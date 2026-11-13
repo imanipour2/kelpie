@@ -28,7 +28,7 @@ jobs:
           grep -F 'LOCAL_HTTP_PORT", "18420"' apps/android/app/build.gradle.kts
       - name: Build isolated QA APK
         working-directory: apps/android
-        run: ./gradlew --no-daemon :app:assembleDebug -PkelpieVerificationProfile=true
+        run: ./gradlew --no-daemon lint ktlintCheck build -PkelpieVerificationProfile=true
       - name: Upload isolated QA APK
         uses: actions/upload-artifact@v4
         with:
