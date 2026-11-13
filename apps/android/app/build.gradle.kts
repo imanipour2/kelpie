@@ -31,6 +31,9 @@ android {
             if (providers.gradleProperty("kelpieEmbeddingVerificationProfile").orNull == "true") {
                 applicationIdSuffix = ".embeddingverify"
                 buildConfigField("int", "LOCAL_HTTP_PORT", "18431")
+            } else if (providers.gradleProperty("kelpieUnifiedVerificationProfile").orNull == "true") {
+                applicationIdSuffix = ".unifiedverify"
+                buildConfigField("int", "LOCAL_HTTP_PORT", "18440")
             } else if (providers.gradleProperty("kelpieVerificationProfile").orNull == "true") {
                 applicationIdSuffix = ".nessieverify"
                 buildConfigField("int", "LOCAL_HTTP_PORT", "18420")
