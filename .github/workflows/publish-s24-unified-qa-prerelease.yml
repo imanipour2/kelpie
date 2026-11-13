@@ -1,0 +1,96 @@
+name: Publish S24 unified experimental QA prerelease
+
+on:
+  push:
+    branches:
+      - qa/release-s24-unified-20261113
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: s24-unified-qa-20261113-rc1
+      SOURCE_SHA: 3a376483f3678ab1abc6e694ef14ed4ca1cd3d1a
+      APK_SHA: cac51cda5850be1f561f464c2c7812f650962003a85c3b9e86102030840d4b21
+    steps:
+      - uses: actions/checkout@v6.0.3
+        with:
+          fetch-depth: 0
+      - name: Verify immutable tag and completed source CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse "refs/tags/${TAG}^{}")" = "${SOURCE_SHA}"
+          test "$(gh run view 43467011772 --json conclusion --jq .conclusion)" = success
+          test -f LICENSE
+      - name: Retrieve and hash-check exact CI artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          gh run download 43467011772 --repo "$GH_REPO" -n kelpie-s24-unified-qa-20261113 -D release
+          test -f release/app-debug.apk
+          echo "${APK_SHA}  release/app-debug.apk" | sha256sum -c -
+          actual=$(cut -d' ' -f1 release/app-debug.apk.sha256)
+          test "$actual" = "$APK_SHA"
+          mv release/app-debug.apk release/Kelpie-S24-Unified-QA-rc1-debug.apk
+          printf '%s  %s\n' "$APK_SHA" 'Kelpie-S24-Unified-QA-rc1-debug.apk' > release/SHA256SUMS.txt
+          cp LICENSE release/LICENSE
+      - name: Write factual release notes
+        shell: bash
+        run: |
+          cat > release/RELEASE_NOTES.md <<'KELPIE_QA_NOTES'
+          ## Experimental Android S24 unified QA build — not an official Kelpie release
+          
+          This is a **developer-only, debug-signed, separately installed application** in the `imanipour2/kelpie` fork. It is **not** signed by UnlikeOtherAI and **cannot** replace the official `com.kelpie.browser` installation.
+          
+          ### Tested changes
+          - Visible-WebView viewport screenshots now use hardware `PixelCopy` instead of software `WebView.draw`. Hidden tabs fail explicitly rather than returning a misleading blank screenshot.
+          - Canonical Android `page.scroll` now actually moves a scrollable WebView; click, typing and RTL snapshots were verified.
+          - JNI `PT_LOAD`/RELRO and APK ZIP layout pass 16 KiB alignment checks for arm64-v8a and x86_64.
+          - PixelCopy bitmap cleanup on resize/encoding errors.
+          
+          ### Evidence
+          - Immutable source commit: `3a376483f3678ab1abc6e694ef14ed4ca1cd3d1a`.
+          - Full CI: https://github.com/imanipour2/kelpie/actions/runs/43467011772 — Kotlin formatting, JVM unit tests, Android lint, APK build, `zipalign -P 16`, native ELF/RELRO, APK ID checks: PASS.
+          - Exact APK SHA-256: `cac51cda5850be1f561f464c2c7812f650962003a85c3b9e86102030840d4b21`.
+          - Real Galaxy S24 Ultra / Android 17: installed without removing original app, DOM/snapshot/click/text-entry PASS, canonical scroll `scrollY ≈ 60 -> 1020` PASS, screenshot colors/RTL/animated Canvas PASS, 25/25 static and 20/20 animated captures PASS, Home/background rejects screenshot and foreground recovery PASS. No 16KB compatibility dialog detected on this build.
+          
+          ### Important limits
+          - **Not for production browsing** or use with private credentials: APK is **debuggable** and uses a development signature.
+          - APK package `com.kelpie.browser.unifiedverify`, local port `18440`, independent from official `com.kelpie.browser` port `8420`.
+          - Hardware tested device reported **4096-byte kernel pages**. ELF/APK layout is 16 KiB-compliant, but a true 16 KiB-page device/emulator test remains pending.
+          - No true headless/background WebView rendering; screen-off and long-duration service availability are **not** certified.
+          - Full-page screenshots remain unsupported in the standard `tab.screenshot` route.
+          - A short memory/capture test is not proof of absence of long-term leaks. PixelCopy callback/timeout behavior requires maintainer review.
+          - Upstream PRs remain separate and unmerged: [screenshot #214](https://github.com/UnlikeOtherAI/kelpie/pull/214), [JNI #217](https://github.com/UnlikeOtherAI/kelpie/pull/217), [scroll #218](https://github.com/UnlikeOtherAI/kelpie/pull/218).
+          
+          ### Licensing
+          Kelpie is Copyright UnlikeOtherAI Ltd., distributed under **Apache License 2.0**. Changes are identified by the three linked PRs and this release; `LICENSE` is included as a release asset. This is an unofficial, experimental fork build. No warranties.
+          
+          ### Reproduction / safe removal
+          On an authorized Android 17 device with USB debugging, verify SHA-256 first and install only the independent debug package. Stop/remove only `com.kelpie.browser.unifiedverify` if testing is complete. Do not uninstall or replace `com.kelpie.browser`.
+          KELPIE_QA_NOTES
+      - name: Publish developer-only prerelease in personal fork
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo 'QA prerelease already exists; refusing overwrite'
+            exit 1
+          fi
+          gh release create "$TAG" \
+            release/Kelpie-S24-Unified-QA-rc1-debug.apk \
+            release/SHA256SUMS.txt \
+            release/LICENSE \
+            --prerelease --latest=false --verify-tag \
+            --title 'Kelpie S24 Unified Android QA RC1 (experimental; not upstream)' \
+            --notes-file release/RELEASE_NOTES.md
+          gh release view "$TAG" --json url,isPrerelease,tagName --jq '{url, isPrerelease, tagName}'
