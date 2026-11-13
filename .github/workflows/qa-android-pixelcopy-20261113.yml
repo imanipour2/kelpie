@@ -1,0 +1,38 @@
+name: Android isolated PixelCopy QA APK
+
+on:
+  push:
+    branches:
+      - qa/android-isolated-pixelcopy-20261113
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6.0.3
+      - uses: ./.github/actions/browser-contract
+      - uses: actions/setup-java@v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4.0.3
+      - name: Verify isolated identity and port
+        shell: bash
+        run: |
+          grep -F 'applicationIdSuffix = ".nessieverify"' apps/android/app/build.gradle.kts
+          grep -F 'LOCAL_HTTP_PORT", "18420"' apps/android/app/build.gradle.kts
+      - name: Build isolated QA APK
+        working-directory: apps/android
+        run: ./gradlew --no-daemon :app:assembleDebug -PkelpieVerificationProfile=true
+      - name: Upload isolated QA APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: kelpie-pixelcopy-isolated-qa-apk
+          path: apps/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 3
