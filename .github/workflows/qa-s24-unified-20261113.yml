@@ -1,0 +1,58 @@
+name: S24 Unified Kelpie Android QA
+
+on:
+  push:
+    branches:
+      - qa/s24-unified-pixelcopy-scroll-16kb-20261113
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v6.0.3
+      - uses: ./.github/actions/browser-contract
+      - uses: actions/setup-java@v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4.0.3
+
+      - name: Android code quality, unit tests, lint, and isolated APK
+        working-directory: apps/android
+        run: |
+          ./gradlew --no-daemon \
+            :kelpie-browser:ktlintCheck \
+            :app:ktlintCheck \
+            :kelpie-browser:testDebugUnitTest \
+            :app:lintDebug \
+            :app:assembleDebug \
+            -PkelpieUnifiedVerificationProfile=true
+
+      - name: Verify native ELF RELRO and APK ZIP 16 KiB alignment
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=apps/android/app/build/outputs/apk/debug/app-debug.apk
+          python3 scripts/testing/check_android_16kb_apk.py "$APK"
+          ZIPALIGN=$(find "$ANDROID_HOME/build-tools" -type f -name zipalign | sort -V | tail -n 1)
+          test -n "$ZIPALIGN"
+          "$ZIPALIGN" -c -P 16 -v 4 "$APK"
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+          test -n "$AAPT"
+          "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.browser.unifiedverify'"
+          sha256sum "$APK" | tee apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
+
+      - name: Upload validated isolated QA APK and hash
+        uses: actions/upload-artifact@v4
+        with:
+          name: kelpie-s24-unified-qa-20261113
+          path: |
+            apps/android/app/build/outputs/apk/debug/app-debug.apk
+            apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 7
