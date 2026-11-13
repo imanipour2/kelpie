@@ -1,0 +1,35 @@
+name: Android JNI 16 KiB alignment QA
+
+on:
+  push:
+    branches:
+      - qa/android-jni-16kb-20261113
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6.0.3
+      - uses: ./.github/actions/browser-contract
+      - uses: actions/setup-java@v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4.0.3
+      - name: Build isolated Android QA APK
+        working-directory: apps/android
+        run: ./gradlew --no-daemon :app:assembleDebug -PkelpieVerificationProfile=true
+      - name: Verify 16 KiB library ELF and ZIP alignment
+        run: python3 scripts/testing/check_android_16kb_apk.py apps/android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Upload isolated QA APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: kelpie-android-jni-16kb-qa
+          path: apps/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 3
