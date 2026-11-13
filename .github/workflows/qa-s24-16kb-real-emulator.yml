@@ -41,22 +41,4 @@ jobs:
           emulator-boot-timeout: 900
           disable-animations: true
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -camera-back none -camera-front none
-          script: |
-            set -euo pipefail
-            pages=$(adb shell getconf PAGE_SIZE | tr -d '\r')
-            echo "Emulator physical page size: ${pages}"
-            test "$pages" = 16384
-            adb install qa-apk/app-debug.apk
-            adb shell am start -n com.kelpie.browser.unifiedverify/com.kelpie.browser.MainActivity
-            adb forward tcp:18440 tcp:18440
-            success=0
-            for attempt in $(seq 1 30); do
-              if curl --fail --silent --max-time 3 http://127.0.0.1:18440/health | grep -q '"status":"ok"'; then
-                success=1; break
-              fi
-              sleep 2
-            done
-            test "$success" -eq 1
-            echo 'PASS: 16 KiB emulator booted, isolated JNI APK installed, Kelpie HTTP health succeeded'
-            adb shell pidof com.kelpie.browser.unifiedverify
-            adb shell dumpsys package com.kelpie.browser.unifiedverify | grep -m 1 'versionName='
+          script: bash scripts/testing/smoke_16kb_emulator.sh
