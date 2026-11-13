@@ -1,0 +1,62 @@
+name: Android 15 real 16 KiB emulator smoke
+
+on:
+  push:
+    branches:
+      - qa/s24-16kb-emulator-20261113
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  emulator-16k:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6.0.3
+      - name: Download immutable S24 unified CI APK
+        uses: actions/download-artifact@v4
+        with:
+          name: kelpie-s24-unified-qa-20261113
+          run-id: 43467011772
+          github-token: ${{ github.token }}
+          path: qa-apk
+      - name: Hash check source artifact
+        run: |
+          set -euo pipefail
+          test -f qa-apk/app-debug.apk
+          echo 'cac51cda5850be1f561f464c2c7812f650962003a85c3b9e86102030840d4b21  qa-apk/app-debug.apk' | sha256sum -c -
+      - name: Enable virtualization
+        run: |
+          set -euo pipefail
+          if test -e /dev/kvm; then sudo chmod 666 /dev/kvm; else echo 'KVM absent; runner may be slow'; fi
+      - name: Boot Android 15 experimental 16 KiB image and test JNI/HTTP
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          target: google_apis_ps16k
+          arch: x86_64
+          profile: pixel_7_pro
+          emulator-boot-timeout: 900
+          disable-animations: true
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -camera-back none -camera-front none
+          script: |
+            set -euo pipefail
+            pages=$(adb shell getconf PAGE_SIZE | tr -d '\r')
+            echo "Emulator physical page size: ${pages}"
+            test "$pages" = 16384
+            adb install qa-apk/app-debug.apk
+            adb shell am start -n com.kelpie.browser.unifiedverify/com.kelpie.browser.MainActivity
+            adb forward tcp:18440 tcp:18440
+            success=0
+            for attempt in $(seq 1 30); do
+              if curl --fail --silent --max-time 3 http://127.0.0.1:18440/health | grep -q '"status":"ok"'; then
+                success=1; break
+              fi
+              sleep 2
+            done
+            test "$success" -eq 1
+            echo 'PASS: 16 KiB emulator booted, isolated JNI APK installed, Kelpie HTTP health succeeded'
+            adb shell pidof com.kelpie.browser.unifiedverify
+            adb shell dumpsys package com.kelpie.browser.unifiedverify | grep -m 1 'versionName='
