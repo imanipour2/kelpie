@@ -150,6 +150,10 @@ void SelectedAndMapping() {
   assert(step["params"]["timeout"] == 234);
   assert(!step["params"].contains("timeoutMs"));
   direct.Cancel();
+  step = direct.Begin(Request("tab.screenshot", {{"recoveryRequestId", "550e8400-e29b-41d4-a716-446655440000"}}));
+  assert(step["method"] == "screenshot");
+  assert(step["params"]["recoveryRequestId"] == "550e8400-e29b-41d4-a716-446655440000");
+  direct.Cancel();
   step = direct.Begin(Request("tab.screenshot", {{"fullPage", false}}));
   assert(step["method"] == "screenshot");
   assert(!step["params"].contains("fullPage"));
