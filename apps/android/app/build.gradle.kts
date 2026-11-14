@@ -23,12 +23,21 @@ android {
         versionCode = 27
         versionName = "0.2.7-qa"
         buildConfigField("int", "LOCAL_HTTP_PORT", "8420")
+        buildConfigField("boolean", "P2_QA_ENABLED", "false")
+        manifestPlaceholders["p2QaEnabled"] = "false"
+        manifestPlaceholders["p2NormalBrowserEnabled"] = "true"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
     buildTypes {
         debug {
-            if (providers.gradleProperty("kelpieEmbeddingVerificationProfile").orNull == "true") {
+            if (providers.gradleProperty("kelpieP2VerificationProfile").orNull == "true") {
+                applicationIdSuffix = ".p2verify"
+                buildConfigField("int", "LOCAL_HTTP_PORT", "18450")
+                buildConfigField("boolean", "P2_QA_ENABLED", "true")
+                manifestPlaceholders["p2QaEnabled"] = "true"
+                manifestPlaceholders["p2NormalBrowserEnabled"] = "false"
+            } else if (providers.gradleProperty("kelpieEmbeddingVerificationProfile").orNull == "true") {
                 applicationIdSuffix = ".embeddingverify"
                 buildConfigField("int", "LOCAL_HTTP_PORT", "18431")
             } else if (providers.gradleProperty("kelpieUnifiedVerificationProfile").orNull == "true") {
