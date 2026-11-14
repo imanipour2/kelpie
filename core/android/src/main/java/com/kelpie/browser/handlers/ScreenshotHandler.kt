@@ -83,12 +83,14 @@ private class FullContentCapture(
 
 class ScreenshotHandler(
     private val ctx: HandlerContext,
-    private val activity: ComponentActivity,
+    activity: ComponentActivity? = null,
 ) {
-    private val approvedCapture = ApprovedForegroundCapture(ctx, activity, ::captureFullPagePayload)
+    // Only the real Activity host may authorize a user-consented recovery capture.
+    // Job-scoped routers and annotation-only handlers have no Activity authority.
+    private val approvedCapture = activity?.let { ApprovedForegroundCapture(ctx, it, ::captureFullPagePayload) }
 
     fun register(router: Router) {
-        ctx.approvedForegroundCapture = approvedCapture
+        if (approvedCapture != null) ctx.approvedForegroundCapture = approvedCapture
         router.register("screenshot") { screenshot(it) }
     }
 
@@ -102,7 +104,7 @@ class ScreenshotHandler(
 
         val approvedId = (body["recoveryRequestId"] ?: body["requestId"]) as? String
         if (approvedId != null) {
-            val result = approvedCapture.take(approvedId, fullPage, format, quality, resolution)
+            val result = approvedCapture?.take(approvedId, fullPage, format, quality, resolution)
             return if (result != null) {
                 successResponse(result)
             } else {
@@ -130,7 +132,7 @@ class ScreenshotHandler(
             val captureArmed =
                 notificationPosted &&
                     request != null &&
-                    approvedCapture.arm(request, fullPage, format, quality, resolution)
+                    approvedCapture?.arm(request, fullPage, format, quality, resolution) == true
             return errorResponse(
                 "FOREGROUND_REQUIRED",
                 if (notificationPosted) {

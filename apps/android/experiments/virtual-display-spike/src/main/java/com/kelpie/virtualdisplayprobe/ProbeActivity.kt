@@ -3,6 +3,7 @@ package com.kelpie.virtualdisplayprobe
 import android.app.Activity
 import android.app.KeyguardManager
 import android.app.Presentation
+import android.content.Intent
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
@@ -59,6 +60,12 @@ class ProbeActivity : Activity() {
             Button(this).apply {
                 text = "Start 20-frame local fixture"
                 setOnClickListener { start() }
+            },
+        )
+        column.addView(
+            Button(this).apply {
+                text = "Open SAME-WebView migration QA"
+                setOnClickListener { startActivity(Intent(this@ProbeActivity, SameWebViewActivity::class.java)) }
             },
         )
         column.addView(
