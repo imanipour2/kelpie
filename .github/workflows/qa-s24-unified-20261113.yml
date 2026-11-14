@@ -5,6 +5,7 @@ on:
     branches:
       - qa/s24-unified-pixelcopy-scroll-16kb-20261113
       - fix/s24-foreground-screenshot-status-20261114
+      - fix/s24-recovery-crypto-20261114
   workflow_dispatch:
 
 permissions:
@@ -51,7 +52,7 @@ jobs:
       - name: Upload validated isolated QA APK and hash
         uses: actions/upload-artifact@v4
         with:
-          name: kelpie-s24-foreground-qa-20261114-${{ github.sha }}
+          name: kelpie-s24-recovery-crypto-20261114-${{ github.sha }}
           path: |
             apps/android/app/build/outputs/apk/debug/app-debug.apk
             apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
