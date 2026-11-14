@@ -1,7 +1,7 @@
 package com.kelpie.browser.qa
 
 /** Synthetic RTL document for an actual Kelpie TabStore WebView; no network resources. */
-internal object P2OfflineFixture {
+object P2OfflineFixture {
     const val BASE = "https://fixture.invalid/p2/"
 
     fun colorFor(sequence: Int): Triple<Int, Int, Int> {
