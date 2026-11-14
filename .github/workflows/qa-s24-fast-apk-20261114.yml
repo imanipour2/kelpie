@@ -5,6 +5,10 @@ on:
       - fix/s24-foreground-screenshot-status-20261114
       - fix/s24-recovery-crypto-20261114
   workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 jobs:
