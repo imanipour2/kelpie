@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - experiment/s24-private-display-spike-20261114
+      - experiment/s24-same-webview-migration-20261114
   workflow_dispatch:
 
 concurrency:
@@ -24,6 +25,18 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v4.0.3
+      - name: Enforce committed Kotlin formatting (emit exact formatter patch on failure)
+        shell: bash
+        working-directory: apps/android
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon :virtual-display-spike:ktlintFormat -PvirtualDisplaySpike=true
+          git diff --check
+          if ! git diff --quiet -- experiments/virtual-display-spike; then
+            git diff -- experiments/virtual-display-spike
+            echo "::error::Kotlin source differs from ktlint formatter; commit formatter output before QA."
+            exit 1
+          fi
       - name: Lint, test, and package opt-in standalone Android probe
         working-directory: apps/android
         run: |
@@ -40,7 +53,7 @@ jobs:
           APK=apps/android/experiments/virtual-display-spike/build/outputs/apk/debug/virtual-display-spike-debug.apk
           test -f "$APK"
           AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
-          "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.virtualdisplayprobe'"
+          "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.virtualdisplayprobe.p1'"
           ZIPALIGN=$(find "$ANDROID_HOME/build-tools" -type f -name zipalign | sort -V | tail -n 1)
           "$ZIPALIGN" -c -P 16 -v 4 "$APK"
           sha256sum "$APK" > "$APK.sha256"
