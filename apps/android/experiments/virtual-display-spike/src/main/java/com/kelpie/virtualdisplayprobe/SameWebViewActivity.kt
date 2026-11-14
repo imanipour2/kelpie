@@ -205,7 +205,7 @@ class SameWebViewActivity : Activity() {
         sequence: Int,
     ) {
         if (!active || ticket != generation || !lifecycleGate.claimStep(sequence)) return
-        if (getSystemService(KeyguardManager::class.java).isKeyguardLocked {
+        if (getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
             stop("KEYGUARD_STOP")
             return
         }
