@@ -287,6 +287,14 @@ class KelpieBrowserSession(
         KelpieNetworkService.start(applicationContext)
     }
 
+    fun onRecoveryResumed() {
+        handlerContext.approvedForegroundCapture?.onResumed()
+    }
+
+    fun onRecoveryPaused() {
+        handlerContext.approvedForegroundCapture?.onPaused()
+    }
+
     fun trimMemory() {
         handlerContext.tabStore?.discardPreviews()
     }
@@ -306,6 +314,8 @@ class KelpieBrowserSession(
         com.kelpie.browser.account.UOAAccount
             .detach(activity)
         handlerContext.dialogState.dismissPending()
+        handlerContext.approvedForegroundCapture?.close()
+        handlerContext.approvedForegroundCapture = null
         val tabs = handlerContext.tabStore
         browserView.disposeComposition()
         (browserView.parent as? ViewGroup)?.removeView(browserView)
