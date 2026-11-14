@@ -46,6 +46,7 @@ class SameWebViewActivity : Activity() {
     private var initialProof: String? = null
     private var originalViewIdentity = 0
     private var migrationComplete = false
+    private var lifecycleGate = ProbeLifecycleGate()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -89,6 +90,7 @@ class SameWebViewActivity : Activity() {
         latest = null
         migrationComplete = false
         initialProof = null
+        lifecycleGate = ProbeLifecycleGate()
         File(filesDir, "same-webview-migration.jsonl").writeText("")
         val view = WebView(this)
         browser = view
@@ -112,7 +114,7 @@ class SameWebViewActivity : Activity() {
                     target: WebView?,
                     url: String?,
                 ) {
-                    if (!active || ticket != generation) return
+                    if (!active || ticket != generation || !lifecycleGate.claimLoad()) return
                     view.evaluateJavascript("window.kelpieSeed(); window.kelpieProof()", { proof ->
                         if (!active || ticket != generation) return@evaluateJavascript
                         initialProof = proof
@@ -132,7 +134,7 @@ class SameWebViewActivity : Activity() {
     }
 
     private fun migrate(ticket: Int) {
-        if (!active || ticket != generation) return
+        if (!active || ticket != generation || !lifecycleGate.claimMigration()) return
         if (getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
             stop("KEYGUARD_STOP")
             return
@@ -202,8 +204,8 @@ class SameWebViewActivity : Activity() {
         ticket: Int,
         sequence: Int,
     ) {
-        if (!active || ticket != generation) return
-        if (getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
+        if (!active || ticket != generation || !lifecycleGate.claimStep(sequence)) return
+        if (getSystemService(KeyguardManager::class.java).isKeyguardLocked {
             stop("KEYGUARD_STOP")
             return
         }
