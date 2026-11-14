@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Android 11 and older. Cookie sync metadata is bound to this device's run and never leaves it. -->
+<!-- Android 11 and earlier. Encrypted prefs are device-key-bound and must not restore without Keystore material. -->
 <full-backup-content>
     <exclude domain="file" path="sync/" />
+    <exclude domain="sharedpref" path="kelpie_secrets.xml" />
 </full-backup-content>
