@@ -1,8 +1,10 @@
 package com.kelpie.browser
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
+import com.kelpie.browser.network.KelpieRecoveryNotification
 
 /** Optional standalone-window host; other apps may embed KelpieBrowserSession.view(). */
 open class KelpieBrowserActivity : ComponentActivity() {
@@ -11,8 +13,30 @@ open class KelpieBrowserActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        KelpieRecoveryNotification.approveFromIntent(intent)
         browser = KelpieBrowserSession(this)
         setContentView(browser.view())
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (KelpieRecoveryNotification.approveFromIntent(intent)) {
+            // A SINGLE_TOP launch can deliver its Intent to an already resumed Activity.
+            KelpieRecoveryNotification.activityResumed()
+            if (::browser.isInitialized) browser.onRecoveryResumed()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        KelpieRecoveryNotification.activityResumed()
+        if (::browser.isInitialized) browser.onRecoveryResumed()
+    }
+
+    override fun onPause() {
+        if (::browser.isInitialized) browser.onRecoveryPaused()
+        super.onPause()
     }
 
     override fun onTrimMemory(level: Int) {

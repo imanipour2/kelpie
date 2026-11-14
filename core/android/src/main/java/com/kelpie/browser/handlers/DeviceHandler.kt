@@ -58,6 +58,7 @@ class DeviceHandler(
     /** Read-only recovery preflight. No system-wide state or sensitive app data is exported. */
     private suspend fun deviceStatus(): Map<String, Any?> {
         val ready = ctx.isScreenshotForegroundReady()
+        if (ready) KelpieRecoveryNotification.renderReady()
         val notificationsEnabled =
             activity?.getSystemService(NotificationManager::class.java)?.areNotificationsEnabled() == true
         return successResponse(
@@ -66,6 +67,8 @@ class DeviceHandler(
                 "screenshotReady" to ready,
                 "notificationsEnabled" to notificationsEnabled,
                 "recovery" to recoveryStatus(ready, notificationsEnabled),
+                "recoveryRequestId" to KelpieRecoveryNotification.current()?.id,
+                "recoveryRequestStatus" to KelpieRecoveryNotification.current()?.status?.name,
             ),
         )
     }
@@ -81,6 +84,19 @@ class DeviceHandler(
             } else {
                 false
             }
+        val pending = KelpieRecoveryNotification.current()
+        val captureArmed =
+            if (notificationPosted && pending != null) {
+                ctx.approvedForegroundCapture?.arm(
+                    pending,
+                    fullPage = false,
+                    format = "png",
+                    quality = 80,
+                    resolution = ScreenshotResolution.VIEWPORT,
+                ) == true
+            } else {
+                false
+            }
         val status =
             if (!ready && notificationsEnabled && !notificationPosted) {
                 "NOTIFICATION_FAILED"
@@ -91,7 +107,11 @@ class DeviceHandler(
             mapOf(
                 "status" to status,
                 "automaticLaunch" to false,
+                "requestId" to KelpieRecoveryNotification.current()?.id,
+                "requestStatus" to KelpieRecoveryNotification.current()?.status?.name,
+                "expiresAtMs" to KelpieRecoveryNotification.current()?.expiresAt,
                 "screenshotReady" to ready,
+                "captureArmed" to captureArmed,
                 "message" to
                     when (status) {
                         "READY" -> "Kelpie is already visible. Retry screenshot."

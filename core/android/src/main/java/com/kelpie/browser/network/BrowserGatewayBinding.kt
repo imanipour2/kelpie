@@ -27,7 +27,10 @@ class BrowserGatewayBinding(
     fun register() {
         router.browserGateway = this
         ctx.browserGateway = this
-        ctx.browserDocumentChanged = { tabId -> changedDocuments.add(tabId) }
+        ctx.browserDocumentChanged = { tabId ->
+            changedDocuments.add(tabId)
+            ctx.approvedForegroundCapture?.onDocumentChanged(tabId)
+        }
         router.register("browser-control") { request ->
             direct.call(request) ?: errorResponse("GATEWAY_ERROR", "The browser returned no response")
         }

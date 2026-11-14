@@ -18,6 +18,13 @@ describe("browser control boundary", () => {
     ]) expect(BrowserControlRequestSchema.safeParse(input).success).toBe(false);
   });
 
+  it("accepts only UUID-scoped post-consent screenshot requests", () => {
+    const approved = request("tab.screenshot", { recoveryRequestId: "550e8400-e29b-41d4-a716-446655440000" });
+    expect(BrowserControlRequestSchema.safeParse(approved).success).toBe(true);
+    expect(BrowserControlRequestSchema.safeParse(request("tab.screenshot", { recoveryRequestId: "stale-or-unsafe" })).success).toBe(false);
+    expect(BrowserControlRequestSchema.safeParse(request("tab.screenshot", { recoveryToken: "not-admitted" })).success).toBe(false);
+  });
+
   it("authorizes reads and metadata, refuses unsupported calls before execution", async () => {
     const authorize = vi.fn();
     const execute = vi.fn();

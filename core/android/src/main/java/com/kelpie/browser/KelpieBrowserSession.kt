@@ -169,6 +169,7 @@ class KelpieBrowserSession(
     }
 
     private fun onResume() {
+        handlerContext.approvedForegroundCapture?.onResumed()
         com.kelpie.browser.browser.BookmarkStore
             .refreshAccountBookmarks()
         com.kelpie.browser.connect.NessieConnection
@@ -176,6 +177,7 @@ class KelpieBrowserSession(
     }
 
     private fun onPause() {
+        handlerContext.approvedForegroundCapture?.onPaused()
         com.kelpie.browser.connect.NessieConnection
             .setForeground(false)
     }
@@ -186,7 +188,7 @@ class KelpieBrowserSession(
         handlerContext.scriptPlaybackState = scriptPlaybackState
 
         NavigationHandler(handlerContext).register(router)
-        ScreenshotHandler(handlerContext).register(router)
+        ScreenshotHandler(handlerContext, activity).register(router)
         DOMHandler(handlerContext).register(router)
         InteractionHandler(handlerContext).register(router)
         TapCalibrationHandler().register(router)
@@ -287,6 +289,14 @@ class KelpieBrowserSession(
         KelpieNetworkService.start(applicationContext)
     }
 
+    fun onRecoveryResumed() {
+        handlerContext.approvedForegroundCapture?.onResumed()
+    }
+
+    fun onRecoveryPaused() {
+        handlerContext.approvedForegroundCapture?.onPaused()
+    }
+
     fun trimMemory() {
         handlerContext.tabStore?.discardPreviews()
     }
@@ -306,6 +316,8 @@ class KelpieBrowserSession(
         com.kelpie.browser.account.UOAAccount
             .detach(activity)
         handlerContext.dialogState.dismissPending()
+        handlerContext.approvedForegroundCapture?.close()
+        handlerContext.approvedForegroundCapture = null
         val tabs = handlerContext.tabStore
         browserView.disposeComposition()
         (browserView.parent as? ViewGroup)?.removeView(browserView)
