@@ -103,7 +103,10 @@ class DeviceHandler(
         )
     }
 
-    private fun recoveryStatus(ready: Boolean, notificationsEnabled: Boolean): String =
+    private fun recoveryStatus(
+        ready: Boolean,
+        notificationsEnabled: Boolean,
+    ): String =
         when {
             ready -> "READY"
             notificationsEnabled -> "USER_TAP_REQUIRED"
