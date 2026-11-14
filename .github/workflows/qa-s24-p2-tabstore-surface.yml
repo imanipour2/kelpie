@@ -25,6 +25,18 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v4.0.3
+      - name: Enforce exact committed Kotlin formatting for P2 sources
+        working-directory: apps/android
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon :kelpie-browser:ktlintFormat :app:ktlintFormat -PkelpieP2VerificationProfile=true
+          git -C ../.. diff --check
+          if ! git -C ../.. diff --quiet -- core/android/src/main/java/com/kelpie/browser/qa core/android/src/test/java/com/kelpie/browser/qa apps/android/app/src/main/java/com/kelpie/browser/P2SurfaceQaActivity.kt; then
+            git -C ../.. diff -- core/android/src/main/java/com/kelpie/browser/qa core/android/src/test/java/com/kelpie/browser/qa apps/android/app/src/main/java/com/kelpie/browser/P2SurfaceQaActivity.kt
+            echo "::error::P2 sources require committed Kotlin formatter changes"
+            exit 1
+          fi
       - name: Lint, test, and package P2 isolated TabStore Android QA
         working-directory: apps/android
         run: |
