@@ -123,6 +123,8 @@ std::vector<McpTool> CreateDefaultMcpTools() {
       Tool("kelpie_scroll_to_bottom", "scroll-to-bottom", "Scroll to the bottom of the page"),
       Tool("kelpie_get_viewport", "get-viewport", "Get viewport dimensions and device pixel ratio"),
       Tool("kelpie_get_device_info", "get-device-info", "Get full device information"),
+      Tool("kelpie_device_status", "device-status", "Read Android Kelpie foreground and screenshot readiness", CapabilityAvailability(kMobilePlatforms, kAllEngines, {"foreground-recovery"})),
+      Tool("kelpie_request_foreground", "request-foreground", "Ask the user to open Kelpie through its ongoing notification; never silently launches an Activity", CapabilityAvailability(kMobilePlatforms, kAllEngines, {"foreground-recovery"})),
       Tool("kelpie_get_capabilities", "get-capabilities", "Get device capabilities"),
       Tool("kelpie_wait_for_element", "wait-for-element", "Wait for an element to appear or reach a state"),
       Tool("kelpie_wait_for_navigation", "wait-for-navigation", "Wait for a navigation to complete"),
