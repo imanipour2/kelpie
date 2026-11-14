@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Android 12+. allowBackup="false" stops cloud backup but not device-to-device
-     transfer, so cookie sync metadata is excluded from both explicitly. -->
+<!-- Android 12+. Explicitly exclude Keystore-bound ciphertext from both transport types.
+     allowBackup=false alone does not reliably protect device-to-device transfer. -->
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="file" path="sync/" />
+        <exclude domain="sharedpref" path="kelpie_secrets.xml" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="file" path="sync/" />
+        <exclude domain="sharedpref" path="kelpie_secrets.xml" />
     </device-transfer>
 </data-extraction-rules>
