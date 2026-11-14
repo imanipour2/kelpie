@@ -27,25 +27,25 @@ class DeviceHandler(
 
     private suspend fun getViewport(): Map<String, Any?> {
         val wv = ctx.webView ?: return errorResponse("NO_WEBVIEW", "No WebView")
-        return mapOf(
+        return successResponse(mapOf(
             "width" to wv.width,
             "height" to wv.height,
             "devicePixelRatio" to wv.context.resources.displayMetrics.density,
             "platform" to "android",
             "deviceName" to deviceInfo.name,
             "orientation" to if (wv.width > wv.height) "landscape" else "portrait",
-        )
+        ))
     }
 
     private fun getDeviceInfo(): Map<String, Any?> =
-        mapOf(
+        successResponse(mapOf(
             "device" to mapOf("id" to deviceInfo.id, "name" to deviceInfo.name, "model" to deviceInfo.model, "platform" to "android"),
             "display" to mapOf("width" to deviceInfo.width, "height" to deviceInfo.height, "scale" to 1),
             "network" to mapOf("ip" to deviceInfo.ip, "port" to deviceInfo.port),
             "browser" to mapOf("engine" to "Chromium", "version" to android.os.Build.VERSION.RELEASE),
             "app" to mapOf("version" to deviceInfo.version, "build" to deviceInfo.build),
             "system" to mapOf("os" to "Android", "osVersion" to android.os.Build.VERSION.RELEASE),
-        )
+        ))
 
     private fun getViewportPresets(): Map<String, Any?> {
         val availablePresetIds = TabletViewportPresetStore.availablePresetIds.value
