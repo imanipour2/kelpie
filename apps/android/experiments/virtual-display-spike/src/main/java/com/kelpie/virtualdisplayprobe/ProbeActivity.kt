@@ -44,23 +44,29 @@ class ProbeActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val column = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(24, 24, 24, 24)
-        }
-        status = TextView(this).apply {
-            textSize = 16f
-            text = "Private VirtualDisplay test. Tap Start, then HOME. No phone screen recording or Internet access."
-        }
+        val column =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(24, 24, 24, 24)
+            }
+        status =
+            TextView(this).apply {
+                textSize = 16f
+                text = "Private VirtualDisplay test. Tap Start, then HOME. No phone screen recording or Internet access."
+            }
         column.addView(status)
-        column.addView(Button(this).apply {
-            text = "Start 20-frame local fixture"
-            setOnClickListener { start() }
-        })
-        column.addView(Button(this).apply {
-            text = "Stop and release resources"
-            setOnClickListener { stop("USER_STOP") }
-        })
+        column.addView(
+            Button(this).apply {
+                text = "Start 20-frame local fixture"
+                setOnClickListener { start() }
+            },
+        )
+        column.addView(
+            Button(this).apply {
+                text = "Stop and release resources"
+                setOnClickListener { stop("USER_STOP") }
+            },
+        )
         setContentView(column)
     }
 
@@ -86,12 +92,13 @@ class ProbeActivity : Activity() {
                         val offset = 240 * plane.rowStride + 160 * plane.pixelStride
                         val buffer = plane.buffer
                         if (offset + 2 < buffer.limit()) {
-                            frame = PixelSample(
-                                buffer.get(offset).toInt() and 255,
-                                buffer.get(offset + 1).toInt() and 255,
-                                buffer.get(offset + 2).toInt() and 255,
-                                SystemClock.elapsedRealtimeNanos(),
-                            )
+                            frame =
+                                PixelSample(
+                                    buffer.get(offset).toInt() and 255,
+                                    buffer.get(offset + 1).toInt() and 255,
+                                    buffer.get(offset + 2).toInt() and 255,
+                                    SystemClock.elapsedRealtimeNanos(),
+                                )
                         }
                     } finally {
                         image.close()
@@ -100,20 +107,28 @@ class ProbeActivity : Activity() {
                     // Teardown may race image acquisition.
                 }
             }, Handler(thread.looper))
-            val flags = DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION or
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY
-            val virtual = getSystemService(DisplayManager::class.java).createVirtualDisplay(
-                "KelpiePrivateFixture", 320, 480, resources.displayMetrics.densityDpi,
-                imageReader.surface, flags,
-            ) ?: error("No private display")
+            val flags =
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION or
+                    DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY
+            val virtual =
+                getSystemService(DisplayManager::class.java).createVirtualDisplay(
+                    "KelpiePrivateFixture",
+                    320,
+                    480,
+                    resources.displayMetrics.densityDpi,
+                    imageReader.surface,
+                    flags,
+                ) ?: error("No private display")
             display = virtual
             val window = Presentation(this, virtual.display)
             presentation = window
             val view = WebView(window.context)
             webView = view
-            view.layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
-            )
+            view.layoutParams =
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                )
             view.settings.javaScriptEnabled = true
             view.settings.domStorageEnabled = false
             view.settings.allowFileAccess = false
@@ -121,18 +136,26 @@ class ProbeActivity : Activity() {
             view.settings.javaScriptCanOpenWindowsAutomatically = false
             view.settings.setSupportMultipleWindows(false)
             running = true
-            view.webViewClient = object : WebViewClient() {
-                override fun onPageFinished(view: WebView?, url: String?) {
-                    if (token == generation && running) {
-                        writeEvent("FIXTURE_READY", 0, null, false)
-                        main.postDelayed({ step(token, 1) }, 3000)
+            view.webViewClient =
+                object : WebViewClient() {
+                    override fun onPageFinished(
+                        view: WebView?,
+                        url: String?,
+                    ) {
+                        if (token == generation && running) {
+                            writeEvent("FIXTURE_READY", 0, null, false)
+                            main.postDelayed({ step(token, 1) }, 3000)
+                        }
                     }
                 }
-            }
             window.setContentView(view)
             window.show()
             view.loadDataWithBaseURL(
-                "https://fixture.invalid/", ProbeFixture.html(), "text/html", "UTF-8", null,
+                "https://fixture.invalid/",
+                ProbeFixture.html(),
+                "text/html",
+                "UTF-8",
+                null,
             )
             status.text = "Private display readying. Press HOME now, then return after 35 seconds."
         } catch (e: Exception) {
@@ -141,7 +164,10 @@ class ProbeActivity : Activity() {
         }
     }
 
-    private fun step(token: Int, sequence: Int) {
+    private fun step(
+        token: Int,
+        sequence: Int,
+    ) {
         if (!running || token != generation) return
         if (getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
             writeEvent("LOCKED_STOP", sequence, null, false)
@@ -155,7 +181,11 @@ class ProbeActivity : Activity() {
             release()
             return
         }
-        val view = webView ?: run { stop("NO_WEBVIEW"); return }
+        val view =
+            webView ?: run {
+                stop("NO_WEBVIEW")
+                return
+            }
         val (red, green, blue) = ProbeFixture.colorFor(sequence)
         val before = SystemClock.elapsedRealtimeNanos()
         view.evaluateJavascript("window.setProbe($sequence,$red,$green,$blue)", null)
@@ -171,16 +201,28 @@ class ProbeActivity : Activity() {
         }, 900)
     }
 
-    private fun writeEvent(event: String, sequence: Int, observed: PixelSample?, matched: Boolean) {
-        val json = JSONObject()
-            .put("event", event)
-            .put("sequence", sequence)
-            .put("activityVisible", visible)
-            .put("elapsedMs", SystemClock.elapsedRealtime())
-            .put("matched", matched)
-            .put("frameTimeNs", observed?.receivedAtNs ?: 0)
-            .put("sampleRgb", if (observed == null) "none" else
-                observed.red.toString() + "," + observed.green + "," + observed.blue)
+    private fun writeEvent(
+        event: String,
+        sequence: Int,
+        observed: PixelSample?,
+        matched: Boolean,
+    ) {
+        val json =
+            JSONObject()
+                .put("event", event)
+                .put("sequence", sequence)
+                .put("activityVisible", visible)
+                .put("elapsedMs", SystemClock.elapsedRealtime())
+                .put("matched", matched)
+                .put("frameTimeNs", observed?.receivedAtNs ?: 0)
+                .put(
+                    "sampleRgb",
+                    if (observed == null) {
+                        "none"
+                    } else {
+                        observed.red.toString() + "," + observed.green + "," + observed.blue
+                    },
+                )
         try {
             File(filesDir, "virtual-display-probe.jsonl")
                 .appendText(json.toString() + "\n")
