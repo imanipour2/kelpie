@@ -77,3 +77,14 @@ JVM tests now cover consent caching, one-time retrieval, replay rejection, wrong
 ### Release decision
 
 Latest QA source version 0.2.7-qa (27) is not the previously installed 0.2.6-qa (26). Do not report installation, capture success, or merge/release acceptance before artifact SHA256/readback and physical S24 testing. All GitHub development text remains English.
+
+
+## Follow-up contract and lifecycle audit (2026-11-14, branch only)
+
+A second source inspection found an overlooked strict-protocol gate: the canonical `tab.screenshot` request schema originally accepted only `fullPage`, `format` and `quality`. The initial recovery implementation's `recoveryRequestId` would therefore have been rejected *before reaching Android*. The authoritative TypeScript Zod schema now permits an optional UUID recovery ID; new shared protocol and native C++ gateway tests assert acceptance and pass-through, and invalid IDs remain rejected by the strict JS schema. The generated native browser contract is derived from the shared package at build time; no checked-in generated payload was manually patched.
+
+Also corrected a mismatch: `kelpie_request_foreground` stages a screenshot with canonical **viewport** resolution, not native, matching `tab.screenshot`'s native gateway behavior. First-frame capture now requires an actual RESUMED/FOCUSED Activity and waits for window focus rather than abandoning the request on a benign onResume/focus race. Browser tab changes, close and teardown explicitly invalidate staged capture and in-flight work.
+
+The owner-facing message "Capture ready. Return to ChatGPT." is emitted only after a frame is actually staged. Do not interpret `ACTIVITY_RESUMED`, posted notification or the toast without matching MCP retrieval as end-to-end success.
+
+At this checkpoint: source-only `0.2.7-qa` (build 27), latest Build/QA pending on GitHub, older in-progress builds are superseded/cancelled, installed `0.2.6-qa` (build 26) remains untouched. **NO-GO** until current SHA build passes, artifact checksum is independently verified, and physical Allow/Not now + one-shot cached image tests pass.
