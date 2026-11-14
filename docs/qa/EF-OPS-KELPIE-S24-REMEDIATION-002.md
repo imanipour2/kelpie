@@ -17,13 +17,13 @@ P1: Notification HIGH importance does not guarantee heads-up. Current status ico
 ## Changes in this branch
 - SecretStore now fails closed if encryption init/decryption fails, without erasing ciphertext, tabs or pairing files; unavailable secrets read as absent and secret writes fail explicitly. This is containment, not a completed recovery UI.
 - Backup rules exclude sharedpref/kelpie_secrets.xml from legacy backup, modern cloud backup and device transfer. Manifest merger still needs verification.
-- ForegroundRecoveryState provides an isolated clock-injected model: ID, 120s TTL, coalescing, expiry, decline and legal transitions; JVM tests cover replay and expiry. NOT yet integrated with notification / Activity / MCP.
+- ForegroundRecoveryState provides an isolated clock-injected model: ID, 120s TTL, coalescing, expiry, decline and legal transitions; JVM tests cover replay and expiry. Integration code now connects matching PendingIntent IDs to approval/decline Activity and MCP status/capture, but awaits CI, runtime and lifecycle review.
 - New branch added to Android QA workflow, including ktlint, unit, lint, APK packaging, RELRO and 16 KiB checks.
 
 ## Blocking acceptance gates
-1. Integrate request ID in PendingIntents and MCP, and authenticate matching approve/decline lifecycle; stale approval cannot authorize the new request.
+1. Verify the new request-ID PendingIntent / Activity / MCP integration on a real device, including denial, stale intent, replay, user-visible status, cancelled requests and coalescing; no device proof yet.
 2. Add user-visible re-authentication and scoped recovery for failed Keystore, with explicit consent for any destructive reset.
-3. Increment versionCode and use stable protected signer; no uninstall/data wipe due to APK signing mismatch. Verify migration and rollback.
+3. QA versionName 0.2.6-qa / versionCode 26 allocated in source; verify stable protected signer and signer match before any attempted update. No uninstall/data wipe due to APK signing mismatch. Verify migration and rollback.
 4. Real SM-S928B device tests: foreground, background, tap Allow, tap Not now, TTL, blocked/silent/DND, lock, split-screen, screenshot freshness, navigation race and tab preservation.
 5. Instrumentation and MCP contract tests, concurrency, retry throttling and 24h reliability; Wi-Fi/cellular and reboot.
 6. Audit Android HTTP cleartext, LAN endpoints, exported intents, pairing replay, connectedDevice FGS eligibility and local tunnel auth.
@@ -40,4 +40,4 @@ Preserve the installed APK and non-secret app data; never blindly uninstall. In-
 - Android 16 KiB: https://developer.android.com/guide/practices/page-sizes
 - Prior PR and issue: https://github.com/imanipour2/kelpie/pull/1 and https://github.com/imanipour2/enerfoam-website/issues/98
 
-Code branch readback/CI required before acceptance. Canonical Drive sync not yet verified: SYNC_BLOCKED.
+Code branch readback/CI required before acceptance. Canonical Drive Runbook and Live Master Log sync completed with readback; owner approval for any new architectural decision remains a separate CDG gate.
