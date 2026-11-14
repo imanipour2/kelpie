@@ -64,7 +64,7 @@ class DeviceHandler(
                 "appForeground" to (activity?.hasWindowFocus() == true),
                 "screenshotReady" to ready,
                 "notificationsEnabled" to notificationsEnabled,
-                "recovery" to if (ready) "READY" else if (notificationsEnabled) "USER_TAP_REQUIRED" else "NOTIFICATIONS_DISABLED",
+                "recovery" to recoveryStatus(ready, notificationsEnabled),
             ),
         )
     }
@@ -74,21 +74,28 @@ class DeviceHandler(
         val ready = ctx.isScreenshotForegroundReady()
         val notificationsEnabled =
             activity?.getSystemService(NotificationManager::class.java)?.areNotificationsEnabled() == true
-        val status =
-            if (ready) "READY" else if (notificationsEnabled) "USER_TAP_REQUIRED" else "NOTIFICATIONS_DISABLED"
+        val status = recoveryStatus(ready, notificationsEnabled)
         return successResponse(
             mapOf(
                 "status" to status,
                 "automaticLaunch" to false,
                 "screenshotReady" to ready,
-                "message" to when (status) {
-                    "READY" -> "Kelpie is already visible. Retry screenshot."
-                    "USER_TAP_REQUIRED" -> "Tap the persistent Kelpie notification to bring it to the foreground, then retry screenshot."
-                    else -> "Kelpie notifications are disabled. Enable notifications in Android settings and open Kelpie manually."
-                },
+                "message" to
+                    when (status) {
+                        "READY" -> "Kelpie is already visible. Retry screenshot."
+                        "USER_TAP_REQUIRED" -> "Tap the persistent Kelpie notification to bring it to the foreground, then retry screenshot."
+                        else -> "Kelpie notifications are disabled. Enable notifications in Android settings and open Kelpie manually."
+                    },
             ),
         )
     }
+
+    private fun recoveryStatus(ready: Boolean, notificationsEnabled: Boolean): String =
+        when {
+            ready -> "READY"
+            notificationsEnabled -> "USER_TAP_REQUIRED"
+            else -> "NOTIFICATIONS_DISABLED"
+        }
 
     private fun getViewportPresets(): Map<String, Any?> {
         val availablePresetIds = TabletViewportPresetStore.availablePresetIds.value
