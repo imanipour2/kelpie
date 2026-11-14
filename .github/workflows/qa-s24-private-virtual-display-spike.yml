@@ -1,0 +1,55 @@
+name: S24 Private VirtualDisplay Spike QA
+
+on:
+  push:
+    branches:
+      - experiment/s24-private-display-spike-20261114
+  workflow_dispatch:
+
+concurrency:
+  group: private-display-spike-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  standalone-android-spike:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6.0.3
+      - uses: actions/setup-java@v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4.0.3
+      - name: Lint, test, and package opt-in standalone Android probe
+        working-directory: apps/android
+        run: |
+          ./gradlew --no-daemon \
+            :virtual-display-spike:ktlintCheck \
+            :virtual-display-spike:testDebugUnitTest \
+            :virtual-display-spike:lintDebug \
+            :virtual-display-spike:assembleDebug \
+            -PvirtualDisplaySpike=true
+      - name: Verify independent package and 16 KiB APK alignment
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=apps/android/experiments/virtual-display-spike/build/outputs/apk/debug/virtual-display-spike-debug.apk
+          test -f "$APK"
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+          "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.virtualdisplayprobe'"
+          ZIPALIGN=$(find "$ANDROID_HOME/build-tools" -type f -name zipalign | sort -V | tail -n 1)
+          "$ZIPALIGN" -c -P 16 -v 4 "$APK"
+          sha256sum "$APK" > "$APK.sha256"
+      - name: Upload isolated fixture APK and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: kelpie-s24-private-display-spike-${{ github.sha }}
+          path: |
+            apps/android/experiments/virtual-display-spike/build/outputs/apk/debug/*.apk
+            apps/android/experiments/virtual-display-spike/build/outputs/apk/debug/*.sha256
+          if-no-files-found: error
+          retention-days: 7
