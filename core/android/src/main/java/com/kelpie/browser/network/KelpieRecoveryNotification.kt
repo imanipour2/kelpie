@@ -39,7 +39,10 @@ internal object KelpieRecoveryNotification {
         if (manager.getNotificationChannel(CHANNEL_ID)?.importance == NotificationManager.IMPORTANCE_NONE) return false
 
         val now = SystemClock.elapsedRealtime()
-        if (lastPostedAt != 0L && now - lastPostedAt < COOLDOWN_MS) return true
+        // A dismissed recovery notification must be reposted on the next
+        // explicit user request, even if the cooldown period has not elapsed.
+        val stillVisible = manager.activeNotifications.any { it.id == NOTIFICATION_ID }
+        if (lastPostedAt != 0L && now - lastPostedAt < COOLDOWN_MS && stillVisible) return true
 
         val intent =
             context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
