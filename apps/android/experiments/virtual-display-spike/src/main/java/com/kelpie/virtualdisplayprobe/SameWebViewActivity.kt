@@ -51,13 +51,13 @@ class SameWebViewActivity : Activity() {
         super.onCreate(savedInstanceState)
         root =
             LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(12, 12, 12, 12)
-        }
+                orientation = LinearLayout.VERTICAL
+                setPadding(12, 12, 12, 12)
+            }
         status =
             TextView(this).apply {
-            text = "S24 same-WebView migration (offline). Start, then HOME immediately. Return after 35 s."
-        }
+                text = "S24 same-WebView migration (offline). Start, then HOME immediately. Return after 35 s."
+            }
         root.addView(status)
         root.addView(
             Button(this).apply {
@@ -101,9 +101,9 @@ class SameWebViewActivity : Activity() {
         view.settings.setSupportMultipleWindows(false)
         view.layoutParams =
             LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            280,
-        )
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                280,
+            )
         root.addView(view)
         active = true
         view.webViewClient =
@@ -112,13 +112,13 @@ class SameWebViewActivity : Activity() {
                     target: WebView?,
                     url: String?,
                 ) {
-                if (!active || ticket != generation) return
-                view.evaluateJavascript("window.kelpieSeed(); window.kelpieProof()", { proof ->
-                    if (!active || ticket != generation) return@evaluateJavascript
-                    initialProof = proof
-                    write("INITIAL_PROOF", 0, null, false, proof)
-                    main.postDelayed({ migrate(ticket) }, 700)
-                })
+                    if (!active || ticket != generation) return
+                    view.evaluateJavascript("window.kelpieSeed(); window.kelpieProof()", { proof ->
+                        if (!active || ticket != generation) return@evaluateJavascript
+                        initialProof = proof
+                        write("INITIAL_PROOF", 0, null, false, proof)
+                        main.postDelayed({ migrate(ticket) }, 700)
+                    })
                 }
             }
         // A fictional .invalid base and no INTERNET permission guarantee local-only operation.
@@ -153,11 +153,11 @@ class SameWebViewActivity : Activity() {
                         if (offset + 2 < plane.buffer.limit()) {
                             latest =
                                 PixelSample(
-                                plane.buffer.get(offset).toInt() and 255,
-                                plane.buffer.get(offset + 1).toInt() and 255,
-                                plane.buffer.get(offset + 2).toInt() and 255,
-                                SystemClock.elapsedRealtimeNanos(),
-                            )
+                                    plane.buffer.get(offset).toInt() and 255,
+                                    plane.buffer.get(offset + 1).toInt() and 255,
+                                    plane.buffer.get(offset + 2).toInt() and 255,
+                                    SystemClock.elapsedRealtimeNanos(),
+                                )
                         }
                     } finally {
                         image.close()
@@ -168,14 +168,14 @@ class SameWebViewActivity : Activity() {
             }, Handler(thread.looper))
             val virtual =
                 getSystemService(DisplayManager::class.java).createVirtualDisplay(
-                "KelpieSameWebViewOffline",
-                320,
-                480,
-                resources.displayMetrics.densityDpi,
-                imageReader.surface,
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION or
-                    DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY,
-            ) ?: error("Private display creation failed")
+                    "KelpieSameWebViewOffline",
+                    320,
+                    480,
+                    resources.displayMetrics.densityDpi,
+                    imageReader.surface,
+                    DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION or
+                        DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY,
+                ) ?: error("Private display creation failed")
             display = virtual
             val target = Presentation(this, virtual.display)
             presentation = target
@@ -183,9 +183,9 @@ class SameWebViewActivity : Activity() {
             (view.parent as? ViewGroup)?.removeView(view)
             view.layoutParams =
                 ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-            )
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                )
             target.setContentView(view)
             target.show()
             migrationComplete = true
@@ -260,9 +260,9 @@ class SameWebViewActivity : Activity() {
         latest = null
         view.layoutParams =
             LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            280,
-        )
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                280,
+            )
         root.addView(view)
         view.evaluateJavascript("window.kelpieProof()", { proof ->
             val stateOk = proof != null && proof == initialProof
@@ -284,23 +284,23 @@ class SameWebViewActivity : Activity() {
     ) {
         val message =
             JSONObject()
-            .put("event", event)
-            .put("sequence", sequence)
-            .put("activityVisible", visible)
-            .put("sameViewObject", sameObject())
-            .put("matched", matched)
-            .put("elapsedMs", SystemClock.elapsedRealtime())
-            .put("frameTimeNs", sample?.receivedAtNs ?: 0L)
-            .put(
-                "sampleRgb",
-                if (sample == null) {
-                    "none"
-                } else {
-                    "${sample.red},${sample.green},${sample.blue}"
-                },
-            )
-            // Synthetic-only values, never content from a real browsing session.
-            .put("syntheticState", proof.take(350))
+                .put("event", event)
+                .put("sequence", sequence)
+                .put("activityVisible", visible)
+                .put("sameViewObject", sameObject())
+                .put("matched", matched)
+                .put("elapsedMs", SystemClock.elapsedRealtime())
+                .put("frameTimeNs", sample?.receivedAtNs ?: 0L)
+                .put(
+                    "sampleRgb",
+                    if (sample == null) {
+                        "none"
+                    } else {
+                        "${sample.red},${sample.green},${sample.blue}"
+                    },
+                )
+                // Synthetic-only values, never content from a real browsing session.
+                .put("syntheticState", proof.take(350))
         try {
             File(filesDir, "same-webview-migration.jsonl").appendText(message.toString() + "\n")
         } catch (_: Exception) {
