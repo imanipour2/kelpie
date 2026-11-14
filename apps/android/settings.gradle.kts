@@ -26,7 +26,7 @@ if (providers.gradleProperty("updateVerification").orNull == "true") {
     project(":update-verification").projectDir = file("../updates/android-verification")
 }
 
- 
+
 // Experimental, separately installed application with no Kelpie browser dependency.
 // Never included in ordinary production or QA builds.
 if (providers.gradleProperty("virtualDisplaySpike").orNull == "true") {
