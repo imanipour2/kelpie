@@ -31,7 +31,7 @@ export const BrowserControlRequestSchema = z.discriminatedUnion("method", [
   request("tab.click", z.object({ ref: z.string().min(1).max(1024) }).strict()),
   request("tab.type", z.object({ ref: z.string().min(1).max(1024), text }).strict()),
   request("tab.snapshot", z.object({ maxElements: z.number().int().min(1).max(1000).optional(), maxChars: z.number().int().min(256).max(100_000).optional() }).strict().default({})),
-  request("tab.screenshot", z.object({ fullPage: z.boolean().optional(), format: z.enum(["png", "jpeg"]).optional(), quality: z.number().int().min(0).max(100).optional() }).strict().default({})),
+  request("tab.screenshot", z.object({ fullPage: z.boolean().optional(), format: z.enum(["png", "jpeg"]).optional(), quality: z.number().int().min(0).max(100).optional(), recoveryRequestId: z.string().uuid().optional() }).strict().default({})),
   request("locator.click", z.object({ ...locator, button: z.enum(["left", "right", "middle"]).optional(), modifiers: z.array(z.enum(["Alt", "Control", "ControlOrMeta", "Meta", "Shift"])).max(5).optional() }).strict()),
   request("locator.dblclick", z.object(locator).strict()),
   request("locator.fill", z.object({ ...locator, value: text }).strict()),
