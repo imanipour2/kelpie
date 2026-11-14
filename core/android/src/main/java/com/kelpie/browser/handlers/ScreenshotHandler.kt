@@ -94,6 +94,13 @@ class ScreenshotHandler(
             ScreenshotResolution.parse(body["resolution"])
                 ?: return errorResponse("INVALID_PARAMS", "resolution must be 'native' or 'viewport'")
 
+        if (!fullPage && !ctx.isScreenshotForegroundReady()) {
+            return errorResponse(
+                "FOREGROUND_REQUIRED",
+                "Kelpie is in the background. Tap its persistent notification to open the browser, then retry screenshot.",
+            )
+        }
+
         val payload =
             if (fullPage) {
                 captureFullPagePayload(format, quality, resolution)
