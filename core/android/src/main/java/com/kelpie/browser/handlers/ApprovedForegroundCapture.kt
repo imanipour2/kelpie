@@ -1,5 +1,6 @@
 package com.kelpie.browser.handlers
 
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.Lifecycle
 import com.kelpie.browser.network.ApprovedScreenshotStore
@@ -135,6 +136,7 @@ internal class ApprovedForegroundCapture(
                                 )
                             ) {
                                 KelpieRecoveryNotification.captureCompleted()
+                                Toast.makeText(activity, "Capture ready. Return to ChatGPT.", Toast.LENGTH_SHORT).show()
                                 return@launch
                             }
                         }
