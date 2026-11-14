@@ -5,7 +5,7 @@ package com.kelpie.browser.qa
  * Only a local, on-screen affirmative Android dialog may call begin().
  * This is NOT a remote screenshot capability or a persistent consent token.
  */
-internal class SurfaceProbeLease(
+class SurfaceProbeLease(
     private val now: () -> Long = System::currentTimeMillis,
     private val ttlMs: Long = 90_000L,
 ) {
