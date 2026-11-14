@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationCompat.Builder
 import androidx.core.content.ContextCompat
 
 private const val RECOVERY_NOTIFICATION_ID = 0x4B455243
@@ -78,7 +79,7 @@ internal object KelpieRecoveryNotification {
 
         val explanation = "ChatGPT needs Kelpie in the foreground to capture the browser screen. Tap Allow to open Kelpie, or Not now to dismiss."
         val notification =
-            NotificationCompat.Builder(context, CHANNEL_ID)
+            Builder(context, CHANNEL_ID)
                 .setSmallIcon(context.applicationInfo.icon)
                 .setContentTitle("ChatGPT requests to open Kelpie")
                 .setContentText("Your approval is needed to continue browser screen capture.")
