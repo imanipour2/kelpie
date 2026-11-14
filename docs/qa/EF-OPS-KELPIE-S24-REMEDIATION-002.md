@@ -41,3 +41,39 @@ Preserve the installed APK and non-secret app data; never blindly uninstall. In-
 - Prior PR and issue: https://github.com/imanipour2/kelpie/pull/1 and https://github.com/imanipour2/enerfoam-website/issues/98
 
 Code branch readback/CI required before acceptance. Canonical Drive Runbook and Live Master Log sync completed with readback; owner approval for any new architectural decision remains a separate CDG gate.
+
+
+## 2026-11-14 — Post-approval capture handoff (QA-only, not yet device-accepted)
+
+### Evidence-based root cause
+
+The S24 proved that the Android notification, explicit "Allow & open Kelpie" action, Activity resume and original tab restoration work. Returning to ChatGPT subsequently places Kelpie in background; a *new* screenshot call is therefore rejected by the correct foreground policy. This is a time-of-capture/response design problem rather than a notification-importance problem. The earlier notification approval alone must not be confused with completed image capture.
+
+### Proposed/implemented guarded flow
+
+1. An authenticated, permitted foreground request arms a single short-lived ticket containing request UUID, active tab ID, document generation and original screenshot options. No capture occurs before the user taps the matching notification action.
+2. An actual Activity resume AFTER approval schedules a bounded renderer-readiness loop on the Android main thread. It uses the original active WebView, existing visibility checks and PixelCopy/visual-state readiness. If the app is paused, the tab closes, navigation begins or the consent expires, it cancels instead of capturing or returning stale data.
+3. The image is held *only in process memory*, capped at 12 MiB of base64 and 60 seconds after capture (subject also to the original request's 120-second expiry). No screenshot is saved to SharedPreferences, logs, backup or cloud storage.
+4. The caller may retry `tab.screenshot` for the same tab with `params: {"requestId": "..."}` (or `recoveryRequestId`) and the original options. A matching live tab/document and request ID are mandatory. This consumes the staged image exactly once and returns the original request ID and capture timestamp. A miss returns `RECOVERY_CAPTURE_NOT_READY` without generating another notification.
+5. The explicit `kelpie_request_foreground` extension also arms the default PNG/viewport screenshot. It does not start the Activity by itself.
+
+### Samsung multi-profile remediation
+
+ADB showed identical packages simultaneously hosted by Owner/User 0 and Dual App/User 95. Both processes tried to use the same local TCP port. Android's UID ranges identify the profile, so the primary profile keeps the existing port, while secondary profiles receive a deterministic per-profile port offset; mDNS advertises the actual port. This is a change to the *QA* browser only. Profiles remain installed and retain separate app data. Device and tunnel testing must still prove the connection picks the correct profile.
+
+### Tests and remaining security gates
+
+JVM tests now cover consent caching, one-time retrieval, replay rejection, wrong tab/document, expiry, cancellation and oversized image; plus deterministic owner/Dual App profile port mapping. Android QA and lint for **the latest commit** are pending and must be re-read. The on-device screenshot handoff has **not yet been proven**. We must test both default screenshot and `requestId` retry through the canonical MCP gateway, return to ChatGPT, physical decline, stale approval, screen lock, navigation race and request concurrency. Note that request UUID alone is not authenticated client identity: a future hardening pass must bind it to the original authenticated pairing client, or introduce an independent confidential redemption token, before shipping broadly to multiple paired clients. Treat the current code as QA-only.
+
+### Source notes (official docs and community validation)
+
+- https://developer.android.com/guide/components/activities/activity-lifecycle — Activity focus/resume versus later pause.
+- https://developer.android.com/guide/components/activities/secure-bal — explicit user tap rather than remote background activity launch.
+- https://developer.android.com/reference/android/webkit/WebView#postVisualStateCallback(long,android.webkit.WebView.VisualStateCallback) — visual-state callback guarantees a future draw, not already-present pixels.
+- https://developer.android.com/reference/android/view/PixelCopy — surface readiness and asynchronous copy completion.
+- https://developer.android.com/develop/ui/compose/notifications/channels — channel importance does not guarantee heads-up on Samsung.
+- Android developer community discussions (Stack Overflow and Samsung developer forums) were considered as implementation-risk reports, not substitutes for S24 hardware evidence.
+
+### Release decision
+
+Latest QA source version 0.2.7-qa (27) is not the previously installed 0.2.6-qa (26). Do not report installation, capture success, or merge/release acceptance before artifact SHA256/readback and physical S24 testing. All GitHub development text remains English.
