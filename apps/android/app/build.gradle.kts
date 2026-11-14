@@ -25,6 +25,7 @@ android {
         buildConfigField("int", "LOCAL_HTTP_PORT", "8420")
         buildConfigField("boolean", "P2_QA_ENABLED", "false")
         manifestPlaceholders["p2QaEnabled"] = "false"
+        manifestPlaceholders["p2AppLabel"] = "Kelpie"
         manifestPlaceholders["p2NormalBrowserEnabled"] = "true"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
@@ -36,6 +37,7 @@ android {
                 buildConfigField("int", "LOCAL_HTTP_PORT", "18450")
                 buildConfigField("boolean", "P2_QA_ENABLED", "true")
                 manifestPlaceholders["p2QaEnabled"] = "true"
+                manifestPlaceholders["p2AppLabel"] = "Kelpie P2 TabStore QA"
                 manifestPlaceholders["p2NormalBrowserEnabled"] = "false"
             } else if (providers.gradleProperty("kelpieEmbeddingVerificationProfile").orNull == "true") {
                 applicationIdSuffix = ".embeddingverify"
