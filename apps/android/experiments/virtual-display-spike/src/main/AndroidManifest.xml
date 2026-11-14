@@ -8,6 +8,7 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:usesCleartextTraffic="false">
+        <activity android:name=".SameWebViewActivity" android:exported="false" />
         <activity
             android:name=".ProbeActivity"
             android:exported="true"
