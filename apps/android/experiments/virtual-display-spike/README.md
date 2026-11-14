@@ -41,8 +41,8 @@ cd apps/android
 ```
 
 Default Kelpie builds do not include this module. The resulting APK has
-application ID `com.kelpie.virtualdisplayprobe` and can coexist with the
-installed `com.kelpie.browser.unifiedverify`.
+application ID `com.kelpie.virtualdisplayprobe.p1` and can coexist with the
+installed `com.kelpie.browser.unifiedverify` and earlier `com.kelpie.virtualdisplayprobe` installations.
 
 ## Physical test protocol (owner initiated)
 
@@ -54,7 +54,7 @@ installed `com.kelpie.browser.unifiedverify`.
    The 20 scheduled mutations take about 29 seconds after the 3-second grace.
 4. Return to the probe after at least 35 seconds. Read the on-screen result.
 5. For independent review, use USB debug `adb shell run-as
-   com.kelpie.virtualdisplayprobe cat files/virtual-display-probe.jsonl` and
+   com.kelpie.virtualdisplayprobe.p1 cat files/virtual-display-probe.jsonl` and
    save the sanitized JSONL to a private QA location. No screenshots or private
    user content are stored. Review failures, frame timestamps, and
    `activityVisible=false` per iteration.
@@ -62,7 +62,7 @@ installed `com.kelpie.browser.unifiedverify`.
    multi-window, network, orientation and longer idle testing only after this
    first proof gate. The test deliberately **stops on keyguard lock**; it does
    not unlock or override the lock screen.
-7. Use `adb shell am force-stop com.kelpie.virtualdisplayprobe` to safely end
+7. Use `adb shell am force-stop com.kelpie.virtualdisplayprobe.p1` to safely end
    the probe. Remove this separate QA app only after logging evidence.
    No Kelpie/Termux/WordPress changes are needed.
 
