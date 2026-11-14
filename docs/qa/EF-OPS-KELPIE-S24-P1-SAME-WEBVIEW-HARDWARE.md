@@ -29,7 +29,7 @@ Important independent observation: the original Java `WebView` identity remained
 - Added `ProbeLifecycleGate`, reset per run. Exactly once: `claimLoad()`, `claimMigration()`, and `claimStep(1..21)`. A repeated callback, delayed task or overlapping capture loop cannot increment the same step twice.
 - Added independent JVM regression tests for repeated load/migration, out-of-order and duplicate step suppression.
 - Updated QA build to `0.2.1-p1-qa` code 3 to distinguish the correction.
-- **New APK build, signing/upgrade and physical rerun are not yet verified in this document.** Preserve the existing P1 application data and evidence unless a dedicated, verified QA-only rollback/uninstall is required. Never uninstall the main browser or first PoC.
+- The later corrected build and physical retests have now been verified; see the dated readback below. Preserve the earlier failed-run evidence as a regression witness.
 
 ## Remaining release gates
 
@@ -38,4 +38,20 @@ Important independent observation: the original Java `WebView` identity remained
 3. Repeat unlocked HOME and ChatGPT-foreground runs: unique `INITIAL_PROOF`/migration events, exactly 20 fresh nonce-matching frames, `activityVisible=false` for every match, matched `FRAMES_COMPLETE`, then matched `RESTORE_VERDICT` and original tab/document/form/history/scroll.
 4. Keyguard behavior, Doze, long-run resource bounds, multi-tab authenticated session architecture, per-client consent/expiry/Pause/Stop and original Kelpie integration remain separately OPEN. No browser release or site deployment.
 
-**Classification:** PHYSICAL FAILURE CONFIRMED / SOURCE FIX IN REVIEW / MAIN KELPIE UNCHANGED / ENERFOAM TEST & LIVE UNCHANGED / RELEASE NO-GO.
+**Classification of original Run 1:** PHYSICAL FAILURE CONFIRMED; see below for later corrected-build PASS. Main Kelpie and ENERFOAM TEST/LIVE remain unchanged.
+
+## Corrected P1 build and direct S24 re-test — PASS, isolated fixture only
+
+**Corrective source:** `8abd2235e7084022f4ff7f11f7ff67783dc542ed` (single-flight lifecycle gate, JVM tests, syntax fix). Dedicated [S24 Private VirtualDisplay Spike QA run 43637889372](https://github.com/imanipour2/kelpie/actions/runs/43637889372) finished **SUCCESS**. It ran committed-source formatting comparison, Kotlin lint, JVM tests (including duplicate-callback regressions), Android lint, assemble, package identity and 16-KiB APK ZIP alignment. Artifact **14130736443** ZIP SHA256 `5af8e42d94a40c5b13244de8b92be9051c7e37a6f3b1f216cfdf5d93fda45f72`. APK SHA256 `704f46f98ef04f425f38646fe8a57b18415640f5bd89bf14d2be087681ce0efa`.
+
+**Installation integrity:** transfer via verified Google Drive working copy and independent ZIP CRC/SHA256; exact app identity `com.kelpie.virtualdisplayprobe.p1`, QA version `0.2.1-p1-qa`, build 3. In-place upgrade was rejected as `INSTALL_FAILED_UPDATE_INCOMPATIBLE` owing to differing ephemeral debug signers. With old synthetic-only full log and exact prior APK backed up, **only** isolated `com.kelpie.virtualdisplayprobe.p1` was uninstalled and replaced. `adb pull base.apk` after install verified exact new APK SHA256. Neither original `com.kelpie.browser.unifiedverify` nor earlier isolated `com.kelpie.virtualdisplayprobe` was uninstalled/replaced. ADB forwarding list remained empty.
+
+**Hardware acceptance A — HOME in foreground:** In standalone user-started QA Activity, 1 `INITIAL_PROOF`, 1 `MIGRATED_SAME_OBJECT`, exactly 20 `FRESH_MATCH` entries (sequences 1..20, all `activityVisible=false`, all matched), 1 `FRAMES_COMPLETE` (`matched=true`), 1 `RESTORE_VERDICT` (`matched=true`). The same Java `WebView` object survived the two reparentings; original synthetic document nonce, form value, history marker, and scrollY=340 were byte-identical. Preserved 24-event local synthetic-only JSONL `C:\Enerfoam-Kelpie-QA\P1\P1_BUILD3_HOME_PASS_24.jsonl` SHA256 `fcdb6a43266ce50eaeab93ee3ab0dcb71263dd3e2219b822b3d27f9ebb7c5fe6`. **PASS 20/20 + state restore.**
+
+**Hardware acceptance B — ChatGPT as foreground:** Repeat separate 20-step capture while Android `topResumedActivity` was `com.openai.chatgpt`, not QA app. Same exact 24-event structure and 20/20 new background frames, with `FRAMES_COMPLETE=true`, `RESTORE_VERDICT=true`, exact same Java object and document/form/history/scroll state. Evidence `C:\Enerfoam-Kelpie-QA\P1\P1_BUILD3_CHATGPT_PASS_24.jsonl` SHA256 `6e30f139cbccf833fe499940920b2c85c148dd15a0fe312961da70d9e8e052d5`. **PASS 20/20 + state restore.**
+
+The QA process was force-stopped after saving evidence and ChatGPT returned to Android foreground. The P1 test package remains installed but is stopped. Original browser and prior PoC packages remain installed and ADB forwarding is empty.
+
+**Interpretation:** The failure was fixed on the actual physical SM-S928B/Android 17. This is strong evidence of *same WebView object reparenting*, changed frames and preservation of a *synthetic offline document* while Activity is hidden. It **does not** prove Android supports continuous long-running rendering under Doze/keyguard, or migration of the actual Kelpie tab, live authentication/cookies, multi-tabs, network state, 24-hour resource bounds, or a secure always-on remote controller. All such gates remain **OPEN** and need separate scope/authorization, device checks, rollback and QA. No Kelpie browser APK release/merge and no Enerfoam TEST/LIVE site change.
+
+**Disposition:** `ISOLATED_P1_SAME_WEBVIEW_HARDWARE_PASS_BOTH_SCENARIOS`; `PRODUCTION_TAB_MIGRATION_UNVERIFIED`; `SESSION_SECURITY_OPEN`; `RELEASE_NO_GO`.
