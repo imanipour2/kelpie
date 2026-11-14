@@ -25,6 +25,18 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v4.0.3
+      - name: Enforce committed Kotlin formatting (emit exact formatter patch on failure)
+        shell: bash
+        working-directory: apps/android
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon :virtual-display-spike:ktlintFormat -PvirtualDisplaySpike=true
+          git diff --check
+          if ! git diff --quiet -- experiments/virtual-display-spike; then
+            git diff -- experiments/virtual-display-spike
+            echo "::error::Kotlin source differs from ktlint formatter; commit formatter output before QA."
+            exit 1
+          fi
       - name: Lint, test, and package opt-in standalone Android probe
         working-directory: apps/android
         run: |
