@@ -60,7 +60,6 @@ internal object KelpieRecoveryNotification {
         state.transition(id, ForegroundRecoveryState.Status.USER_DECLINED)
     }
 
-
     @Synchronized
     fun request(context: Context): Boolean {
         val pending = state.begin()
