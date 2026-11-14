@@ -4,7 +4,7 @@
          FOREGROUND_SERVICE, storage, or notification permissions. -->
     <application
         android:allowBackup="false"
-        android:label="Kelpie Virtual Display QA"
+        android:label="Kelpie P1 Same WebView QA"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:usesCleartextTraffic="false">
