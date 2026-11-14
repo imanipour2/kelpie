@@ -92,7 +92,7 @@ class DeviceHandler(
                     fullPage = false,
                     format = "png",
                     quality = 80,
-                    resolution = ScreenshotResolution.NATIVE,
+                    resolution = ScreenshotResolution.VIEWPORT,
                 ) == true
             } else {
                 false
