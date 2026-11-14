@@ -114,15 +114,23 @@ class ScreenshotHandler(
                 } else {
                     "Kelpie is in the background and a recovery notification could not be posted. Open Kelpie manually, then retry screenshot."
                 },
+                mapOf(
+                    "requestId" to KelpieRecoveryNotification.current()?.id,
+                    "requestStatus" to KelpieRecoveryNotification.current()?.status?.name,
+                    "expiresAtMs" to KelpieRecoveryNotification.current()?.expiresAt,
+                    "mayHaveCompleted" to false,
+                ),
             )
         }
 
+        KelpieRecoveryNotification.renderReady()
         val payload =
             if (fullPage) {
                 captureFullPagePayload(format, quality, resolution)
             } else {
                 ctx.captureScreenshotPayload(format, quality, resolution)
             } ?: return errorResponse("SCREENSHOT_FAILED", "Failed to capture screenshot")
+        KelpieRecoveryNotification.captureCompleted()
         return successResponse(payload)
     }
 
