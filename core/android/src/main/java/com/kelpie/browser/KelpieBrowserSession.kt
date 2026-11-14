@@ -169,6 +169,7 @@ class KelpieBrowserSession(
     }
 
     private fun onResume() {
+        handlerContext.approvedForegroundCapture?.onResumed()
         com.kelpie.browser.browser.BookmarkStore
             .refreshAccountBookmarks()
         com.kelpie.browser.connect.NessieConnection
