@@ -1,6 +1,7 @@
 package com.kelpie.browser.handlers
 
 import android.app.Activity
+import android.app.NotificationManager
 import android.content.pm.ActivityInfo
 import com.kelpie.browser.device.DeviceInfo
 import com.kelpie.browser.network.AndroidUnsupportedMethods
@@ -21,6 +22,8 @@ class DeviceHandler(
         router.register("get-viewport-presets") { getViewportPresets() }
         router.register("get-device-info") { getDeviceInfo() }
         router.register("get-capabilities") { getCapabilities() }
+        router.register("device-status") { deviceStatus() }
+        router.register("request-foreground") { requestForeground() }
         router.register("set-orientation") { body -> setOrientation(body) }
         router.register("get-orientation") { getOrientation() }
     }
@@ -50,6 +53,42 @@ class DeviceHandler(
                 "system" to mapOf("os" to "Android", "osVersion" to android.os.Build.VERSION.RELEASE),
             ),
         )
+
+    /** Read-only recovery preflight. No system-wide state or sensitive app data is exported. */
+    private suspend fun deviceStatus(): Map<String, Any?> {
+        val ready = ctx.isScreenshotForegroundReady()
+        val notificationsEnabled =
+            activity?.getSystemService(NotificationManager::class.java)?.areNotificationsEnabled() == true
+        return successResponse(
+            mapOf(
+                "appForeground" to (activity?.hasWindowFocus() == true),
+                "screenshotReady" to ready,
+                "notificationsEnabled" to notificationsEnabled,
+                "recovery" to if (ready) "READY" else if (notificationsEnabled) "USER_TAP_REQUIRED" else "NOTIFICATIONS_DISABLED",
+            ),
+        )
+    }
+
+    /** Never launches the Activity remotely or dismisses a lock screen. */
+    private suspend fun requestForeground(): Map<String, Any?> {
+        val ready = ctx.isScreenshotForegroundReady()
+        val notificationsEnabled =
+            activity?.getSystemService(NotificationManager::class.java)?.areNotificationsEnabled() == true
+        val status =
+            if (ready) "READY" else if (notificationsEnabled) "USER_TAP_REQUIRED" else "NOTIFICATIONS_DISABLED"
+        return successResponse(
+            mapOf(
+                "status" to status,
+                "automaticLaunch" to false,
+                "screenshotReady" to ready,
+                "message" to when (status) {
+                    "READY" -> "Kelpie is already visible. Retry screenshot."
+                    "USER_TAP_REQUIRED" -> "Tap the persistent Kelpie notification to bring it to the foreground, then retry screenshot."
+                    else -> "Kelpie notifications are disabled. Enable notifications in Android settings and open Kelpie manually."
+                },
+            ),
+        )
+    }
 
     private fun getViewportPresets(): Map<String, Any?> {
         val availablePresetIds = TabletViewportPresetStore.availablePresetIds.value
