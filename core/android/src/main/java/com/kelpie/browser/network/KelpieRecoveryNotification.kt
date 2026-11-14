@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -12,13 +13,17 @@ import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 
+private const val RECOVERY_NOTIFICATION_ID = 0x4B455243
+
 /**
- * User-mediated return to Kelpie. An authenticated remote call may post this
- * notification but NEVER starts an Activity or bypasses the device lock.
+ * A conspicuous, user-mediated permission request. The app cannot bring an
+ * Activity to the front from an ordinary background network command.
+ * Heads-up visibility is controlled by Android/user channel settings and DND.
  */
 internal object KelpieRecoveryNotification {
-    private const val CHANNEL_ID = "kelpie_recovery"
-    private const val NOTIFICATION_ID = 0x4B455243
+    // New channel ID: Android does not let an app upgrade an existing channel
+    // from DEFAULT to HIGH once the channel has been created.
+    private const val CHANNEL_ID = "kelpie_recovery_prompt_v2"
     private const val COOLDOWN_MS = 15_000L
     private var lastPostedAt = 0L
 
@@ -31,42 +36,74 @@ internal object KelpieRecoveryNotification {
         ) {
             return false
         }
+
         if (manager.getNotificationChannel(CHANNEL_ID) == null) {
             manager.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Kelpie recovery", NotificationManager.IMPORTANCE_DEFAULT),
+                NotificationChannel(
+                    CHANNEL_ID,
+                    "درخواست بازکردن کلپی",
+                    NotificationManager.IMPORTANCE_HIGH,
+                ).apply {
+                    description = "درخواست قابل مشاهده برای اجازه بازکردن کلپی از طریق ChatGPT"
+                },
             )
         }
-        if (manager.getNotificationChannel(CHANNEL_ID)?.importance == NotificationManager.IMPORTANCE_NONE) return false
+        val channel = manager.getNotificationChannel(CHANNEL_ID) ?: return false
+        if (channel.importance == NotificationManager.IMPORTANCE_NONE) return false
 
         val now = SystemClock.elapsedRealtime()
-        // A dismissed recovery notification must be reposted on the next
-        // explicit user request, even if the cooldown period has not elapsed.
-        val stillVisible = manager.activeNotifications.any { it.id == NOTIFICATION_ID }
+        // A user-dismissed prompt must be shown again for a fresh request.
+        val stillVisible = manager.activeNotifications.any { it.id == RECOVERY_NOTIFICATION_ID }
         if (lastPostedAt != 0L && now - lastPostedAt < COOLDOWN_MS && stillVisible) return true
 
-        val intent =
+        val launchIntent =
             context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             } ?: return false
         val open =
             PendingIntent.getActivity(
                 context,
-                NOTIFICATION_ID,
-                intent,
+                RECOVERY_NOTIFICATION_ID,
+                launchIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
-        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+
+        val dismiss =
+            PendingIntent.getBroadcast(
+                context,
+                RECOVERY_NOTIFICATION_ID + 1,
+                Intent(context, KelpieRecoveryDismissReceiver::class.java),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+
+        val explanation = "ChatGPT برای نمایش تصویر صفحه به بازشدن کلپی نیاز دارد. آیا اجازه می‌دهید کلپی باز شود؟"
         val notification =
-            builder
+            NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(context.applicationInfo.icon)
-                .setContentTitle("Kelpie: return to browser")
-                .setContentText("Tap here to resume screenshot capture in Kelpie")
+                .setContentTitle("اجازه بازکردن کلپی توسط ChatGPT؟")
+                .setContentText("برای ادامه، «باز کردن کلپی» را انتخاب کنید.")
+                .setStyle(NotificationCompat.BigTextStyle().bigText(explanation))
+                .setCategory(NotificationCompat.CATEGORY_REMINDER)
+                .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                 .setContentIntent(open)
+                .addAction(android.R.drawable.ic_menu_view, "اجازه می‌دهم؛ باز کردن کلپی", open)
+                .addAction(android.R.drawable.ic_menu_close_clear_cancel, "فعلاً نه", dismiss)
                 .setAutoCancel(true)
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .build()
-        manager.notify(NOTIFICATION_ID, notification)
+
+        manager.notify(RECOVERY_NOTIFICATION_ID, notification)
         lastPostedAt = now
         return true
+    }
+}
+
+/** Explicit decline: dismiss only this prompt. Never starts any Activity. */
+class KelpieRecoveryDismissReceiver : BroadcastReceiver() {
+    override fun onReceive(
+        context: Context,
+        intent: Intent,
+    ) {
+        context.getSystemService(NotificationManager::class.java)?.cancel(RECOVERY_NOTIFICATION_ID)
     }
 }
