@@ -134,7 +134,7 @@ class KelpieNetworkService : Service() {
             .Builder(this, CHANNEL_ID)
             .setSmallIcon(applicationInfo.icon)
             .setContentTitle("Kelpie is reachable")
-            .setContentText("Listening for commands on the local network")
+            .setContentText("Tap to open Kelpie for screenshots; remote control remains connected")
             .setOngoing(true)
             .setShowWhen(false)
             .setPriority(NotificationCompat.PRIORITY_LOW)
