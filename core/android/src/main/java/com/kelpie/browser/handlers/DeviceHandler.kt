@@ -58,6 +58,7 @@ class DeviceHandler(
     /** Read-only recovery preflight. No system-wide state or sensitive app data is exported. */
     private suspend fun deviceStatus(): Map<String, Any?> {
         val ready = ctx.isScreenshotForegroundReady()
+        if (ready) KelpieRecoveryNotification.renderReady()
         val notificationsEnabled =
             activity?.getSystemService(NotificationManager::class.java)?.areNotificationsEnabled() == true
         return successResponse(
@@ -66,6 +67,8 @@ class DeviceHandler(
                 "screenshotReady" to ready,
                 "notificationsEnabled" to notificationsEnabled,
                 "recovery" to recoveryStatus(ready, notificationsEnabled),
+                "recoveryRequestId" to KelpieRecoveryNotification.current()?.id,
+                "recoveryRequestStatus" to KelpieRecoveryNotification.current()?.status?.name,
             ),
         )
     }
@@ -91,6 +94,9 @@ class DeviceHandler(
             mapOf(
                 "status" to status,
                 "automaticLaunch" to false,
+                "requestId" to KelpieRecoveryNotification.current()?.id,
+                "requestStatus" to KelpieRecoveryNotification.current()?.status?.name,
+                "expiresAtMs" to KelpieRecoveryNotification.current()?.expiresAt,
                 "screenshotReady" to ready,
                 "message" to
                     when (status) {
