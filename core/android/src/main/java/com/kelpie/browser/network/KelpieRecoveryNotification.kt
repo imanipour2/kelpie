@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat.Builder
 import androidx.core.content.ContextCompat
 
 private const val RECOVERY_NOTIFICATION_ID = 0x4B455243
+private const val REQUEST_EXTRA = "com.kelpie.browser.recovery.request_id"
 
 /**
  * A conspicuous, user-mediated permission request. The app cannot bring an
@@ -24,9 +25,45 @@ internal object KelpieRecoveryNotification {
     // New channel ID: Android does not let an app upgrade an existing channel
     // from DEFAULT to HIGH once the channel has been created.
     private const val CHANNEL_ID = "kelpie_recovery_prompt_v2"
+    private val state = ForegroundRecoveryState()
+
+    fun current(): ForegroundRecoveryState.Request? = state.snapshot()
+
+    fun approveFromIntent(intent: Intent?): Boolean {
+        val id = intent?.getStringExtra(REQUEST_EXTRA) ?: return false
+        return state.transition(id, ForegroundRecoveryState.Status.USER_APPROVED) != null
+    }
+
+    fun activityResumed() {
+        val current = state.snapshot() ?: return
+        if (current.status == ForegroundRecoveryState.Status.USER_APPROVED) {
+            state.transition(current.id, ForegroundRecoveryState.Status.ACTIVITY_RESUMED)
+        }
+    }
+
+    fun renderReady() {
+        val current = state.snapshot() ?: return
+        if (current.status == ForegroundRecoveryState.Status.ACTIVITY_RESUMED) {
+            state.transition(current.id, ForegroundRecoveryState.Status.RENDER_READY)
+        }
+    }
+
+    fun captureCompleted() {
+        val current = state.snapshot() ?: return
+        if (current.status == ForegroundRecoveryState.Status.RENDER_READY) {
+            state.transition(current.id, ForegroundRecoveryState.Status.CAPTURE_COMPLETED)
+        }
+    }
+
+    fun decline(id: String?) {
+        if (id == null) return
+        state.transition(id, ForegroundRecoveryState.Status.USER_DECLINED)
+    }
+
 
     @Synchronized
     fun request(context: Context): Boolean {
+        val pending = state.begin()
         val manager = context.getSystemService(NotificationManager::class.java) ?: return false
         if (!manager.areNotificationsEnabled()) return false
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -55,16 +92,20 @@ internal object KelpieRecoveryNotification {
             manager.activeNotifications.any {
                 it.id == RECOVERY_NOTIFICATION_ID && it.notification.channelId == CHANNEL_ID
             }
-        if (promptAlreadyVisible) return true
+        if (promptAlreadyVisible) {
+            state.transition(pending.id, ForegroundRecoveryState.Status.NOTIFICATION_POSTED)
+            return true
+        }
 
         val launchIntent =
             context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(REQUEST_EXTRA, pending.id)
             } ?: return false
         val open =
             PendingIntent.getActivity(
                 context,
-                RECOVERY_NOTIFICATION_ID,
+                pending.id.hashCode(),
                 launchIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
@@ -72,8 +113,8 @@ internal object KelpieRecoveryNotification {
         val dismiss =
             PendingIntent.getBroadcast(
                 context,
-                RECOVERY_NOTIFICATION_ID + 1,
-                Intent(context, KelpieRecoveryDismissReceiver::class.java),
+                pending.id.hashCode() xor 0x51,
+                Intent(context, KelpieRecoveryDismissReceiver::class.java).putExtra(REQUEST_EXTRA, pending.id),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
 
@@ -94,6 +135,7 @@ internal object KelpieRecoveryNotification {
                 .build()
 
         manager.notify(RECOVERY_NOTIFICATION_ID, notification)
+        state.transition(pending.id, ForegroundRecoveryState.Status.NOTIFICATION_POSTED)
         return true
     }
 }
@@ -104,6 +146,11 @@ class KelpieRecoveryDismissReceiver : BroadcastReceiver() {
         context: Context,
         intent: Intent,
     ) {
-        context.getSystemService(NotificationManager::class.java)?.cancel(RECOVERY_NOTIFICATION_ID)
+        val id = intent.getStringExtra(REQUEST_EXTRA)
+        val pending = KelpieRecoveryNotification.current()
+        if (id != null && pending?.id == id) {
+            KelpieRecoveryNotification.decline(id)
+            context.getSystemService(NotificationManager::class.java)?.cancel(RECOVERY_NOTIFICATION_ID)
+        }
     }
 }
