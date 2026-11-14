@@ -26,8 +26,6 @@ import java.io.File
  * are saved. A hidden WebView is tested on its own private virtual display.
  */
 class ProbeActivity : Activity() {
-    private data class Frame(val r: Int, val g: Int, val b: Int, val timeNs: Long)
-
     private val main = Handler(Looper.getMainLooper())
     private lateinit var status: TextView
     private var worker: HandlerThread? = null
@@ -36,7 +34,8 @@ class ProbeActivity : Activity() {
     private var presentation: Presentation? = null
     private var webView: WebView? = null
 
-    @Volatile private var frame: Frame? = null
+    @Volatile
+    private var frame: PixelSample? = null
     private var generation = 0
     private var running = false
     private var visible = true
@@ -87,7 +86,7 @@ class ProbeActivity : Activity() {
                         val offset = 240 * plane.rowStride + 160 * plane.pixelStride
                         val buffer = plane.buffer
                         if (offset + 2 < buffer.limit()) {
-                            frame = Frame(
+                            frame = PixelSample(
                                 buffer.get(offset).toInt() and 255,
                                 buffer.get(offset + 1).toInt() and 255,
                                 buffer.get(offset + 2).toInt() and 255,
@@ -163,8 +162,7 @@ class ProbeActivity : Activity() {
         main.postDelayed({
             if (!running || token != generation) return@postDelayed
             val f = frame
-            val pass = f != null && f.timeNs > before &&
-                f.r == red && f.g == green && f.b == blue
+            val pass = FrameEvidence.matches(sequence, before, f)
             attempts++
             if (pass) passes++
             writeEvent(if (pass) "FRESH_MATCH" else "STALE_OR_MISSING", sequence, f, pass)
@@ -173,16 +171,16 @@ class ProbeActivity : Activity() {
         }, 900)
     }
 
-    private fun writeEvent(event: String, sequence: Int, observed: Frame?, matched: Boolean) {
+    private fun writeEvent(event: String, sequence: Int, observed: PixelSample?, matched: Boolean) {
         val json = JSONObject()
             .put("event", event)
             .put("sequence", sequence)
             .put("activityVisible", visible)
             .put("elapsedMs", SystemClock.elapsedRealtime())
             .put("matched", matched)
-            .put("frameTimeNs", observed?.timeNs ?: 0)
+            .put("frameTimeNs", observed?.receivedAtNs ?: 0)
             .put("sampleRgb", if (observed == null) "none" else
-                observed.r.toString() + "," + observed.g + "," + observed.b)
+                observed.red.toString() + "," + observed.green + "," + observed.blue)
         try {
             File(filesDir, "virtual-display-probe.jsonl")
                 .appendText(json.toString() + "\n")
