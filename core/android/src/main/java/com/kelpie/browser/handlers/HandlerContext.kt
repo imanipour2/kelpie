@@ -380,6 +380,9 @@ class HandlerContext(
         }
     }
 
+    /** Fixed preflight: never render a hidden WebView or launch an Activity. */
+    suspend fun isScreenshotForegroundReady(): Boolean = hasVisibleDocument()
+
     private suspend fun hasVisibleDocument(): Boolean =
         try {
             val state =
