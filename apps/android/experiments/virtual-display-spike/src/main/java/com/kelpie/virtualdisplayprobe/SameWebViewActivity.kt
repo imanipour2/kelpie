@@ -49,26 +49,34 @@ class SameWebViewActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        root = LinearLayout(this).apply {
+        root =
+            LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(12, 12, 12, 12)
         }
-        status = TextView(this).apply {
+        status =
+            TextView(this).apply {
             text = "S24 same-WebView migration (offline). Start, then HOME immediately. Return after 35 s."
         }
         root.addView(status)
-        root.addView(Button(this).apply {
-            text = "Start migration / 20 changed frames"
-            setOnClickListener { start() }
-        })
-        root.addView(Button(this).apply {
-            text = "Restore SAME WebView to Activity"
-            setOnClickListener { restoreToActivity() }
-        })
-        root.addView(Button(this).apply {
-            text = "Stop and release"
-            setOnClickListener { stop("USER_STOP") }
-        })
+        root.addView(
+            Button(this).apply {
+                text = "Start migration / 20 changed frames"
+                setOnClickListener { start() }
+            },
+        )
+        root.addView(
+            Button(this).apply {
+                text = "Restore SAME WebView to Activity"
+                setOnClickListener { restoreToActivity() }
+            },
+        )
+        root.addView(
+            Button(this).apply {
+                text = "Stop and release"
+                setOnClickListener { stop("USER_STOP") }
+            },
+        )
         setContentView(root)
     }
 
@@ -91,14 +99,19 @@ class SameWebViewActivity : Activity() {
         view.settings.allowContentAccess = false
         view.settings.javaScriptCanOpenWindowsAutomatically = false
         view.settings.setSupportMultipleWindows(false)
-        view.layoutParams = LinearLayout.LayoutParams(
+        view.layoutParams =
+            LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             280,
         )
         root.addView(view)
         active = true
-        view.webViewClient = object : WebViewClient() {
-            override fun onPageFinished(target: WebView?, url: String?) {
+        view.webViewClient =
+            object : WebViewClient() {
+                override fun onPageFinished(
+                    target: WebView?,
+                    url: String?,
+                ) {
                 if (!active || ticket != generation) return
                 view.evaluateJavascript("window.kelpieSeed(); window.kelpieProof()", { proof ->
                     if (!active || ticket != generation) return@evaluateJavascript
@@ -106,8 +119,8 @@ class SameWebViewActivity : Activity() {
                     write("INITIAL_PROOF", 0, null, false, proof)
                     main.postDelayed({ migrate(ticket) }, 700)
                 })
+                }
             }
-        }
         // A fictional .invalid base and no INTERNET permission guarantee local-only operation.
         view.loadDataWithBaseURL(
             "https://fixture.invalid/",
@@ -138,7 +151,8 @@ class SameWebViewActivity : Activity() {
                         val plane = image.planes[0]
                         val offset = 240 * plane.rowStride + 160 * plane.pixelStride
                         if (offset + 2 < plane.buffer.limit()) {
-                            latest = PixelSample(
+                            latest =
+                                PixelSample(
                                 plane.buffer.get(offset).toInt() and 255,
                                 plane.buffer.get(offset + 1).toInt() and 255,
                                 plane.buffer.get(offset + 2).toInt() and 255,
@@ -152,7 +166,8 @@ class SameWebViewActivity : Activity() {
                     // Reader may close concurrently during cleanup.
                 }
             }, Handler(thread.looper))
-            val virtual = getSystemService(DisplayManager::class.java).createVirtualDisplay(
+            val virtual =
+                getSystemService(DisplayManager::class.java).createVirtualDisplay(
                 "KelpieSameWebViewOffline",
                 320,
                 480,
@@ -166,7 +181,8 @@ class SameWebViewActivity : Activity() {
             presentation = target
             // Detach rather than destroy or instantiate a replacement WebView.
             (view.parent as? ViewGroup)?.removeView(view)
-            view.layoutParams = ViewGroup.LayoutParams(
+            view.layoutParams =
+                ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
             )
@@ -182,7 +198,10 @@ class SameWebViewActivity : Activity() {
         }
     }
 
-    private fun step(ticket: Int, sequence: Int) {
+    private fun step(
+        ticket: Int,
+        sequence: Int,
+    ) {
         if (!active || ticket != generation) return
         if (getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
             stop("KEYGUARD_STOP")
@@ -195,7 +214,11 @@ class SameWebViewActivity : Activity() {
             // Leave Presentation and original WebView alive for state/identity readback.
             return
         }
-        val view = browser ?: run { stop("MISSING_WEBVIEW"); return }
+        val view =
+            browser ?: run {
+                stop("MISSING_WEBVIEW")
+                return
+            }
         val (r, g, b) = ProbeFixture.colorFor(sequence)
         val before = SystemClock.elapsedRealtimeNanos()
         view.evaluateJavascript("window.setProbe($sequence,$r,$g,$b)", null)
@@ -212,10 +235,11 @@ class SameWebViewActivity : Activity() {
     }
 
     private fun restoreToActivity() {
-        val view = browser ?: run {
-            status.text = "No WebView to restore"
-            return
-        }
+        val view =
+            browser ?: run {
+                status.text = "No WebView to restore"
+                return
+            }
         if (!migrationComplete || !visible) {
             status.text = "Restore is permitted only while Activity is visible after migration."
             return
@@ -234,7 +258,8 @@ class SameWebViewActivity : Activity() {
         worker?.quitSafely()
         worker = null
         latest = null
-        view.layoutParams = LinearLayout.LayoutParams(
+        view.layoutParams =
+            LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             280,
         )
@@ -248,8 +273,7 @@ class SameWebViewActivity : Activity() {
         migrationComplete = false
     }
 
-    private fun sameObject(): Boolean =
-        browser != null && System.identityHashCode(browser) == originalViewIdentity
+    private fun sameObject(): Boolean = browser != null && System.identityHashCode(browser) == originalViewIdentity
 
     private fun write(
         event: String,
@@ -258,7 +282,8 @@ class SameWebViewActivity : Activity() {
         matched: Boolean,
         proof: String,
     ) {
-        val message = JSONObject()
+        val message =
+            JSONObject()
             .put("event", event)
             .put("sequence", sequence)
             .put("activityVisible", visible)
@@ -268,8 +293,11 @@ class SameWebViewActivity : Activity() {
             .put("frameTimeNs", sample?.receivedAtNs ?: 0L)
             .put(
                 "sampleRgb",
-                if (sample == null) "none"
-                else "${sample.red},${sample.green},${sample.blue}",
+                if (sample == null) {
+                    "none"
+                } else {
+                    "${sample.red},${sample.green},${sample.blue}"
+                },
             )
             // Synthetic-only values, never content from a real browsing session.
             .put("syntheticState", proof.take(350))
