@@ -149,9 +149,9 @@ internal class ApprovedForegroundCapture(
 
     private fun eligible(plan: CapturePlan): Boolean {
         val tab = ctx.tabStore?.activeTab ?: return false
-        val status = KelpieRecoveryNotification.current()
+        val status = KelpieRecoveryNotification.current() ?: return false
         return foreground &&
-            status?.id == plan.ticket.requestId &&
+            status.id == plan.ticket.requestId &&
             status.status in setOf(
                 ForegroundRecoveryState.Status.ACTIVITY_RESUMED,
                 ForegroundRecoveryState.Status.RENDER_READY,
