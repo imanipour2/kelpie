@@ -83,7 +83,10 @@ private class FullContentCapture(
 class ScreenshotHandler(
     private val ctx: HandlerContext,
 ) {
+    private val approvedCapture = ApprovedForegroundCapture(ctx, ::captureFullPagePayload)
+
     fun register(router: Router) {
+        ctx.approvedForegroundCapture = approvedCapture
         router.register("screenshot") { screenshot(it) }
     }
 
@@ -94,6 +97,20 @@ class ScreenshotHandler(
         val resolution =
             ScreenshotResolution.parse(body["resolution"])
                 ?: return errorResponse("INVALID_PARAMS", "resolution must be 'native' or 'viewport'")
+
+        val approvedId = (body["recoveryRequestId"] ?: body["requestId"]) as? String
+        if (approvedId != null) {
+            val result = approvedCapture.take(approvedId, fullPage, format, quality, resolution)
+            return if (result != null) {
+                successResponse(result)
+            } else {
+                errorResponse(
+                    "RECOVERY_CAPTURE_NOT_READY",
+                    "No valid approved capture is available for this request ID, tab and document.",
+                    mapOf("requestId" to approvedId, "mayHaveCompleted" to false),
+                )
+            }
+        }
 
         if (!ctx.isScreenshotForegroundReady()) {
             // A remote screenshot request is also the user's recovery request.
@@ -107,6 +124,11 @@ class ScreenshotHandler(
                         ?.applicationContext
                         ?.let { KelpieRecoveryNotification.request(it) } == true
                 }.getOrDefault(false)
+            val request = KelpieRecoveryNotification.current()
+            val captureArmed =
+                notificationPosted &&
+                    request != null &&
+                    approvedCapture.arm(request, fullPage, format, quality, resolution)
             return errorResponse(
                 "FOREGROUND_REQUIRED",
                 if (notificationPosted) {
@@ -118,6 +140,7 @@ class ScreenshotHandler(
                     "requestId" to KelpieRecoveryNotification.current()?.id,
                     "requestStatus" to KelpieRecoveryNotification.current()?.status?.name,
                     "expiresAtMs" to KelpieRecoveryNotification.current()?.expiresAt,
+                    "captureArmed" to captureArmed,
                     "mayHaveCompleted" to false,
                 ),
             )
