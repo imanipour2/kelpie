@@ -38,7 +38,12 @@ import java.io.File
  * Enabled only with -PkelpieP2VerificationProfile=true.
  */
 class P2SurfaceQaActivity : Activity() {
-    private data class Sample(val r: Int, val g: Int, val b: Int, val receivedNs: Long)
+    private data class Sample(
+        val r: Int,
+        val g: Int,
+        val b: Int,
+        val receivedNs: Long,
+    )
 
     private val main = Handler(Looper.getMainLooper())
     private lateinit var panel: FrameLayout
@@ -73,26 +78,34 @@ class P2SurfaceQaActivity : Activity() {
         HomeStore.init(this)
         HistoryStore.init(this)
         store = TabStore(this, HandlerContext(), BrowserState())
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(12, 12, 12, 12)
-        }
-        status = TextView(this).apply {
-            text = "P2: real Kelpie TabStore WebView / offline-only fixture. Explicit local approval required."
-        }
+        val root =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(12, 12, 12, 12)
+            }
+        status =
+            TextView(this).apply {
+                text = "P2: real Kelpie TabStore WebView / offline-only fixture. Explicit local approval required."
+            }
         root.addView(status)
-        root.addView(Button(this).apply {
-            text = "Approve local P2 test (20 frames)"
-            setOnClickListener { showConsent() }
-        })
-        root.addView(Button(this).apply {
-            text = "Restore SAME TabStore tab"
-            setOnClickListener { restore() }
-        })
-        root.addView(Button(this).apply {
-            text = "STOP / release private display"
-            setOnClickListener { stop("USER_STOP") }
-        })
+        root.addView(
+            Button(this).apply {
+                text = "Approve local P2 test (20 frames)"
+                setOnClickListener { showConsent() }
+            },
+        )
+        root.addView(
+            Button(this).apply {
+                text = "Restore SAME TabStore tab"
+                setOnClickListener { restore() }
+            },
+        )
+        root.addView(
+            Button(this).apply {
+                text = "STOP / release private display"
+                setOnClickListener { stop("USER_STOP") }
+            },
+        )
         panel = FrameLayout(this)
         root.addView(
             panel,
@@ -102,15 +115,15 @@ class P2SurfaceQaActivity : Activity() {
     }
 
     private fun showConsent() {
-        AlertDialog.Builder(this)
+        AlertDialog
+            .Builder(this)
             .setTitle("تأیید آزمایش محدود P2")
             .setMessage(
                 "فقط یک صفحه ساختگی فارسی و آفلاین در WebView متعلق به TabStore آزمایش می‌شود. " +
                     "هیچ سایت، رمز عبور، کوکی، تصویر یا نشست واقعی ارسال و ذخیره نمی‌شود. " +
                     "پس از شروع HOME را بزنید و صفحه را قفل نکنید. " +
                     "حداکثر زمان مجوز ۹۰ ثانیه است. دکمه STOP عملیات را قطع می‌کند.",
-            )
-            .setNegativeButton("لغو", null)
+            ).setNegativeButton("لغو", null)
             .setPositiveButton("تأیید و شروع") { _, _ -> start() }
             .show()
     }
@@ -126,10 +139,11 @@ class P2SurfaceQaActivity : Activity() {
         latest = null
         initialProof = null
         File(filesDir, "p2-tabstore-surface.jsonl").writeText("")
-        val tab = store.activeTab ?: run {
-            stop("TAB_MISSING")
-            return
-        }
+        val tab =
+            store.activeTab ?: run {
+                stop("TAB_MISSING")
+                return
+            }
         val view = tab.webView
         originalWebView = view
         webView = view
@@ -152,9 +166,16 @@ class P2SurfaceQaActivity : Activity() {
         main.postDelayed({ awaitFixture(ticket, 0) }, 500)
     }
 
-    private fun awaitFixture(ticket: Int, attempt: Int) {
+    private fun awaitFixture(
+        ticket: Int,
+        attempt: Int,
+    ) {
         if (!active || runToken != ticket) return
-        val tab = store.activeTab ?: run { stop("TAB_LOST"); return }
+        val tab =
+            store.activeTab ?: run {
+                stop("TAB_LOST")
+                return
+            }
         if (tab.id != tabId || tab.webView !== originalWebView) {
             stop("TAB_CHANGED")
             return
@@ -192,9 +213,13 @@ class P2SurfaceQaActivity : Activity() {
 
     private fun valid(ticket: Int): Boolean {
         val tab = store.activeTab ?: return false
-        return active && ticket == runToken && gate.allows(tabId, documentVersion) &&
-            tab.id == tabId && tab.webView === originalWebView &&
-            tab.documentVersion == documentVersion && !tab.isLoading &&
+        return active &&
+            ticket == runToken &&
+            gate.allows(tabId, documentVersion) &&
+            tab.id == tabId &&
+            tab.webView === originalWebView &&
+            tab.documentVersion == documentVersion &&
+            !tab.isLoading &&
             (tab.currentUrl.startsWith(P2OfflineFixture.BASE))
     }
 
@@ -219,12 +244,13 @@ class P2SurfaceQaActivity : Activity() {
                         val plane = image.planes[0]
                         val offset = 240 * plane.rowStride + 160 * plane.pixelStride
                         if (offset + 2 < plane.buffer.limit()) {
-                            latest = Sample(
-                                plane.buffer.get(offset).toInt() and 255,
-                                plane.buffer.get(offset + 1).toInt() and 255,
-                                plane.buffer.get(offset + 2).toInt() and 255,
-                                SystemClock.elapsedRealtimeNanos(),
-                            )
+                            latest =
+                                Sample(
+                                    plane.buffer.get(offset).toInt() and 255,
+                                    plane.buffer.get(offset + 1).toInt() and 255,
+                                    plane.buffer.get(offset + 2).toInt() and 255,
+                                    SystemClock.elapsedRealtimeNanos(),
+                                )
                         }
                     } finally {
                         image.close()
@@ -233,13 +259,16 @@ class P2SurfaceQaActivity : Activity() {
                     // A stopped/closed ImageReader may race with the callback.
                 }
             }, Handler(thread.looper))
-            val privateDisplay = getSystemService(DisplayManager::class.java).createVirtualDisplay(
-                "KelpieP2TabStoreOffline",
-                320, 480, resources.displayMetrics.densityDpi,
-                images.surface,
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION or
-                    DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY,
-            ) ?: error("VirtualDisplay unavailable")
+            val privateDisplay =
+                getSystemService(DisplayManager::class.java).createVirtualDisplay(
+                    "KelpieP2TabStoreOffline",
+                    320,
+                    480,
+                    resources.displayMetrics.densityDpi,
+                    images.surface,
+                    DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION or
+                        DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY,
+                ) ?: error("VirtualDisplay unavailable")
             display = privateDisplay
             val target = Presentation(this, privateDisplay.display)
             presentation = target
@@ -254,7 +283,10 @@ class P2SurfaceQaActivity : Activity() {
         }
     }
 
-    private fun step(ticket: Int, sequence: Int) {
+    private fun step(
+        ticket: Int,
+        sequence: Int,
+    ) {
         if (!valid(ticket) || locked() || !gate.claim(sequence, tabId, documentVersion)) {
             stop("STEP_GUARD_FAILED")
             return
@@ -265,7 +297,11 @@ class P2SurfaceQaActivity : Activity() {
             status.text = "P2 frames $passed/$frames; open this QA app and press Restore."
             return
         }
-        val view = webView ?: run { stop("WEBVIEW_MISSING"); return }
+        val view =
+            webView ?: run {
+                stop("WEBVIEW_MISSING")
+                return
+            }
         val (r, g, b) = P2OfflineFixture.colorFor(sequence)
         latest = null
         val before = SystemClock.elapsedRealtimeNanos()
@@ -276,8 +312,12 @@ class P2SurfaceQaActivity : Activity() {
                 return@postDelayed
             }
             val sample = latest
-            val match = sample != null && sample.receivedNs > before &&
-                sample.r == r && sample.g == g && sample.b == b
+            val match =
+                sample != null &&
+                    sample.receivedNs > before &&
+                    sample.r == r &&
+                    sample.g == g &&
+                    sample.b == b
             frames++
             if (match) passed++
             write(if (match) "FRESH_MATCH" else "FRAME_INVALID", sequence, sample, match, "")
@@ -287,17 +327,22 @@ class P2SurfaceQaActivity : Activity() {
     }
 
     private fun restore() {
-        val view = originalWebView ?: run {
-            status.text = "No tab to restore"
-            return
-        }
+        val view =
+            originalWebView ?: run {
+                status.text = "No tab to restore"
+                return
+            }
         if (!visible || !migrated || active) {
             status.text = "Restoration only when visible after the 20-frame run."
             return
         }
         val tab = store.activeTab
-        val identity = tab != null && tab.webView === view && tab.id == tabId &&
-            tab.documentVersion == documentVersion && gate.completed()
+        val identity =
+            tab != null &&
+                tab.webView === view &&
+                tab.id == tabId &&
+                tab.documentVersion == documentVersion &&
+                gate.completed()
         (view.parent as? ViewGroup)?.removeView(view)
         presentation?.dismiss()
         presentation = null
@@ -319,18 +364,25 @@ class P2SurfaceQaActivity : Activity() {
         gate.cancel()
     }
 
-    private fun write(event: String, sequence: Int, sample: Sample?, matched: Boolean, proof: String) {
-        val record = JSONObject()
-            .put("event", event)
-            .put("sequence", sequence)
-            .put("activityVisible", visible)
-            .put("tabStoreIdentity", store.activeTab?.webView === originalWebView)
-            .put("sameDocument", store.activeTab?.documentVersion == documentVersion)
-            .put("matched", matched)
-            .put("elapsedMs", SystemClock.elapsedRealtime())
-            .put("sampleRgb", if (sample == null) "" else "${sample.r},${sample.g},${sample.b}")
-            .put("frameReceivedNs", sample?.receivedNs ?: 0L)
-            .put("syntheticState", proof.take(250))
+    private fun write(
+        event: String,
+        sequence: Int,
+        sample: Sample?,
+        matched: Boolean,
+        proof: String,
+    ) {
+        val record =
+            JSONObject()
+                .put("event", event)
+                .put("sequence", sequence)
+                .put("activityVisible", visible)
+                .put("tabStoreIdentity", store.activeTab?.webView === originalWebView)
+                .put("sameDocument", store.activeTab?.documentVersion == documentVersion)
+                .put("matched", matched)
+                .put("elapsedMs", SystemClock.elapsedRealtime())
+                .put("sampleRgb", if (sample == null) "" else "${sample.r},${sample.g},${sample.b}")
+                .put("frameReceivedNs", sample?.receivedNs ?: 0L)
+                .put("syntheticState", proof.take(250))
         try {
             File(filesDir, "p2-tabstore-surface.jsonl").appendText(record.toString() + "\n")
         } catch (_: Exception) {
