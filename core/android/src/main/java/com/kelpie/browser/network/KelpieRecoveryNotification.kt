@@ -9,7 +9,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
-import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 
@@ -24,8 +23,6 @@ internal object KelpieRecoveryNotification {
     // New channel ID: Android does not let an app upgrade an existing channel
     // from DEFAULT to HIGH once the channel has been created.
     private const val CHANNEL_ID = "kelpie_recovery_prompt_v2"
-    private const val COOLDOWN_MS = 15_000L
-    private var lastPostedAt = 0L
 
     @Synchronized
     fun request(context: Context): Boolean {
@@ -51,10 +48,9 @@ internal object KelpieRecoveryNotification {
         val channel = manager.getNotificationChannel(CHANNEL_ID) ?: return false
         if (channel.importance == NotificationManager.IMPORTANCE_NONE) return false
 
-        val now = SystemClock.elapsedRealtime()
-        // A user-dismissed prompt must be shown again for a fresh request.
-        val stillVisible = manager.activeNotifications.any { it.id == RECOVERY_NOTIFICATION_ID }
-        if (lastPostedAt != 0L && now - lastPostedAt < COOLDOWN_MS && stillVisible) return true
+        // Do not repeatedly alert while the same user-consent request is
+        // already visible. A new request after dismissal may appear again.
+        if (manager.activeNotifications.any { it.id == RECOVERY_NOTIFICATION_ID }) return true
 
         val launchIntent =
             context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
@@ -93,7 +89,6 @@ internal object KelpieRecoveryNotification {
                 .build()
 
         manager.notify(RECOVERY_NOTIFICATION_ID, notification)
-        lastPostedAt = now
         return true
     }
 }
