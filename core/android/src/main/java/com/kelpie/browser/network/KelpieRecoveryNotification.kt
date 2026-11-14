@@ -39,7 +39,7 @@ internal object KelpieRecoveryNotification {
         if (manager.getNotificationChannel(CHANNEL_ID)?.importance == NotificationManager.IMPORTANCE_NONE) return false
 
         val now = SystemClock.elapsedRealtime()
-        if (now - lastPostedAt < COOLDOWN_MS) return true
+        if (lastPostedAt != 0L && now - lastPostedAt < COOLDOWN_MS) return true
 
         val intent =
             context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
