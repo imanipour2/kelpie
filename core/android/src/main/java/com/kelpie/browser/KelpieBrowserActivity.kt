@@ -2,9 +2,9 @@ package com.kelpie.browser
 
 import android.content.Intent
 import android.os.Bundle
-import com.kelpie.browser.network.KelpieRecoveryNotification
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
+import com.kelpie.browser.network.KelpieRecoveryNotification
 
 /** Optional standalone-window host; other apps may embed KelpieBrowserSession.view(). */
 open class KelpieBrowserActivity : ComponentActivity() {
