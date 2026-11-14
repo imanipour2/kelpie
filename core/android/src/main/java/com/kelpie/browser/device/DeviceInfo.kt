@@ -2,6 +2,7 @@ package com.kelpie.browser.device
 
 import android.content.Context
 import android.os.Build
+import android.os.Process
 import android.util.DisplayMetrics
 import android.view.WindowManager
 import com.kelpie.browser.BuildConfig
@@ -25,7 +26,9 @@ data class DeviceInfo(
             port: Int = BuildConfig.LOCAL_HTTP_PORT,
         ): DeviceInfo {
             val id = DeviceIdentity.getOrCreate(context)
-            val name = "${Build.MANUFACTURER} ${Build.MODEL}".trim()
+            val userId = AndroidProfilePort.userId(Process.myUid())
+            val name = "${Build.MANUFACTURER} ${Build.MODEL}".trim() +
+                if (userId == 0) "" else " (Android profile)"
             val model = Build.MODEL
 
             val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -40,7 +43,7 @@ data class DeviceInfo(
                 width = metrics.widthPixels,
                 height = metrics.heightPixels,
                 ip = getLocalIpAddress(),
-                port = port,
+                port = AndroidProfilePort.forProfile(port, Process.myUid()),
                 version = context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "",
                 build =
                     context.packageManager
