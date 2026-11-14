@@ -1,11 +1,11 @@
 package com.kelpie.browser.handlers
 
-import androidx.activity.ComponentActivity
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Handler
 import android.os.Looper
 import android.webkit.WebView
+import androidx.activity.ComponentActivity
 import com.kelpie.browser.network.KelpieRecoveryNotification
 import com.kelpie.browser.network.Router
 import com.kelpie.browser.network.errorResponse
