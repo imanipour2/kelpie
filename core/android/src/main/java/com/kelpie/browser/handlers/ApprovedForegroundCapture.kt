@@ -1,5 +1,7 @@
 package com.kelpie.browser.handlers
 
+import androidx.activity.ComponentActivity
+import androidx.lifecycle.Lifecycle
 import com.kelpie.browser.network.ApprovedScreenshotStore
 import com.kelpie.browser.network.ForegroundRecoveryState
 import com.kelpie.browser.network.KelpieRecoveryNotification
@@ -19,6 +21,7 @@ import kotlinx.coroutines.launch
  */
 internal class ApprovedForegroundCapture(
     private val ctx: HandlerContext,
+    private val activity: ComponentActivity,
     private val fullPageCapture: suspend (String, Int, ScreenshotResolution) -> Map<String, Any?>?,
 ) {
     private data class CapturePlan(
@@ -93,6 +96,7 @@ internal class ApprovedForegroundCapture(
     }
 
     fun onResumed() {
+        if (!activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
         foreground = true
         if (worker?.isActive == true) return
         val plan = pending ?: return
@@ -151,6 +155,8 @@ internal class ApprovedForegroundCapture(
         val tab = ctx.tabStore?.activeTab ?: return false
         val status = KelpieRecoveryNotification.current() ?: return false
         return foreground &&
+            activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+            activity.hasWindowFocus() &&
             status.id == plan.ticket.requestId &&
             status.status in setOf(
                 ForegroundRecoveryState.Status.ACTIVITY_RESUMED,
