@@ -38,10 +38,10 @@ internal object KelpieRecoveryNotification {
             manager.createNotificationChannel(
                 NotificationChannel(
                     CHANNEL_ID,
-                    "درخواست بازکردن کلپی",
+                    "Kelpie foreground access requests",
                     NotificationManager.IMPORTANCE_HIGH,
                 ).apply {
-                    description = "درخواست قابل مشاهده برای اجازه بازکردن کلپی از طریق ChatGPT"
+                    description = "Prominent notification for user-approved Kelpie foreground access requested by ChatGPT"
                 },
             )
         }
@@ -76,18 +76,18 @@ internal object KelpieRecoveryNotification {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
 
-        val explanation = "ChatGPT برای نمایش تصویر صفحه به بازشدن کلپی نیاز دارد. آیا اجازه می‌دهید کلپی باز شود؟"
+        val explanation = "ChatGPT needs Kelpie in the foreground to capture the browser screen. Tap Allow to open Kelpie, or Not now to dismiss."
         val notification =
             NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(context.applicationInfo.icon)
-                .setContentTitle("اجازه بازکردن کلپی توسط ChatGPT؟")
-                .setContentText("برای ادامه، «باز کردن کلپی» را انتخاب کنید.")
+                .setContentTitle("ChatGPT requests to open Kelpie")
+                .setContentText("Your approval is needed to continue browser screen capture.")
                 .setStyle(NotificationCompat.BigTextStyle().bigText(explanation))
                 .setCategory(NotificationCompat.CATEGORY_REMINDER)
                 .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                 .setContentIntent(open)
-                .addAction(android.R.drawable.ic_menu_view, "اجازه می‌دهم؛ باز کردن کلپی", open)
-                .addAction(android.R.drawable.ic_menu_close_clear_cancel, "فعلاً نه", dismiss)
+                .addAction(android.R.drawable.ic_menu_view, "Allow & open Kelpie", open)
+                .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Not now", dismiss)
                 .setAutoCancel(true)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .build()
