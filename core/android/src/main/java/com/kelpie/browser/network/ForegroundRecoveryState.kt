@@ -46,7 +46,13 @@ internal class ForegroundRecoveryState(
     fun begin(): Request {
         expire()
         current?.takeIf {
-            it.status in setOf(Status.FOREGROUND_REQUIRED, Status.NOTIFICATION_POSTED)
+            it.status in setOf(
+                Status.FOREGROUND_REQUIRED,
+                Status.NOTIFICATION_POSTED,
+                Status.USER_APPROVED,
+                Status.ACTIVITY_RESUMED,
+                Status.RENDER_READY,
+            )
         }
             ?.let { return it }
         val t = now()
