@@ -20,8 +20,8 @@ android {
         applicationId = "com.kelpie.virtualdisplayprobe.p1"
         minSdk = 28
         targetSdk = 34
-        versionCode = 2
-        versionName = "0.2.0-p1-qa"
+        versionCode = 3
+        versionName = "0.2.1-p1-qa"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
