@@ -159,8 +159,10 @@ json BrowserGateway::Advance(json result) {
       if (impl_->stage == "authorize" || impl_->stage == "authorize-select") impl_->Finish(Failure("ACCESS_DENIED"));
       // A read whose image cannot fit its caller's result budget is a definite refusal, not an unknown failure.
       else if (impl_->request["method"] == "tab.screenshot" && result.is_object() && result.contains("error") &&
-               result["error"].is_object() && result["error"].value("code", std::string()) == "SCREENSHOT_TOO_LARGE")
-        impl_->Finish(Failure("SCREENSHOT_TOO_LARGE"));
+               result["error"].is_object() &&
+               (result["error"].value("code", std::string()) == "SCREENSHOT_TOO_LARGE" ||
+                result["error"].value("code", std::string()) == "FOREGROUND_REQUIRED"))
+        impl_->Finish(Failure(result["error"].value("code", std::string())));
       else fail();
       return Next();
     }
