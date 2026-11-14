@@ -1,6 +1,6 @@
 package com.kelpie.browser.handlers
 
-import android.app.Activity
+import androidx.activity.ComponentActivity
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Handler
@@ -83,7 +83,7 @@ private class FullContentCapture(
 
 class ScreenshotHandler(
     private val ctx: HandlerContext,
-    private val activity: Activity,
+    private val activity: ComponentActivity,
 ) {
     private val approvedCapture = ApprovedForegroundCapture(ctx, activity, ::captureFullPagePayload)
 
