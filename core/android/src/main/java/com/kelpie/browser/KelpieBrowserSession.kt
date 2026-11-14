@@ -188,7 +188,7 @@ class KelpieBrowserSession(
         handlerContext.scriptPlaybackState = scriptPlaybackState
 
         NavigationHandler(handlerContext).register(router)
-        ScreenshotHandler(handlerContext).register(router)
+        ScreenshotHandler(handlerContext, activity).register(router)
         DOMHandler(handlerContext).register(router)
         InteractionHandler(handlerContext).register(router)
         TapCalibrationHandler().register(router)
