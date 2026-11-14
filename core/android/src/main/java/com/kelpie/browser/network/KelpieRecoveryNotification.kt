@@ -50,7 +50,12 @@ internal object KelpieRecoveryNotification {
 
         // Do not repeatedly alert while the same user-consent request is
         // already visible. A new request after dismissal may appear again.
-        if (manager.activeNotifications.any { it.id == RECOVERY_NOTIFICATION_ID }) return true
+        if (manager.activeNotifications.any {
+                it.id == RECOVERY_NOTIFICATION_ID && it.notification.channelId == CHANNEL_ID
+            }
+        ) {
+            return true
+        }
 
         val launchIntent =
             context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
