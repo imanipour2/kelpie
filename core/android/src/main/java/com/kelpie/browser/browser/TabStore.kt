@@ -81,6 +81,7 @@ class TabStore(
         com.kelpie.browser.connect.NessieConnection
             .personChangedTab()
         captureActivePreview()
+        handlerContext.approvedForegroundCapture?.invalidate()
         val tab = createTab(partition = partition, profile = profile, name = name)
         _tabs.value = _tabs.value + tab
         _activeTabId.value = tab.id
@@ -98,6 +99,7 @@ class TabStore(
             com.kelpie.browser.connect.NessieConnection
                 .personChangedTab()
         }
+        handlerContext.approvedForegroundCapture?.invalidate()
         previewTabs.remove(id)
         val index = _tabs.value.indexOfFirst { it.id == id }
         if (index < 0) return
@@ -127,7 +129,10 @@ class TabStore(
                 .personChangedTab()
         }
         if (_tabs.value.any { it.id == id }) {
-            if (id != _activeTabId.value) captureActivePreview()
+            if (id != _activeTabId.value) {
+                captureActivePreview()
+                handlerContext.approvedForegroundCapture?.invalidate()
+            }
             _activeTabId.value = id
             persistSession()
         }
@@ -138,6 +143,7 @@ class TabStore(
      * JavaScript interface, and WebChromeClient references do not leak across Activity recreation.
      */
     fun destroyAllTabs() {
+        handlerContext.approvedForegroundCapture?.invalidate()
         discardPreviews()
         previewSampler?.cancel()
         val snapshot = _tabs.value
