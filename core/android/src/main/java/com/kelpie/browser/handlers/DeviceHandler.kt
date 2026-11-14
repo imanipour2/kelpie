@@ -84,6 +84,19 @@ class DeviceHandler(
             } else {
                 false
             }
+        val pending = KelpieRecoveryNotification.current()
+        val captureArmed =
+            if (notificationPosted && pending != null) {
+                ctx.approvedForegroundCapture?.arm(
+                    pending,
+                    fullPage = false,
+                    format = "png",
+                    quality = 80,
+                    resolution = ScreenshotResolution.NATIVE,
+                ) == true
+            } else {
+                false
+            }
         val status =
             if (!ready && notificationsEnabled && !notificationPosted) {
                 "NOTIFICATION_FAILED"
@@ -98,6 +111,7 @@ class DeviceHandler(
                 "requestStatus" to KelpieRecoveryNotification.current()?.status?.name,
                 "expiresAtMs" to KelpieRecoveryNotification.current()?.expiresAt,
                 "screenshotReady" to ready,
+                "captureArmed" to captureArmed,
                 "message" to
                     when (status) {
                         "READY" -> "Kelpie is already visible. Retry screenshot."
