@@ -296,7 +296,7 @@ class P2SurfaceQaActivity : Activity() {
             return
         }
         val tab = store.activeTab
-        val identity = tab?.webView === view && tab?.id == tabId &&
+        val identity = tab != null && tab.webView === view && tab.id == tabId &&
             tab.documentVersion == documentVersion && gate.completed()
         (view.parent as? ViewGroup)?.removeView(view)
         presentation?.dismiss()
