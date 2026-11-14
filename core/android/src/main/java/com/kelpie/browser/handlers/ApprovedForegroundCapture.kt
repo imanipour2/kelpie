@@ -106,8 +106,15 @@ internal class ApprovedForegroundCapture(
                     // Compose and the WebView may not have attached at onResume.
                     repeat(24) {
                         if (!eligible(plan)) return@launch
+                        // onResume may precede the first focused frame. Wait
+                        // for window focus instead of permanently abandoning
+                        // this consented request.
+                        if (!activity.hasWindowFocus()) {
+                            delay(200)
+                            return@repeat
+                        }
                         val ready = ctx.isScreenshotForegroundReady()
-                        if (ready && eligible(plan)) {
+                        if (ready && eligible(plan) && activity.hasWindowFocus()) {
                             KelpieRecoveryNotification.renderReady()
                             val tab = ctx.tabStore?.activeTab ?: return@launch
                             val payload =
@@ -118,7 +125,7 @@ internal class ApprovedForegroundCapture(
                                         ctx.captureScreenshotPayload(plan.format, plan.quality, plan.resolution)
                                     }
                                 }
-                            if (!eligible(plan)) return@launch
+                            if (!eligible(plan) || !activity.hasWindowFocus()) return@launch
                             if (payload != null &&
                                 store.stage(
                                     plan.ticket.requestId,
@@ -156,7 +163,6 @@ internal class ApprovedForegroundCapture(
         val status = KelpieRecoveryNotification.current() ?: return false
         return foreground &&
             activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
-            activity.hasWindowFocus() &&
             status.id == plan.ticket.requestId &&
             status.status in setOf(
                 ForegroundRecoveryState.Status.ACTIVITY_RESUMED,
