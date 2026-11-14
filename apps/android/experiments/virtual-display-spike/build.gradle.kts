@@ -17,11 +17,11 @@ android {
 
     defaultConfig {
         // Separate application ID: never replaces the browser installed on S24.
-        applicationId = "com.kelpie.virtualdisplayprobe"
+        applicationId = "com.kelpie.virtualdisplayprobe.p1"
         minSdk = 28
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0-qa"
+        versionCode = 2
+        versionName = "0.2.0-p1-qa"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
