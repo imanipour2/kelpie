@@ -92,10 +92,9 @@ internal object KelpieRecoveryNotification {
             manager.activeNotifications.any {
                 it.id == RECOVERY_NOTIFICATION_ID && it.notification.channelId == CHANNEL_ID
             }
-        if (promptAlreadyVisible) {
-            state.transition(pending.id, ForegroundRecoveryState.Status.NOTIFICATION_POSTED)
-            return true
-        }
+        if (promptAlreadyVisible && pending.status == ForegroundRecoveryState.Status.NOTIFICATION_POSTED) return true
+        // A notification for an expired request must be replaced with a new
+        // request-scoped PendingIntent, never silently reused.
 
         val launchIntent =
             context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
