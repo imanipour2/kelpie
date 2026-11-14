@@ -177,6 +177,7 @@ class KelpieBrowserSession(
     }
 
     private fun onPause() {
+        handlerContext.approvedForegroundCapture?.onPaused()
         com.kelpie.browser.connect.NessieConnection
             .setForeground(false)
     }
