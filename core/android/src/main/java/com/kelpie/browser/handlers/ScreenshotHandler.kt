@@ -102,7 +102,10 @@ class ScreenshotHandler(
             // is respected: only the user's notification tap opens the Activity.
             val notificationPosted =
                 runCatching {
-                    ctx.webView?.context?.applicationContext?.let { KelpieRecoveryNotification.request(it) } == true
+                    ctx.webView
+                        ?.context
+                        ?.applicationContext
+                        ?.let { KelpieRecoveryNotification.request(it) } == true
                 }.getOrDefault(false)
             return errorResponse(
                 "FOREGROUND_REQUIRED",
