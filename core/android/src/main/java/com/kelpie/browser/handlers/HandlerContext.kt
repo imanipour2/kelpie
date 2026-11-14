@@ -57,6 +57,7 @@ class HandlerContext(
     ): T = withContext(operationWebView.asContextElement(view)) { block() }
 
     var tabStore: TabStore? = null
+    internal var approvedForegroundCapture: ApprovedForegroundCapture? = null
     var browserDocumentChanged: ((String) -> Unit)? = null
     var browserGateway: com.kelpie.browser.network.BrowserGatewayBinding? = null
     var keyboardObserver: KeyboardObserver? = null
