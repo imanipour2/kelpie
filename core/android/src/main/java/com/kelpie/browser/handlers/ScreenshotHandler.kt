@@ -131,7 +131,13 @@ class ScreenshotHandler(
                 ctx.captureScreenshotPayload(format, quality, resolution)
             } ?: return errorResponse("SCREENSHOT_FAILED", "Failed to capture screenshot")
         KelpieRecoveryNotification.captureCompleted()
-        return successResponse(payload)
+        return successResponse(
+            payload +
+                mapOf(
+                    "recoveryRequestId" to KelpieRecoveryNotification.current()?.id,
+                    "recoveryRequestStatus" to KelpieRecoveryNotification.current()?.status?.name,
+                ),
+        )
     }
 
     /**
