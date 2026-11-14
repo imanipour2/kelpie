@@ -63,6 +63,14 @@ internal object KelpieRecoveryNotification {
     @Synchronized
     fun request(context: Context): Boolean {
         val pending = state.begin()
+        // A user already approved this exact request: never issue a second
+        // notification while its Activity/renderer is being resumed.
+        if (pending.status in setOf(
+                ForegroundRecoveryState.Status.USER_APPROVED,
+                ForegroundRecoveryState.Status.ACTIVITY_RESUMED,
+                ForegroundRecoveryState.Status.RENDER_READY,
+            )
+        ) return true
         val manager = context.getSystemService(NotificationManager::class.java) ?: return false
         if (!manager.areNotificationsEnabled()) return false
         if (Build.VERSION.SDK_INT >= 33 &&
