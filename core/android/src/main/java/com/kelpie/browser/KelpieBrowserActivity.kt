@@ -24,12 +24,19 @@ open class KelpieBrowserActivity : ComponentActivity() {
         if (KelpieRecoveryNotification.approveFromIntent(intent)) {
             // A SINGLE_TOP launch can deliver its Intent to an already resumed Activity.
             KelpieRecoveryNotification.activityResumed()
+            if (::browser.isInitialized) browser.onRecoveryResumed()
         }
     }
 
     override fun onResume() {
         super.onResume()
         KelpieRecoveryNotification.activityResumed()
+        if (::browser.isInitialized) browser.onRecoveryResumed()
+    }
+
+    override fun onPause() {
+        if (::browser.isInitialized) browser.onRecoveryPaused()
+        super.onPause()
     }
 
     override fun onTrimMemory(level: Int) {
