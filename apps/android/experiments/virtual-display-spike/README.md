@@ -91,3 +91,22 @@ Official context:
 - https://developer.android.com/guide/components/activities/secure-bal
 
 **Status: experimental / CI and physical QA required / no release authorization.**
+
+
+## P1: Same-WebView migration research (2026-11-14)
+
+**Separate hardware gate. This does not make the production Kelpie background-capable.**
+The second button in the fixture launcher opens `SameWebViewActivity` in the same offline-only, permission-free QA package. It creates **one** WebView in the Activity, seeds a synthetic DOM nonce, text input, history state and scroll position, then reparents the exact WebView object into a private `Presentation` backed by `VirtualDisplay + ImageReader`. It never loads a real site or credentials.
+
+**Procedure:** Start the QA app, select **Open SAME-WebView migration QA**, then tap **Start migration / 20 changed frames**, immediately press HOME and leave the display unlocked. After at least 35 seconds, return to QA and tap **Restore SAME WebView to Activity**. Read `files/same-webview-migration.jsonl` with authorized `adb shell run-as com.kelpie.virtualdisplayprobe cat files/same-webview-migration.jsonl` and verify:
+- `MIGRATED_SAME_OBJECT` is matched; no second WebView was substituted.
+- Exactly 20/20 `FRESH_MATCH` entries with `activityVisible=false`, post-mutation callback times and nonce pixels.
+- `RESTORE_VERDICT` is matched: the same Java WebView object, document identity, synthetic text input, history marker, and scroll are intact.
+- `KEYGUARD_STOP`, failures, incomplete frames, a stale document, or state drift are **FAIL** and require investigation.
+- The synthetic state is logged solely for comparison, **not real browser text**. No screenshots are retained.
+
+This is deliberately a stricter experiment than the earlier fresh-frame-only PoC. It may fail due to Android View reparenting, display/context mismatch, a WebView renderer recreation, viewport reflow, or resource/lifecycle changes. Failure must **not** be hidden by creating another WebView and copying cookies; that would invalidate the same-tab claim.
+
+**CI** checks only compile/lint/unit/packaging; it cannot prove physical Android rendering. Perform signer/ABI/package/rollback checks before installing this QA APK and preserve the already installed `com.kelpie.browser.unifiedverify` as-is. The check is non-production and must not be merged or released as a working background browser.
+
+Further gates after physical PASS: repeat 10-minute and 1-hour capture; multi-tab, IME/RTL/touch and navigation restoration; memory/GPU/lock/Doze; user-approved scoped authenticated sessions, per-client identity, expiry/Pause/Stop; security review and proper native renderer integration. No lock bypass or screenshot of another application.
