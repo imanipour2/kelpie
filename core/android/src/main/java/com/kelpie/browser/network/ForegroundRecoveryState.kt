@@ -45,16 +45,18 @@ internal class ForegroundRecoveryState(
     @Synchronized
     fun begin(): Request {
         expire()
-        val pending = current?.takeIf {
-            it.status in setOf(
+        val pending = current
+        if (pending != null) {
+            when (pending.status) {
                 Status.FOREGROUND_REQUIRED,
                 Status.NOTIFICATION_POSTED,
                 Status.USER_APPROVED,
                 Status.ACTIVITY_RESUMED,
                 Status.RENDER_READY,
-            )
+                -> return pending
+                else -> Unit
+            }
         }
-        if (pending != null) return pending
         val t = now()
         return Request(newId(), t, t + ttlMs, Status.FOREGROUND_REQUIRED).also { current = it }
     }
