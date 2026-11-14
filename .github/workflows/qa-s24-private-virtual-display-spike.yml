@@ -24,6 +24,13 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v4.0.3
+      - name: Generate deterministic Kotlin formatting patch for code review
+        working-directory: apps/android
+        run: |
+          ./gradlew --no-daemon :virtual-display-spike:ktlintFormat -PvirtualDisplaySpike=true
+          echo "BEGIN_KELPIE_FORMAT_DIFF"
+          git diff --no-ext-diff -- experiments/virtual-display-spike
+          echo "END_KELPIE_FORMAT_DIFF"
       - name: Lint, test, and package opt-in standalone Android probe
         working-directory: apps/android
         run: |
