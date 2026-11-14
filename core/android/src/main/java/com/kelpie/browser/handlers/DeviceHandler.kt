@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.content.pm.ActivityInfo
 import com.kelpie.browser.device.DeviceInfo
 import com.kelpie.browser.network.AndroidUnsupportedMethods
+import com.kelpie.browser.network.KelpieRecoveryNotification
 import com.kelpie.browser.network.Router
 import com.kelpie.browser.network.errorResponse
 import com.kelpie.browser.network.successResponse
@@ -74,7 +75,18 @@ class DeviceHandler(
         val ready = ctx.isScreenshotForegroundReady()
         val notificationsEnabled =
             activity?.getSystemService(NotificationManager::class.java)?.areNotificationsEnabled() == true
-        val status = recoveryStatus(ready, notificationsEnabled)
+        val notificationPosted =
+            if (!ready && notificationsEnabled && activity != null) {
+                KelpieRecoveryNotification.request(activity)
+            } else {
+                false
+            }
+        val status =
+            if (!ready && notificationsEnabled && !notificationPosted) {
+                "NOTIFICATION_FAILED"
+            } else {
+                recoveryStatus(ready, notificationsEnabled)
+            }
         return successResponse(
             mapOf(
                 "status" to status,
@@ -83,7 +95,8 @@ class DeviceHandler(
                 "message" to
                     when (status) {
                         "READY" -> "Kelpie is already visible. Retry screenshot."
-                        "USER_TAP_REQUIRED" -> "Tap the persistent Kelpie notification to bring it to the foreground, then retry screenshot."
+                        "USER_TAP_REQUIRED" -> "Tap the new Kelpie recovery notification to open the browser, then retry screenshot."
+                        "NOTIFICATION_FAILED" -> "Android refused to post the recovery notification; open Kelpie manually."
                         else -> "Kelpie notifications are disabled. Enable notifications in Android settings and open Kelpie manually."
                     },
             ),
