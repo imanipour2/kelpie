@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.os.Handler
 import android.os.Looper
 import android.webkit.WebView
+import com.kelpie.browser.network.KelpieRecoveryNotification
 import com.kelpie.browser.network.Router
 import com.kelpie.browser.network.errorResponse
 import com.kelpie.browser.network.successResponse
@@ -93,6 +94,28 @@ class ScreenshotHandler(
         val resolution =
             ScreenshotResolution.parse(body["resolution"])
                 ?: return errorResponse("INVALID_PARAMS", "resolution must be 'native' or 'viewport'")
+
+        if (!ctx.isScreenshotForegroundReady()) {
+            // A remote screenshot request is also the user's recovery request.
+            // Post an actionable notification rather than requiring a separate
+            // device.requestForeground call. Android's secure foreground policy
+            // is respected: only the user's notification tap opens the Activity.
+            val notificationPosted =
+                runCatching {
+                    ctx.webView
+                        ?.context
+                        ?.applicationContext
+                        ?.let { KelpieRecoveryNotification.request(it) } == true
+                }.getOrDefault(false)
+            return errorResponse(
+                "FOREGROUND_REQUIRED",
+                if (notificationPosted) {
+                    "Kelpie is in the background. Tap the Kelpie recovery notification to open it, then retry screenshot."
+                } else {
+                    "Kelpie is in the background and a recovery notification could not be posted. Open Kelpie manually, then retry screenshot."
+                },
+            )
+        }
 
         val payload =
             if (fullPage) {

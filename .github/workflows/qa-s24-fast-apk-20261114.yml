@@ -1,0 +1,42 @@
+name: S24 Kelpie Fast Isolated APK
+on:
+  push:
+    branches:
+      - fix/s24-foreground-screenshot-status-20261114
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  android-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6.0.3
+      - uses: ./.github/actions/browser-contract
+      - uses: actions/setup-java@v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4.0.3
+      - name: Assemble isolated S24 QA APK
+        working-directory: apps/android
+        run: ./gradlew --no-daemon :app:assembleDebug -PkelpieUnifiedVerificationProfile=true
+      - name: Verify package, APK ZIP alignment, SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=apps/android/app/build/outputs/apk/debug/app-debug.apk
+          python3 scripts/testing/check_android_16kb_apk.py "$APK"
+          ZIPALIGN=$(find "$ANDROID_HOME/build-tools" -type f -name zipalign | sort -V | tail -n 1)
+          "$ZIPALIGN" -c -P 16 -v 4 "$APK"
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+          "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.browser.unifiedverify'"
+          sha256sum "$APK" > "$APK.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kelpie-s24-consent-fast-${{ github.sha }}
+          path: |
+            apps/android/app/build/outputs/apk/debug/app-debug.apk
+            apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 7

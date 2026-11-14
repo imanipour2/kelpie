@@ -1,9 +1,11 @@
 package com.kelpie.browser.handlers
 
 import android.app.Activity
+import android.app.NotificationManager
 import android.content.pm.ActivityInfo
 import com.kelpie.browser.device.DeviceInfo
 import com.kelpie.browser.network.AndroidUnsupportedMethods
+import com.kelpie.browser.network.KelpieRecoveryNotification
 import com.kelpie.browser.network.Router
 import com.kelpie.browser.network.errorResponse
 import com.kelpie.browser.network.successResponse
@@ -21,31 +23,95 @@ class DeviceHandler(
         router.register("get-viewport-presets") { getViewportPresets() }
         router.register("get-device-info") { getDeviceInfo() }
         router.register("get-capabilities") { getCapabilities() }
+        router.register("device-status") { deviceStatus() }
+        router.register("request-foreground") { requestForeground() }
         router.register("set-orientation") { body -> setOrientation(body) }
         router.register("get-orientation") { getOrientation() }
     }
 
     private suspend fun getViewport(): Map<String, Any?> {
         val wv = ctx.webView ?: return errorResponse("NO_WEBVIEW", "No WebView")
-        return mapOf(
-            "width" to wv.width,
-            "height" to wv.height,
-            "devicePixelRatio" to wv.context.resources.displayMetrics.density,
-            "platform" to "android",
-            "deviceName" to deviceInfo.name,
-            "orientation" to if (wv.width > wv.height) "landscape" else "portrait",
+        return successResponse(
+            mapOf(
+                "width" to wv.width,
+                "height" to wv.height,
+                "devicePixelRatio" to wv.context.resources.displayMetrics.density,
+                "platform" to "android",
+                "deviceName" to deviceInfo.name,
+                "orientation" to if (wv.width > wv.height) "landscape" else "portrait",
+            ),
         )
     }
 
     private fun getDeviceInfo(): Map<String, Any?> =
-        mapOf(
-            "device" to mapOf("id" to deviceInfo.id, "name" to deviceInfo.name, "model" to deviceInfo.model, "platform" to "android"),
-            "display" to mapOf("width" to deviceInfo.width, "height" to deviceInfo.height, "scale" to 1),
-            "network" to mapOf("ip" to deviceInfo.ip, "port" to deviceInfo.port),
-            "browser" to mapOf("engine" to "Chromium", "version" to android.os.Build.VERSION.RELEASE),
-            "app" to mapOf("version" to deviceInfo.version, "build" to deviceInfo.build),
-            "system" to mapOf("os" to "Android", "osVersion" to android.os.Build.VERSION.RELEASE),
+        successResponse(
+            mapOf(
+                "device" to mapOf("id" to deviceInfo.id, "name" to deviceInfo.name, "model" to deviceInfo.model, "platform" to "android"),
+                "display" to mapOf("width" to deviceInfo.width, "height" to deviceInfo.height, "scale" to 1),
+                "network" to mapOf("ip" to deviceInfo.ip, "port" to deviceInfo.port),
+                "browser" to mapOf("engine" to "Chromium", "version" to android.os.Build.VERSION.RELEASE),
+                "app" to mapOf("version" to deviceInfo.version, "build" to deviceInfo.build),
+                "system" to mapOf("os" to "Android", "osVersion" to android.os.Build.VERSION.RELEASE),
+            ),
         )
+
+    /** Read-only recovery preflight. No system-wide state or sensitive app data is exported. */
+    private suspend fun deviceStatus(): Map<String, Any?> {
+        val ready = ctx.isScreenshotForegroundReady()
+        val notificationsEnabled =
+            activity?.getSystemService(NotificationManager::class.java)?.areNotificationsEnabled() == true
+        return successResponse(
+            mapOf(
+                "appForeground" to (activity?.hasWindowFocus() == true),
+                "screenshotReady" to ready,
+                "notificationsEnabled" to notificationsEnabled,
+                "recovery" to recoveryStatus(ready, notificationsEnabled),
+            ),
+        )
+    }
+
+    /** Never launches the Activity remotely or dismisses a lock screen. */
+    private suspend fun requestForeground(): Map<String, Any?> {
+        val ready = ctx.isScreenshotForegroundReady()
+        val notificationsEnabled =
+            activity?.getSystemService(NotificationManager::class.java)?.areNotificationsEnabled() == true
+        val notificationPosted =
+            if (!ready && notificationsEnabled && activity != null) {
+                KelpieRecoveryNotification.request(activity)
+            } else {
+                false
+            }
+        val status =
+            if (!ready && notificationsEnabled && !notificationPosted) {
+                "NOTIFICATION_FAILED"
+            } else {
+                recoveryStatus(ready, notificationsEnabled)
+            }
+        return successResponse(
+            mapOf(
+                "status" to status,
+                "automaticLaunch" to false,
+                "screenshotReady" to ready,
+                "message" to
+                    when (status) {
+                        "READY" -> "Kelpie is already visible. Retry screenshot."
+                        "USER_TAP_REQUIRED" -> "Tap the new Kelpie recovery notification to open the browser, then retry screenshot."
+                        "NOTIFICATION_FAILED" -> "Android refused to post the recovery notification; open Kelpie manually."
+                        else -> "Kelpie notifications are disabled. Enable notifications in Android settings and open Kelpie manually."
+                    },
+            ),
+        )
+    }
+
+    private fun recoveryStatus(
+        ready: Boolean,
+        notificationsEnabled: Boolean,
+    ): String =
+        when {
+            ready -> "READY"
+            notificationsEnabled -> "USER_TAP_REQUIRED"
+            else -> "NOTIFICATIONS_DISABLED"
+        }
 
     private fun getViewportPresets(): Map<String, Any?> {
         val availablePresetIds = TabletViewportPresetStore.availablePresetIds.value
