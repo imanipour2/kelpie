@@ -105,11 +105,14 @@ internal class ApprovedForegroundCapture(
                         val ready = ctx.isScreenshotForegroundReady()
                         if (ready && eligible(plan)) {
                             KelpieRecoveryNotification.renderReady()
+                            val tab = ctx.tabStore?.activeTab ?: return@launch
                             val payload =
-                                if (plan.fullPage) {
-                                    fullPageCapture(plan.format, plan.quality, plan.resolution)
-                                } else {
-                                    ctx.captureScreenshotPayload(plan.format, plan.quality, plan.resolution)
+                                ctx.withBrowserTarget(tab.webView) {
+                                    if (plan.fullPage) {
+                                        fullPageCapture(plan.format, plan.quality, plan.resolution)
+                                    } else {
+                                        ctx.captureScreenshotPayload(plan.format, plan.quality, plan.resolution)
+                                    }
                                 }
                             if (!eligible(plan)) return@launch
                             if (payload != null &&
