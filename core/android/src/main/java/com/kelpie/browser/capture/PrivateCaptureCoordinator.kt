@@ -83,6 +83,9 @@ class PrivateCaptureCoordinator(
 
     init {
         if (qaEnabled) {
+            context.privateCaptureRestricted = {
+                renderer.state.value != PrivateWebViewDisplay.State.IDLE
+            }
             ContextCompat.registerReceiver(
                 activity,
                 screenOffReceiver,
@@ -329,7 +332,9 @@ class PrivateCaptureCoordinator(
                 stopByUser()
                 renderer.verifyRestored()
             }
-        } else if (renderer.state.value == PrivateWebViewDisplay.State.RESTORE_PENDING) {
+        } else if (renderer.state.value == PrivateWebViewDisplay.State.RESTORE_PENDING ||
+            renderer.state.value == PrivateWebViewDisplay.State.FAILED
+        ) {
             scope.launch { renderer.verifyRestored() }
         }
     }
@@ -338,6 +343,7 @@ class PrivateCaptureCoordinator(
         if (closed) return
         closed = true
         if (qaEnabled) activity.unregisterReceiver(screenOffReceiver)
+        context.privateCaptureRestricted = null
         userStopped = true
         registry.revoke()
         activeRequestId = null
