@@ -12,6 +12,7 @@ import android.media.ImageReader
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
+import android.os.PowerManager
 import android.view.ViewGroup
 import android.webkit.WebView
 import kotlinx.coroutines.CompletableDeferred
@@ -183,9 +184,12 @@ class PrivateWebViewDisplay(
                 // Reader timestamps and SystemClock can have different timebases.
                 // A matching pixel nonce is proof of the NEW render, not a cached frame.
                 runCatching { images.acquireLatestImage()?.close() }
-                val expectedRgb = PrivateCaptureQaPixelProof.rgb(++qaFrameSequence)
+                val next = qaFrameSequence + 1
+                val expectedRgb = PrivateCaptureQaPixelProof.rgb(next)
                 val wait = FrameWait(expectedRgb, CompletableDeferred())
                 if (!pendingImage.compareAndSet(null, wait)) return@withContext null
+                // The QA nonce must advance only for a newly accepted single flight.
+                qaFrameSequence = next
                 lastFrameOutcome = "WAITING_FOR_FRESH_NONCE"
                 current.evaluateJavascript(PrivateCaptureQaPixelProof.repaintScript(expectedRgb)) { result ->
                     if (result != "true" && pendingImage.compareAndSet(wait, null)) {
@@ -259,8 +263,11 @@ class PrivateWebViewDisplay(
      */
     suspend fun verifyRestored(): Boolean =
         withContext(Dispatchers.Main.immediate) {
-            if (stateFlow.value != State.RESTORE_PENDING) return@withContext false
-            val original = view ?: return@withContext false
+            if (stateFlow.value != State.RESTORE_PENDING && stateFlow.value != State.FAILED) return@withContext false
+            val original = view ?: run {
+                stateFlow.value = State.IDLE
+                return@withContext true
+            }
             val attached =
                 withTimeoutOrNull(RELEASE_TIMEOUT_MS) {
                     while (!original.isAttachedToWindow) delay(100)
@@ -327,22 +334,44 @@ class PrivateWebViewDisplay(
         active = false
         pendingImage.getAndSet(null)?.result?.cancel()
         val original = view
+        var cleanupFailed = false
+        // Each native resource is independent: failure of Presentation.dismiss()
+        // must never skip releasing VirtualDisplay, ImageReader or the worker.
+        fun releaseStep(action: () -> Unit) {
+            try {
+                action()
+            } catch (_: Exception) {
+                cleanupFailed = true
+            }
+        }
         if (attachedToPrivateHost) {
-            original?.evaluateJavascript(PrivateCaptureQaPixelProof.REMOVE_SCRIPT, null)
-            (original?.parent as? ViewGroup)?.removeView(original)
+            releaseStep { original?.evaluateJavascript(PrivateCaptureQaPixelProof.REMOVE_SCRIPT, null) }
+            releaseStep { (original?.parent as? ViewGroup)?.removeView(original) }
             attachedToPrivateHost = false
         }
-        presentation?.dismiss()
+        val oldPresentation = presentation
         presentation = null
-        display?.release()
+        releaseStep { oldPresentation?.dismiss() }
+        val oldDisplay = display
         display = null
-        reader?.close()
+        releaseStep { oldDisplay?.release() }
+        val oldReader = reader
         reader = null
-        worker?.quitSafely()
+        releaseStep {
+            oldReader?.setOnImageAvailableListener(null, null)
+            oldReader?.close()
+        }
+        val oldWorker = worker
         worker = null
-        composeRestore()
-        if (result == State.IDLE) view = null
-        stateFlow.value = if (original == null) State.IDLE else result
+        releaseStep { oldWorker?.quitSafely() }
+        releaseStep { composeRestore() }
+        if (result == State.IDLE && !cleanupFailed) view = null
+        stateFlow.value =
+            when {
+                cleanupFailed -> State.FAILED
+                original == null || result == State.IDLE -> State.IDLE
+                else -> result
+            }
     }
 
     private fun onImage(images: ImageReader) {
@@ -399,6 +428,7 @@ class PrivateWebViewDisplay(
     private fun isLocked(): Boolean =
         activity.isFinishing ||
             activity.isDestroyed ||
+            !activity.getSystemService(PowerManager::class.java).isInteractive ||
             activity.getSystemService(KeyguardManager::class.java).isKeyguardLocked
 
     companion object {
