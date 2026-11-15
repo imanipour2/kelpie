@@ -67,6 +67,7 @@ class P2SurfaceQaActivity : Activity() {
     private var tabId = ""
     private var originalWebView: WebView? = null
     private var initialProof: String? = null
+    private var fixtureVerified = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -138,6 +139,7 @@ class P2SurfaceQaActivity : Activity() {
         passed = 0
         latest = null
         initialProof = null
+        fixtureVerified = false
         File(filesDir, "p2-tabstore-surface.jsonl").writeText("")
         val tab =
             store.activeTab ?: run {
@@ -186,12 +188,17 @@ class P2SurfaceQaActivity : Activity() {
         }
         val view = tab.webView
         view.evaluateJavascript(
-            "(document.readyState === 'complete' && typeof window.kelpieSeed === 'function')",
+            "(document.readyState === 'complete' && " +
+                "location.origin === 'https://fixture.invalid' && " +
+                "typeof window.kelpieSeed === 'function' && typeof window.kelpieProof === 'function')",
         ) { value ->
             if (!active || runToken != ticket) return@evaluateJavascript
             if (value != "true" || tab.isLoading) {
                 main.postDelayed({ awaitFixture(ticket, attempt + 1) }, 200)
             } else {
+                // The offline fixture origin was verified in the actual page realm.
+                // Android URL readbacks may not equal loadDataWithBaseURL's document origin.
+                fixtureVerified = true
                 // Preserve the genuine TabStore WebViewClient, including its documentVersion.
                 documentVersion = tab.documentVersion
                 if (!gate.begin(tab.id, documentVersion)) {
@@ -223,8 +230,7 @@ class P2SurfaceQaActivity : Activity() {
                 "VIEW" to (tab?.webView === originalWebView),
                 "DOCUMENT" to (tab?.documentVersion == documentVersion),
                 "LOADING" to (tab?.isLoading == false),
-                "TAB_URL" to (tab?.currentUrl?.startsWith(P2OfflineFixture.BASE) == true),
-                "VIEW_URL" to (tab?.webView?.url?.startsWith(P2OfflineFixture.BASE) == true),
+                "FIXTURE_ORIGIN" to fixtureVerified,
             )
         return checks.filterNot { it.second }.joinToString("_") { it.first }.ifBlank { "UNKNOWN" }
     }
@@ -238,7 +244,7 @@ class P2SurfaceQaActivity : Activity() {
             tab.webView === originalWebView &&
             tab.documentVersion == documentVersion &&
             !tab.isLoading &&
-            (tab.currentUrl.startsWith(P2OfflineFixture.BASE))
+            fixtureVerified
     }
 
     private fun locked(): Boolean = getSystemService(KeyguardManager::class.java).isKeyguardLocked
@@ -415,6 +421,7 @@ class P2SurfaceQaActivity : Activity() {
         active = false
         runToken++
         gate.cancel()
+        fixtureVerified = false
         val view = originalWebView
         (view?.parent as? ViewGroup)?.removeView(view)
         presentation?.dismiss()
