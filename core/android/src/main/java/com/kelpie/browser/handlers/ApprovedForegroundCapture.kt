@@ -57,11 +57,13 @@ internal class ApprovedForegroundCapture(
             )
         val prior = pending
         if (prior?.ticket?.requestId == ticket.requestId &&
-            (prior.ticket != ticket ||
-                prior.fullPage != fullPage ||
-                prior.format != format ||
-                prior.quality != quality ||
-                prior.resolution != resolution)
+            (
+                prior.ticket != ticket ||
+                    prior.fullPage != fullPage ||
+                    prior.format != format ||
+                    prior.quality != quality ||
+                    prior.resolution != resolution
+            )
         ) {
             return false
         }
@@ -166,7 +168,8 @@ internal class ApprovedForegroundCapture(
         return foreground &&
             activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
             status.id == plan.ticket.requestId &&
-            status.status in setOf(
+            status.status in
+            setOf(
                 ForegroundRecoveryState.Status.ACTIVITY_RESUMED,
                 ForegroundRecoveryState.Status.RENDER_READY,
             ) &&

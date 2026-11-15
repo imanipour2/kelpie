@@ -24,13 +24,14 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
-        android:label="Kelpie"
+        android:label="${p2AppLabel}"
         android:supportsRtl="true"
         android:theme="@style/Theme.Kelpie"
         android:usesCleartextTraffic="true">
 
         <activity
             android:name="com.kelpie.browser.MainActivity"
+            android:enabled="${p2NormalBrowserEnabled}"
             android:exported="true"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|keyboard|keyboardHidden|navigation"
             android:windowSoftInputMode="adjustResize">
@@ -40,6 +41,18 @@
             </intent-filter>
         </activity>
 
+
+        <!-- P2 is a separate, explicitly launched debug QA package. Disabled in every normal build. -->
+        <activity
+            android:name="com.kelpie.browser.P2SurfaceQaActivity"
+            android:enabled="${p2QaEnabled}"
+            android:exported="true"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
 
         <activity android:name="com.kelpie.browser.account.AccountCallbackActivity" android:exported="true" android:theme="@android:style/Theme.NoDisplay">
             <intent-filter>
