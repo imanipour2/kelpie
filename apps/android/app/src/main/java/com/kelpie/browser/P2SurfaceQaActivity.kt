@@ -163,7 +163,7 @@ class P2SurfaceQaActivity : Activity() {
             P2OfflineFixture.html(),
             "text/html",
             "UTF-8",
-            null,
+            P2OfflineFixture.BASE,
         )
         main.postDelayed({ awaitFixture(ticket, 0) }, 500)
     }
@@ -231,6 +231,7 @@ class P2SurfaceQaActivity : Activity() {
                 "DOCUMENT" to (tab?.documentVersion == documentVersion),
                 "LOADING" to (tab?.isLoading == false),
                 "FIXTURE_ORIGIN" to fixtureVerified,
+                "TAB_URL" to (tab?.currentUrl?.startsWith(P2OfflineFixture.BASE) == true),
             )
         return checks.filterNot { it.second }.joinToString("_") { it.first }.ifBlank { "UNKNOWN" }
     }
@@ -244,7 +245,8 @@ class P2SurfaceQaActivity : Activity() {
             tab.webView === originalWebView &&
             tab.documentVersion == documentVersion &&
             !tab.isLoading &&
-            fixtureVerified
+            fixtureVerified &&
+            tab.currentUrl.startsWith(P2OfflineFixture.BASE)
     }
 
     private fun locked(): Boolean = getSystemService(KeyguardManager::class.java).isKeyguardLocked
