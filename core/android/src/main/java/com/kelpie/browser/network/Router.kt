@@ -71,11 +71,10 @@ class Router {
         // after transfer. Existing private-envelope calls are allowed through
         // only if Gateway/MCPSession has independently checked their inner method.
         val privateOwnerAtDelivery = handlerContext?.privateCaptureRestricted?.invoke() == true
-        if ((privateOwnerAtDelivery && !privateOwnerAtAdmission) ||
-            !PrivateCaptureOperationPolicy.permits(
+        if (!PrivateCaptureOperationPolicy.permitsDelivery(
                 method,
+                privateOwnerAtAdmission,
                 privateOwnerAtDelivery,
-                outerEnvelope = privateOwnerAtAdmission,
             )
         ) {
             return 403 to errorResponse("PERMISSION_REQUIRED", "Private WebView capture owns the browser")
