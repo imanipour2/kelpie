@@ -206,7 +206,8 @@ class PrivateWebViewDisplay(
         var image: Bitmap? = null
         return try {
             image = withTimeoutOrNull(FRAME_TIMEOUT_MS) { request.result.awaitTake() }
-            if (image == null) {
+            val frame = image
+            if (frame == null) {
                 if (lastFrameOutcome == "WAITING_FOR_FRESH_NONCE") lastFrameOutcome = "FRESH_FRAME_TIMEOUT"
                 return null
             }
@@ -217,13 +218,13 @@ class PrivateWebViewDisplay(
                 val encoded =
                     withContext(Dispatchers.Default) {
                         val bytes = ByteArrayOutputStream()
-                        if (!image.compress(Bitmap.CompressFormat.PNG, 100, bytes)) {
+                        if (!frame.compress(Bitmap.CompressFormat.PNG, 100, bytes)) {
                             null
                         } else {
                             mapOf(
                                 "image" to Base64.getEncoder().encodeToString(bytes.toByteArray()),
-                                "width" to image.width,
-                                "height" to image.height,
+                                "width" to frame.width,
+                                "height" to frame.height,
                                 "format" to "png",
                                 "coordinateSpace" to "viewport-css-pixels",
                             )
