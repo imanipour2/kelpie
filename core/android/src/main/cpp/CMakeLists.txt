@@ -47,3 +47,11 @@ target_link_libraries(kelpie_jni
     kelpie_core_mcp
     kelpie_core_sync
 )
+
+# Android 15+ may use 16 KiB kernel pages. Keep our JNI ELF LOAD
+# segments aligned even on older NDK toolchains. Platform-independent
+# native archives remain unaffected; these options apply to Android JNI only.
+target_link_options(kelpie_jni PRIVATE
+  "-Wl,-z,max-page-size=16384"
+  "-Wl,-z,common-page-size=16384"
+)
