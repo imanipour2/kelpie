@@ -201,7 +201,16 @@ class PrivateCaptureCoordinator(
                 }
             if (frameTarget == null) {
                 withContext(Dispatchers.Main.immediate) {
-                    if (activeRequestId == requestId && activeClientId == client) stopByUser()
+                    if (activeRequestId == requestId && activeClientId == client) {
+                        val tab = context.tabStore?.activeTab
+                        val invalidOrigin =
+                            tab == null || !PrivateCaptureQaOrigin.permitted(tab.currentUrl, tab.webView.url)
+                        // A wrong attempt with a legitimate requestId must not stop
+                        // an otherwise valid owner's private display.
+                        if (invalidOrigin || registry.status(requestId, client) != "APPROVED") {
+                            stopByUser()
+                        }
+                    }
                 }
                 return@register errorResponse("PERMISSION_REQUIRED", "Private capture grant missing, expired or revoked")
             }
