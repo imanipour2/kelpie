@@ -19,6 +19,7 @@ import com.kelpie.browser.network.verifiedClientId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -316,17 +317,21 @@ class PrivateCaptureCoordinator(
     }
 
     suspend fun stopByUser() =
-        withContext(Dispatchers.Main.immediate) {
-            userStopped = true
-            registry.revoke()
-            activeRequestId = null
-            activeClientId = null
-            expiry?.cancel()
-            expiry = null
-            try {
-                renderer.stop()
-            } finally {
-                PrivateCaptureNotification.hide(activity)
+        // STOP/expiry/lock must complete even when the calling HTTP coroutine
+        // is cancelled while native display restoration is in progress.
+        withContext(NonCancellable) {
+            withContext(Dispatchers.Main.immediate) {
+                userStopped = true
+                registry.revoke()
+                activeRequestId = null
+                activeClientId = null
+                expiry?.cancel()
+                expiry = null
+                try {
+                    renderer.stop()
+                } finally {
+                    PrivateCaptureNotification.hide(activity)
+                }
             }
         }
 
