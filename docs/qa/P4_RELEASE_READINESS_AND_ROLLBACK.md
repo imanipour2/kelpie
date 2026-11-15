@@ -18,3 +18,9 @@
 **Sources for final verification:** Android SDK API 36, 16KB pages https://developer.android.com/guide/practices/page-sizes ; signing https://developer.android.com/studio/publish/app-signing ; OWASP MASVS https://mas.owasp.org/MASVS/ ; Android restrictions https://developer.android.com/develop/background-work/background-tasks/overview ; GitHub CI run logs for exact SHA.
 
 **Site status:** ENERFOAM LIVE/STAGING/TEST = UNCHANGED BY THIS MISSION; no WordPress/Elementor/WooCommerce actions.
+
+
+## Follow-up readiness check (2026-11-15)
+CI result must be tied to exact final SHA. A previous PR17 QA job failed Kotlin formatting, followed by source corrections. New code also changes cancellation handling and post-admission checks; passing old CI never proves the latest SHA. Until exact-head QA compile, unit, API/manifest/signing audit and physical S24 cases pass: **RELEASE_NO_GO**, **SYNC_BLOCKED_MAIN**.
+
+Critical hardware measurements: 20 unique public-image pixel-nonce frames, 21st denial, real manual notification STOP, 90s no-frame expiry, true SCREEN_OFF, two paired principals, same Java WebView/Task+document+scroll after 3s, and 50-cycle host+renderer memory/surface/thread trends. No user gesture may be simulated by ADB.
