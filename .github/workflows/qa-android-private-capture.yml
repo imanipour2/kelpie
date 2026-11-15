@@ -46,7 +46,11 @@ jobs:
       - name: Lint, unit tests and isolated QA build
         working-directory: apps/android
         run: |
-          ./gradlew --no-daemon -PkelpiePrivateCaptureQaProfile=true             :kelpie-browser:ktlintCheck :kelpie-browser:testDebugUnitTest             :app:assembleDebug
+          ./gradlew --no-daemon \
+            -PkelpiePrivateCaptureQaProfile=true \
+            :kelpie-browser:ktlintCheck \
+            :kelpie-browser:testDebugUnitTest \
+            :app:assembleDebug
       - name: Verify isolated package, explicit feature flag, signature and SHA
         shell: bash
         run: |
