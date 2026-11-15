@@ -204,7 +204,7 @@ class PrivateWebViewDisplay(
         // Closing the holder in finally also disposes pixels delivered by a
         // callback at the exact cancellation/timeout boundary.
         var image: Bitmap? = null
-        try {
+        return try {
             image = withTimeoutOrNull(FRAME_TIMEOUT_MS) { request.result.awaitTake() }
             if (image == null) {
                 if (lastFrameOutcome == "WAITING_FOR_FRESH_NONCE") lastFrameOutcome = "FRESH_FRAME_TIMEOUT"
