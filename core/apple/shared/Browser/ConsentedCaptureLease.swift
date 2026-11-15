@@ -56,8 +56,11 @@ final class ConsentedCaptureLease {
         let now = uptimeMs()
         guard now >= 0, now <= Int64.max - durationMs else { return nil }
         grant = Grant(
-            token: token, binding: binding, view: view,
-            expiresAtMs: now + durationMs, maxFrames: maxFrames
+            token: token,
+            binding: binding,
+            view: view,
+            expiresAtMs: now + durationMs,
+            maxFrames: maxFrames
         )
         return token
     }
@@ -95,18 +98,20 @@ final class ConsentedCaptureLease {
     private static func randomToken() -> String? {
         var bytes = [UInt8](repeating: 0, count: 24)
         let status = bytes.withUnsafeMutableBytes { ptr in
-            SecRandomCopyBytes(kSecRandomDefault, ptr.count, ptr.baseAddress!)
+            guard let address = ptr.baseAddress else { return errSecParam }
+            return SecRandomCopyBytes(kSecRandomDefault, ptr.count, address)
         }
         guard status == errSecSuccess else { return nil }
         return bytes.map { String(format: "%02x", $0) }.joined()
     }
 
-    private static func constantTimeEquals(_ a: String, _ b: String) -> Bool {
-        let x = Array(a.utf8), y = Array(b.utf8)
-        guard x.count == y.count else { return false }
+    private static func constantTimeEquals(_ storedToken: String, _ providedToken: String) -> Bool {
+        let leftBytes = Array(storedToken.utf8)
+        let rightBytes = Array(providedToken.utf8)
+        guard leftBytes.count == rightBytes.count else { return false }
         var difference: UInt8 = 0
-        for i in x.indices {
-            difference |= x[i] ^ y[i]
+        for index in leftBytes.indices {
+            difference |= leftBytes[index] ^ rightBytes[index]
         }
         return difference == 0
     }
