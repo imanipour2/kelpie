@@ -52,3 +52,12 @@
 - [Kelpie repository contract](../../../AGENTS.md) and [bounded physical evidence](https://github.com/imanipour2/kelpie/blob/experiment/s24-p3-compose-owner-qa-20261115/docs/qa/EF-OPS-KELPIE-S24-P3-COMPOSE-OWNER-QA.md)
 
 **Status:** `PRODUCTION_FOUNDATION_SOURCE_ONLY / CI_PENDING / DEVICE_ADB_UNAVAILABLE / SECURITY_REVIEW_REQUIRED / OWNER_RELEASE_GO_REQUIRED`.
+
+
+## Verified client identity and transport amendment (2026-11-15)
+
+Source inspection revealed `AuthMiddleware.evaluate` returns `AuthDecision.Authenticated(clientId)`, but the Ktor HTTPServer previously called `router.handle(method, body)` without forwarding that verified value. This exposes an *authorization design gap* for any future screenshot lease that might otherwise trust a user-supplied JSON `clientId`.
+
+Draft implementation `core/android/.../network/AuthenticatedClientContext.kt` creates an in-memory Kotlin coroutine-context principal **only from `AuthDecision.Authenticated`**; `HTTPServer.handleAuthenticatedPost` now wraps the router/gateway coroutine in that context. `verifiedClientId()` returns null outside this authenticated scope. The associated JVM test checks absence outside the scope, preservation after coroutine dispatcher changes, and no leakage after exit. This path does not grant any new permission or introduce any new network route.
+
+**Important limitations:** Outbound Nessie WebSocket requests are not processed by this Ktor route and require their own authenticated agent/account identity and job-attempt binding. HTTP `screenshot` has **not yet been wired** to `ConsentedCaptureLease` or to a renderer; this change must not make background screenshots possible without an explicit local approved tab-specific grant. Review the [threat-model matrix](../security/EF-KELPIE-CONSENTED-CAPTURE-THREAT-MODEL.md) before any integration.
