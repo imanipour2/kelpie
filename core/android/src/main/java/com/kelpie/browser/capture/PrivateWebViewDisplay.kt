@@ -55,6 +55,7 @@ class PrivateWebViewDisplay(
     private var view: WebView? = null
     private var display: VirtualDisplay? = null
     private var presentation: Presentation? = null
+
     // Only detach a view during cleanup after it entered our private host.
     // Before that, Compose may still own the original view (P3 mount RCA).
     private var attachedToPrivateHost = false
