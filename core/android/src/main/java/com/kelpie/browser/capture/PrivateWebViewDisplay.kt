@@ -12,6 +12,7 @@ import android.media.ImageReader
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
+import android.os.SystemClock
 import android.view.ViewGroup
 import android.webkit.WebView
 import kotlinx.coroutines.CompletableDeferred
@@ -44,7 +45,12 @@ class PrivateWebViewDisplay(
     private val stateFlow = MutableStateFlow(State.IDLE)
     val state = stateFlow.asStateFlow()
 
-    private val pendingImage = AtomicReference<CompletableDeferred<Bitmap?>?>(null)
+    private data class FrameWait(
+        val requestedAtNs: Long,
+        val result: CompletableDeferred<Bitmap?>,
+    )
+
+    private val pendingImage = AtomicReference<FrameWait?>(null)
     private val main = Handler(Looper.getMainLooper())
     private var view: WebView? = null
     private var display: VirtualDisplay? = null
@@ -74,6 +80,8 @@ class PrivateWebViewDisplay(
             view = original
             previousScrollX = original.scrollX
             previousScrollY = original.scrollY
+            val width = original.width.coerceIn(64, MAX_WIDTH)
+            val height = original.height.coerceIn(64, MAX_HEIGHT)
             composeRelease()
             val detached =
                 withTimeoutOrNull(RELEASE_TIMEOUT_MS) {
@@ -85,8 +93,6 @@ class PrivateWebViewDisplay(
                 return@withContext false
             }
             try {
-                val width = original.width.coerceIn(64, MAX_WIDTH)
-                val height = original.height.coerceIn(64, MAX_HEIGHT)
                 val backgroundThread = HandlerThread("Kelpie-Private-ImageReader")
                 backgroundThread.start()
                 worker = backgroundThread
@@ -132,13 +138,13 @@ class PrivateWebViewDisplay(
                 val images = reader ?: return@withContext null
                 // Drain preexisting frames; NEVER send a stale screenshot.
                 runCatching { images.acquireLatestImage()?.close() }
-                val deferred = CompletableDeferred<Bitmap?>()
-                if (!pendingImage.compareAndSet(null, deferred)) return@withContext null
-                view?.invalidate()
-                deferred
+                val wait = FrameWait(SystemClock.elapsedRealtimeNanos(), CompletableDeferred())
+                if (!pendingImage.compareAndSet(null, wait)) return@withContext null
+                view?.postInvalidateOnAnimation()
+                wait
             } ?: return null
 
-        val image = withTimeoutOrNull(FRAME_TIMEOUT_MS) { request.await() }
+        val image = withTimeoutOrNull(FRAME_TIMEOUT_MS) { request.result.await() }
         pendingImage.compareAndSet(request, null)
         if (image == null) return null
         return try {
@@ -201,7 +207,7 @@ class PrivateWebViewDisplay(
     private fun releaseAndRestore(result: State) {
         check(Looper.myLooper() == Looper.getMainLooper())
         active = false
-        pendingImage.getAndSet(null)?.cancel()
+        pendingImage.getAndSet(null)?.result?.cancel()
         val original = view
         (original?.parent as? ViewGroup)?.removeView(original)
         presentation?.dismiss()
@@ -219,13 +225,15 @@ class PrivateWebViewDisplay(
     private fun onImage(images: ImageReader) {
         val image = runCatching { images.acquireLatestImage() }.getOrNull() ?: return
         try {
-            val waiting = pendingImage.getAndSet(null) ?: return
-            if (!active || isLocked() || activityVisible || !waiting.isActive) {
-                waiting.cancel()
+            val waiting = pendingImage.get() ?: return
+            if (image.timestamp <= waiting.requestedAtNs) return
+            if (!pendingImage.compareAndSet(waiting, null)) return
+            if (!active || isLocked() || activityVisible || !waiting.result.isActive) {
+                waiting.result.cancel()
                 return
             }
             val bitmap = runCatching { copyImage(image) }.getOrNull()
-            if (!waiting.complete(bitmap)) bitmap?.recycle()
+            if (!waiting.result.complete(bitmap)) bitmap?.recycle()
         } finally {
             image.close()
         }
@@ -248,7 +256,10 @@ class PrivateWebViewDisplay(
         }
     }
 
-    private fun isLocked(): Boolean = activity.getSystemService(KeyguardManager::class.java).isKeyguardLocked
+    private fun isLocked(): Boolean =
+        activity.isFinishing ||
+            activity.isDestroyed ||
+            activity.getSystemService(KeyguardManager::class.java).isKeyguardLocked
 
     companion object {
         const val RELEASE_TIMEOUT_MS = 2_000L
