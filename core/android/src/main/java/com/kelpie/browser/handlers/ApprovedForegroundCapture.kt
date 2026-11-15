@@ -169,10 +169,10 @@ internal class ApprovedForegroundCapture(
             activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
             status.id == plan.ticket.requestId &&
             status.status in
-                setOf(
-                    ForegroundRecoveryState.Status.ACTIVITY_RESUMED,
-                    ForegroundRecoveryState.Status.RENDER_READY,
-                ) &&
+            setOf(
+                ForegroundRecoveryState.Status.ACTIVITY_RESUMED,
+                ForegroundRecoveryState.Status.RENDER_READY,
+            ) &&
             tab.id == plan.ticket.tabId &&
             tab.documentVersion == plan.ticket.documentVersion &&
             !tab.isLoading &&
