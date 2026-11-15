@@ -52,13 +52,16 @@ class PrivateCaptureCoordinator(
         if (!qaEnabled) return
 
         router.register("capture-session-request") { body ->
-            val verifiedClient = verifiedClientId()
-                ?: return@register errorResponse("PERMISSION_REQUIRED", "Verified paired HTTP client required")
-            val attemptId = body["attemptId"] as? String
-                ?: return@register errorResponse("INVALID_PARAMS", "attemptId required")
+            val verifiedClient =
+                verifiedClientId()
+                    ?: return@register errorResponse("PERMISSION_REQUIRED", "Verified paired HTTP client required")
+            val attemptId =
+                body["attemptId"] as? String
+                    ?: return@register errorResponse("INVALID_PARAMS", "attemptId required")
             withContext(Dispatchers.Main.immediate) {
-                val tab = context.tabStore?.activeTab
-                    ?: return@withContext errorResponse("NO_WEBVIEW", "No active browser tab")
+                val tab =
+                    context.tabStore?.activeTab
+                        ?: return@withContext errorResponse("NO_WEBVIEW", "No active browser tab")
                 if (closed || renderer.state.value != PrivateWebViewDisplay.State.IDLE) {
                     return@withContext errorResponse("RECORDING_IN_PROGRESS", "Private capture busy")
                 }
@@ -84,10 +87,12 @@ class PrivateCaptureCoordinator(
         }
 
         router.register("capture-session-status") { body ->
-            val client = verifiedClientId()
-                ?: return@register errorResponse("PERMISSION_REQUIRED", "Verified paired HTTP client required")
-            val requestId = body["requestId"] as? String
-                ?: return@register errorResponse("INVALID_PARAMS", "requestId required")
+            val client =
+                verifiedClientId()
+                    ?: return@register errorResponse("PERMISSION_REQUIRED", "Verified paired HTTP client required")
+            val requestId =
+                body["requestId"] as? String
+                    ?: return@register errorResponse("INVALID_PARAMS", "requestId required")
             val status = registry.status(requestId, client)
             successResponse(
                 mapOf(
@@ -98,32 +103,36 @@ class PrivateCaptureCoordinator(
         }
 
         router.register("capture-session-frame") { body ->
-            val client = verifiedClientId()
-                ?: return@register errorResponse("PERMISSION_REQUIRED", "Verified paired HTTP client required")
-            val requestId = body["requestId"] as? String
-                ?: return@register errorResponse("INVALID_PARAMS", "requestId required")
-            val attemptId = body["attemptId"] as? String
-                ?: return@register errorResponse("INVALID_PARAMS", "attemptId required")
+            val client =
+                verifiedClientId()
+                    ?: return@register errorResponse("PERMISSION_REQUIRED", "Verified paired HTTP client required")
+            val requestId =
+                body["requestId"] as? String
+                    ?: return@register errorResponse("INVALID_PARAMS", "requestId required")
+            val attemptId =
+                body["attemptId"] as? String
+                    ?: return@register errorResponse("INVALID_PARAMS", "attemptId required")
             val permitted =
                 withContext(Dispatchers.Main.immediate) {
                     val tab = context.tabStore?.activeTab ?: return@withContext false
                     allowedQaOrigin(tab.currentUrl, tab.webView.url) &&
                         registry.claimFrame(
-                        requestId,
-                        client,
-                        attemptId,
-                        tab.id,
-                        tab.documentVersion,
-                        tab.webView,
-                        unlocked = !isLocked(),
-                        userStopped = userStopped || closed,
-                    )
+                            requestId,
+                            client,
+                            attemptId,
+                            tab.id,
+                            tab.documentVersion,
+                            tab.webView,
+                            unlocked = !isLocked(),
+                            userStopped = userStopped || closed,
+                        )
                 }
             if (!permitted) {
                 return@register errorResponse("PERMISSION_REQUIRED", "Private capture grant missing, expired or revoked")
             }
-            val image = renderer.captureFreshPng()
-                ?: return@register errorResponse("SCREENSHOT_FAILED", "No fresh private frame available")
+            val image =
+                renderer.captureFreshPng()
+                    ?: return@register errorResponse("SCREENSHOT_FAILED", "No fresh private frame available")
             if (closed || userStopped || renderer.state.value != PrivateWebViewDisplay.State.PRIVATE_DISPLAY) {
                 return@register errorResponse("PERMISSION_REQUIRED", "Capture stopped before delivery")
             }
@@ -131,10 +140,12 @@ class PrivateCaptureCoordinator(
         }
 
         router.register("capture-session-stop") { body ->
-            val client = verifiedClientId()
-                ?: return@register errorResponse("PERMISSION_REQUIRED", "Verified paired HTTP client required")
-            val requestId = body["requestId"] as? String
-                ?: return@register errorResponse("INVALID_PARAMS", "requestId required")
+            val client =
+                verifiedClientId()
+                    ?: return@register errorResponse("PERMISSION_REQUIRED", "Verified paired HTTP client required")
+            val requestId =
+                body["requestId"] as? String
+                    ?: return@register errorResponse("INVALID_PARAMS", "requestId required")
             if (registry.status(requestId, client) == "NOT_FOUND") {
                 return@register errorResponse("PERMISSION_REQUIRED", "Unknown capture for this client")
             }
@@ -220,11 +231,16 @@ class PrivateCaptureCoordinator(
         scope.cancel()
     }
 
-    private fun allowedQaOrigin(tabUrl: String, actualUrl: String?): Boolean {
+    private fun allowedQaOrigin(
+        tabUrl: String,
+        actualUrl: String?,
+    ): Boolean {
         val tab = Uri.parse(tabUrl)
         val view = Uri.parse(actualUrl.orEmpty())
-        return tab.scheme == "https" && tab.host == "example.com" &&
-            view.scheme == "https" && view.host == "example.com"
+        return tab.scheme == "https" &&
+            tab.host == "example.com" &&
+            view.scheme == "https" &&
+            view.host == "example.com"
     }
 
     private fun isLocked(): Boolean =
