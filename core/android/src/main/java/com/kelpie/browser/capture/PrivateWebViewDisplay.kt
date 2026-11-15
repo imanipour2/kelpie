@@ -48,7 +48,7 @@ class PrivateWebViewDisplay(
 
     private data class FrameWait(
         val expectedRgb: Int,
-        val result: CompletableDeferred<Bitmap?>,
+        val result: OneShotFrameBuffer<Bitmap>,
     )
 
     private val pendingImage = AtomicReference<FrameWait?>(null)
@@ -186,7 +186,7 @@ class PrivateWebViewDisplay(
                 runCatching { images.acquireLatestImage()?.close() }
                 val next = qaFrameSequence + 1
                 val expectedRgb = PrivateCaptureQaPixelProof.rgb(next)
-                val wait = FrameWait(expectedRgb, CompletableDeferred())
+                val wait = FrameWait(expectedRgb, OneShotFrameBuffer(Bitmap::recycle))
                 if (!pendingImage.compareAndSet(null, wait)) return@withContext null
                 // The QA nonce must advance only for a newly accepted single flight.
                 qaFrameSequence = next
@@ -194,21 +194,23 @@ class PrivateWebViewDisplay(
                 current.evaluateJavascript(PrivateCaptureQaPixelProof.repaintScript(expectedRgb)) { result ->
                     if (result != "true" && pendingImage.compareAndSet(wait, null)) {
                         lastFrameOutcome = "QA_SCRIPT_REFUSED"
-                        wait.result.complete(null)
+                        wait.result.fail()
                     }
                 }
                 current.postInvalidateOnAnimation()
                 wait
             } ?: return null
 
-        val image = withTimeoutOrNull(FRAME_TIMEOUT_MS) { request.result.await() }
-        pendingImage.compareAndSet(request, null)
-        if (image == null) {
-            if (lastFrameOutcome == "WAITING_FOR_FRESH_NONCE") lastFrameOutcome = "FRESH_FRAME_TIMEOUT"
-            return null
-        }
-        lastFrameOutcome = "FRESH_NONCE_MATCHED"
-        return try {
+        // Closing the holder in finally also disposes pixels delivered by a
+        // callback at the exact cancellation/timeout boundary.
+        var image: Bitmap? = null
+        try {
+            image = withTimeoutOrNull(FRAME_TIMEOUT_MS) { request.result.awaitTake() }
+            if (image == null) {
+                if (lastFrameOutcome == "WAITING_FOR_FRESH_NONCE") lastFrameOutcome = "FRESH_FRAME_TIMEOUT"
+                return null
+            }
+            lastFrameOutcome = "FRESH_NONCE_MATCHED"
             if (!active || activityVisible || isLocked() || stateFlow.value != State.PRIVATE_DISPLAY) {
                 null
             } else {
@@ -238,7 +240,9 @@ class PrivateWebViewDisplay(
                 }
             }
         } finally {
-            image.recycle()
+            pendingImage.compareAndSet(request, null)
+            request.result.close()
+            image?.recycle()
         }
     }
 
@@ -337,7 +341,7 @@ class PrivateWebViewDisplay(
     private fun releaseAndRestore(result: State) {
         check(Looper.myLooper() == Looper.getMainLooper())
         active = false
-        pendingImage.getAndSet(null)?.result?.cancel()
+        pendingImage.getAndSet(null)?.result?.close()
         val original = view
         val cleanup = PrivateCaptureCleanupSequence()
 
@@ -378,7 +382,7 @@ class PrivateWebViewDisplay(
         callbackCount.incrementAndGet()
         try {
             val waiting = pendingImage.get() ?: return
-            if (!active || isLocked() || activityVisible || !waiting.result.isActive) return
+            if (!active || isLocked() || activityVisible || !waiting.result.isOpen) return
             // Ignore every stale/blank/foreign frame. Only this request's
             // actual page-repaint pixel can complete the one-shot promise.
             val rgb = runCatching { sampleRgb(image) }.getOrNull() ?: return
@@ -389,7 +393,11 @@ class PrivateWebViewDisplay(
             matchingFrameCount.incrementAndGet()
             if (!pendingImage.compareAndSet(waiting, null)) return
             val bitmap = runCatching { copyImage(image) }.getOrNull()
-            if (!waiting.result.complete(bitmap)) bitmap?.recycle()
+            if (bitmap != null) {
+                waiting.result.publish(bitmap)
+            } else {
+                waiting.result.fail()
+            }
         } finally {
             image.close()
         }
