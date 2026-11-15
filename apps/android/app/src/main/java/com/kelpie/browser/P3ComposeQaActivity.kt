@@ -166,7 +166,7 @@ class P3ComposeQaActivity : ComponentActivity() {
         view.settings.allowFileAccess = false
         view.settings.allowContentAccess = false
         view.settings.javaScriptEnabled = true
-        (view.parent as? ViewGroup)?.removeView(view)
+        // Keep this view attached to the real Compose AndroidView until release().
         tab.isStartPage = false
         view.loadDataWithBaseURL(
             P2OfflineFixture.BASE,
