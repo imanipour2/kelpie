@@ -2,6 +2,7 @@ package com.kelpie.browser.network
 
 import android.webkit.WebView
 import com.kelpie.browser.handlers.HandlerContext
+import com.kelpie.browser.capture.PrivateCaptureOperationPolicy
 
 typealias RouteHandler = suspend (body: Map<String, Any?>) -> Map<String, Any?>
 
@@ -39,10 +40,11 @@ class Router {
         bypassRecordingGate: Boolean = false,
         fromGateway: Boolean = false,
     ): Pair<Int, Map<String, Any?>> {
-        if (handlerContext?.privateCaptureRestricted?.invoke() == true &&
-            method != "mcp" &&
-            method != "browser-control" &&
-            !method.startsWith("capture-session-")
+        if (!PrivateCaptureOperationPolicy.permits(
+                method,
+                handlerContext?.privateCaptureRestricted?.invoke() == true,
+                outerEnvelope = true,
+            )
         ) {
             return 403 to errorResponse("PERMISSION_REQUIRED", "Private WebView capture owns the browser")
         }
