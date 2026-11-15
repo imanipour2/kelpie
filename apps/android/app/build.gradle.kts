@@ -32,6 +32,16 @@ android {
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
+    // Only the explicitly opted-in isolated P3 QA variant removes inherited
+    // browser permissions. Standard, P2 and unified builds use their own manifest.
+    sourceSets {
+        getByName("debug") {
+            if (providers.gradleProperty("kelpieP3VerificationProfile").orNull == "true") {
+                manifest.srcFile("src/p3Qa/AndroidManifest.xml")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             if (providers.gradleProperty("kelpieP3VerificationProfile").orNull == "true") {
