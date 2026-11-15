@@ -5,13 +5,13 @@ import com.kelpie.browser.ai.openai.OpenAIJson
 import com.kelpie.browser.capture.PrivateCaptureOperationPolicy
 import com.kelpie.browser.handlers.HandlerContext
 import com.kelpie.browser.nativecore.BrowserGatewayNative
-import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import java.util.concurrent.ConcurrentHashMap
 
 /** Android adapters invoke existing handlers. Fixed scripts are internal and run in WebView's page realm. */
 class BrowserGatewayBinding(
