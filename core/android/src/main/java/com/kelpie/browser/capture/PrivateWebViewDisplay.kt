@@ -270,25 +270,39 @@ class PrivateWebViewDisplay(
                 stateFlow.value = State.FAILED
                 return@withContext false
             }
-            // First restore Android's native offset, then correct the document
-            // using its original CSS coordinates, as established in the P3 QA.
-            original.scrollTo(previousScrollX, previousScrollY)
-            delay(150)
+            // WebView can apply a late compositor/layout scroll restore after the
+            // initial Compose reattach. Never mark restored on one transient read.
+            // Instead, reassert CSS pixels until three spaced observations agree,
+            // followed by a delayed stability check. This is same-document only.
+            delay(650)
+            var stableObservations = 0
             var matched = false
-            for (attempt in 0..2) {
+            for (attempt in 0..11) {
+                if (!original.isAttachedToWindow || isLocked()) break
                 original.evaluateJavascript(
                     "window.scrollTo($previousCssScrollX,$previousCssScrollY)",
                     null,
                 )
-                delay(175)
+                delay(250)
                 val current = readCssScroll(original)
-                if (current != null &&
-                    kotlin.math.abs(current.first - previousCssScrollX) <= 1.5 &&
-                    kotlin.math.abs(current.second - previousCssScrollY) <= 1.5
+                val equal =
+                    current != null &&
+                        kotlin.math.abs(current.first - previousCssScrollX) <= 1.5 &&
+                        kotlin.math.abs(current.second - previousCssScrollY) <= 1.5
+                stableObservations = if (equal) stableObservations + 1 else 0
+                if (stableObservations < 3) continue
+                // A scroll that is correct immediately may still reset on the
+                // next layout; wait beyond a typical UI resize/settling cycle.
+                delay(700)
+                val settled = readCssScroll(original)
+                if (settled != null &&
+                    kotlin.math.abs(settled.first - previousCssScrollX) <= 1.5 &&
+                    kotlin.math.abs(settled.second - previousCssScrollY) <= 1.5
                 ) {
                     matched = true
                     break
                 }
+                stableObservations = 0
             }
             stateFlow.value = if (matched) State.IDLE else State.FAILED
             if (matched) view = null
