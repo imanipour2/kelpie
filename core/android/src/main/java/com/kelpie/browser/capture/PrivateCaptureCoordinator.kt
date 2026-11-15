@@ -1,7 +1,6 @@
 package com.kelpie.browser.capture
 
 import android.app.KeyguardManager
-import android.net.Uri
 import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import com.kelpie.browser.connect.ConsentedCaptureLease
@@ -65,7 +64,7 @@ class PrivateCaptureCoordinator(
                 if (closed || renderer.state.value != PrivateWebViewDisplay.State.IDLE) {
                     return@withContext errorResponse("RECORDING_IN_PROGRESS", "Private capture busy")
                 }
-                if (!allowedQaOrigin(tab.currentUrl, tab.webView.url)) {
+                if (!PrivateCaptureQaOrigin.permitted(tab.currentUrl, tab.webView.url)) {
                     return@withContext errorResponse("PERMISSION_REQUIRED", "QA capture limited to public example.com")
                 }
                 val request =
@@ -112,11 +111,13 @@ class PrivateCaptureCoordinator(
             val attemptId =
                 body["attemptId"] as? String
                     ?: return@register errorResponse("INVALID_PARAMS", "attemptId required")
-            val permitted =
+            val frameTarget =
                 withContext(Dispatchers.Main.immediate) {
-                    val tab = context.tabStore?.activeTab ?: return@withContext false
-                    allowedQaOrigin(tab.currentUrl, tab.webView.url) &&
-                        registry.claimFrame(
+                    val tab = context.tabStore?.activeTab ?: return@withContext null
+                    if (!PrivateCaptureQaOrigin.permitted(tab.currentUrl, tab.webView.url)) {
+                        return@withContext null
+                    }
+                    if (!registry.claimFrame(
                             requestId,
                             client,
                             attemptId,
@@ -126,15 +127,36 @@ class PrivateCaptureCoordinator(
                             unlocked = !isLocked(),
                             userStopped = userStopped || closed,
                         )
+                    ) {
+                        return@withContext null
+                    }
+                    Triple(tab.id, tab.documentVersion, tab.webView)
                 }
-            if (!permitted) {
+            if (frameTarget == null) {
                 return@register errorResponse("PERMISSION_REQUIRED", "Private capture grant missing, expired or revoked")
             }
             val image =
                 renderer.captureFreshPng()
                     ?: return@register errorResponse("SCREENSHOT_FAILED", "No fresh private frame available")
-            if (closed || userStopped || renderer.state.value != PrivateWebViewDisplay.State.PRIVATE_DISPLAY) {
-                return@register errorResponse("PERMISSION_REQUIRED", "Capture stopped before delivery")
+
+            // Navigation/STOP/expiry may occur during ImageReader or PNG encoding.
+            // Do not send a frame unless the same approved document is still hidden.
+            val stillAuthorized =
+                withContext(Dispatchers.Main.immediate) {
+                    val tab = context.tabStore?.activeTab
+                    tab != null &&
+                        tab.id == frameTarget.first &&
+                        tab.documentVersion == frameTarget.second &&
+                        tab.webView === frameTarget.third &&
+                        PrivateCaptureQaOrigin.permitted(tab.currentUrl, tab.webView.url) &&
+                        registry.status(requestId, client) == "APPROVED" &&
+                        !closed &&
+                        !userStopped &&
+                        !isLocked() &&
+                        renderer.canDeliverFrame()
+                }
+            if (!stillAuthorized) {
+                return@register errorResponse("PERMISSION_REQUIRED", "Capture identity or visibility changed before delivery")
             }
             successResponse(image)
         }
@@ -170,7 +192,7 @@ class PrivateCaptureCoordinator(
                     tab.webView,
                     unlocked = !isLocked(),
                 )
-            if (!ok || !allowedQaOrigin(tab.currentUrl, tab.webView.url)) {
+            if (!ok || !PrivateCaptureQaOrigin.permitted(tab.currentUrl, tab.webView.url)) {
                 registry.revoke()
                 return@withContext false
             }
@@ -229,18 +251,6 @@ class PrivateCaptureCoordinator(
         renderer.dispose()
         PrivateCaptureNotification.hide(activity)
         scope.cancel()
-    }
-
-    private fun allowedQaOrigin(
-        tabUrl: String,
-        actualUrl: String?,
-    ): Boolean {
-        val tab = Uri.parse(tabUrl)
-        val view = Uri.parse(actualUrl.orEmpty())
-        return tab.scheme == "https" &&
-            tab.host == "example.com" &&
-            view.scheme == "https" &&
-            view.host == "example.com"
     }
 
     private fun isLocked(): Boolean =
