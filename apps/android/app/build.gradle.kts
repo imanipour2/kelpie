@@ -77,6 +77,14 @@ android {
     }
 
     packaging {
+        jniLibs {
+            // AGP 8.3 does not reliably emit 16 KiB-aligned uncompressed
+            // JNI entries. Extract compressed libs in the isolated QA APK
+            // until a separately reviewed toolchain upgrade.
+            if (providers.gradleProperty("kelpiePrivateCaptureQaProfile").orNull == "true") {
+                useLegacyPackaging = true
+            }
+        }
         resources {
             excludes +=
                 setOf(
