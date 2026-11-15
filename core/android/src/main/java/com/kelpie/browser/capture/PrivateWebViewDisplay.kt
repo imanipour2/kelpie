@@ -23,6 +23,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.ByteArrayOutputStream
 import java.util.Base64
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -50,6 +51,18 @@ class PrivateWebViewDisplay(
     )
 
     private val pendingImage = AtomicReference<FrameWait?>(null)
+    private val callbackCount = AtomicInteger(0)
+    private val matchingFrameCount = AtomicInteger(0)
+
+    @Volatile private var lastFrameOutcome = "NOT_REQUESTED"
+
+    /** Counts only; never expose screenshot pixels, URL, token or page content. */
+    fun qaDiagnostics(): Map<String, Any> =
+        mapOf(
+            "imageCallbacks" to callbackCount.get(),
+            "matchedNonceFrames" to matchingFrameCount.get(),
+            "lastFrameOutcome" to lastFrameOutcome,
+        )
     private val main = Handler(Looper.getMainLooper())
     private var view: WebView? = null
     private var display: VirtualDisplay? = null
@@ -90,6 +103,9 @@ class PrivateWebViewDisplay(
             previousScrollX = original.scrollX
             previousScrollY = original.scrollY
             qaFrameSequence = 0
+            callbackCount.set(0)
+            matchingFrameCount.set(0)
+            lastFrameOutcome = "DISPLAY_INITIALIZING"
             val width = original.width.coerceIn(64, MAX_WIDTH)
             val height = original.height.coerceIn(64, MAX_HEIGHT)
             composeRelease()
@@ -158,8 +174,10 @@ class PrivateWebViewDisplay(
                 val expectedRgb = PrivateCaptureQaPixelProof.rgb(++qaFrameSequence)
                 val wait = FrameWait(expectedRgb, CompletableDeferred())
                 if (!pendingImage.compareAndSet(null, wait)) return@withContext null
+                lastFrameOutcome = "WAITING_FOR_FRESH_NONCE"
                 current.evaluateJavascript(PrivateCaptureQaPixelProof.repaintScript(expectedRgb)) { result ->
                     if (result != "true" && pendingImage.compareAndSet(wait, null)) {
+                        lastFrameOutcome = "QA_SCRIPT_REFUSED"
                         wait.result.complete(null)
                     }
                 }
@@ -169,7 +187,11 @@ class PrivateWebViewDisplay(
 
         val image = withTimeoutOrNull(FRAME_TIMEOUT_MS) { request.result.await() }
         pendingImage.compareAndSet(request, null)
-        if (image == null) return null
+        if (image == null) {
+            if (lastFrameOutcome == "WAITING_FOR_FRESH_NONCE") lastFrameOutcome = "FRESH_FRAME_TIMEOUT"
+            return null
+        }
+        lastFrameOutcome = "FRESH_NONCE_MATCHED"
         return try {
             if (!active || activityVisible || isLocked() || stateFlow.value != State.PRIVATE_DISPLAY) {
                 null
@@ -271,13 +293,18 @@ class PrivateWebViewDisplay(
 
     private fun onImage(images: ImageReader) {
         val image = runCatching { images.acquireLatestImage() }.getOrNull() ?: return
+        callbackCount.incrementAndGet()
         try {
             val waiting = pendingImage.get() ?: return
             if (!active || isLocked() || activityVisible || !waiting.result.isActive) return
             // Ignore every stale/blank/foreign frame. Only this request's
             // actual page-repaint pixel can complete the one-shot promise.
             val rgb = runCatching { sampleRgb(image) }.getOrNull() ?: return
-            if (!PrivateCaptureQaPixelProof.matches(waiting.expectedRgb, rgb)) return
+            if (!PrivateCaptureQaPixelProof.matches(waiting.expectedRgb, rgb)) {
+                lastFrameOutcome = "STALE_OR_WRONG_PIXEL"
+                return
+            }
+            matchingFrameCount.incrementAndGet()
             if (!pendingImage.compareAndSet(waiting, null)) return
             val bitmap = runCatching { copyImage(image) }.getOrNull()
             if (!waiting.result.complete(bitmap)) bitmap?.recycle()
