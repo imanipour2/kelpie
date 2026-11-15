@@ -40,9 +40,10 @@ class Router {
         bypassRecordingGate: Boolean = false,
         fromGateway: Boolean = false,
     ): Pair<Int, Map<String, Any?>> {
+        val privateOwnerAtAdmission = handlerContext?.privateCaptureRestricted?.invoke() == true
         if (!PrivateCaptureOperationPolicy.permits(
                 method,
-                handlerContext?.privateCaptureRestricted?.invoke() == true,
+                privateOwnerAtAdmission,
                 outerEnvelope = true,
             )
         ) {
@@ -66,12 +67,15 @@ class Router {
             }
         }
         val result = handler(body)
-        // An operation may have been admitted before a genuine local P4
-        // approval. Never deliver its old DOM/screenshot result after ownership
-        // transfers to the private WebView, even if the first gate passed.
-        if (!PrivateCaptureOperationPolicy.permits(
+        // A command admitted before P4 may not leak stale DOM/screenshot data
+        // after transfer. Existing private-envelope calls are allowed through
+        // only if Gateway/MCPSession has independently checked their inner method.
+        val privateOwnerAtDelivery = handlerContext?.privateCaptureRestricted?.invoke() == true
+        if ((privateOwnerAtDelivery && !privateOwnerAtAdmission) ||
+            !PrivateCaptureOperationPolicy.permits(
                 method,
-                handlerContext?.privateCaptureRestricted?.invoke() == true,
+                privateOwnerAtDelivery,
+                outerEnvelope = privateOwnerAtAdmission,
             )
         ) {
             return 403 to errorResponse("PERMISSION_REQUIRED", "Private WebView capture owns the browser")
