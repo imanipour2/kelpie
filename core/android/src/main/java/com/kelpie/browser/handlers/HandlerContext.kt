@@ -102,7 +102,7 @@ class HandlerContext(
         synchronized(consoleMessagesLock) {
             consoleMessages.add(message)
             if (consoleMessages.size > 5000) {
-                consoleMessages.removeFirst()
+                consoleMessages.removeAt(0)
             }
         }
     }

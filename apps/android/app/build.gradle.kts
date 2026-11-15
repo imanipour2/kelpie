@@ -13,12 +13,12 @@ ktlint {
 
 android {
     namespace = "com.unlikeotherai.kelpie.app"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.kelpie.browser"
         minSdk = 28
-        targetSdk = 34
+        targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionCode = 25
         versionName = "0.2.5"
@@ -34,6 +34,9 @@ android {
             } else if (providers.gradleProperty("kelpieVerificationProfile").orNull == "true") {
                 applicationIdSuffix = ".nessieverify"
                 buildConfigField("int", "LOCAL_HTTP_PORT", "18420")
+            } else if (providers.gradleProperty("kelpieApi36VerificationProfile").orNull == "true") {
+                applicationIdSuffix = ".api36verify"
+                buildConfigField("int", "LOCAL_HTTP_PORT", "18436")
             }
         }
         release {
