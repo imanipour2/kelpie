@@ -101,7 +101,8 @@ class BrowserGatewayBinding(
         allowActions: Boolean,
         pinned: String?,
     ): Boolean =
-        ctx.scriptPlaybackState?.recordingError(request["method"] as? String ?: "browser-control") == null &&
+        ctx.privateCaptureRestricted?.invoke() != true &&
+            ctx.scriptPlaybackState?.recordingError(request["method"] as? String ?: "browser-control") == null &&
             BrowserGatewayTabPolicy.permits(
                 request,
                 mutates,
