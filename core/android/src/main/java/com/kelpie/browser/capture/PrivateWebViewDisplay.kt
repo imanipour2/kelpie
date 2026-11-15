@@ -361,10 +361,8 @@ class PrivateWebViewDisplay(
         cleanup.release { oldDisplay?.release() }
         val oldReader = reader
         reader = null
-        cleanup.release {
-            oldReader?.setOnImageAvailableListener(null, null)
-            oldReader?.close()
-        }
+        cleanup.release { oldReader?.setOnImageAvailableListener(null, null) }
+        cleanup.release { oldReader?.close() }
         val oldWorker = worker
         worker = null
         cleanup.release { oldWorker?.quitSafely() }
