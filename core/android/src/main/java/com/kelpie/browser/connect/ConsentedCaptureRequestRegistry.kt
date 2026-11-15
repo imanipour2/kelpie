@@ -114,8 +114,12 @@ class ConsentedCaptureRequestRegistry(
             revoke()
             return false
         }
+        val clientId = verifiedClientId ?: run {
+            revoke()
+            return false
+        }
         val binding =
-            ConsentedCaptureLease.Binding(currentTabId, currentDocumentVersion, verifiedClientId, attemptId)
+            ConsentedCaptureLease.Binding(currentTabId, currentDocumentVersion, clientId, attemptId)
         val valid = lease.claimFrame(a.localToken, binding, currentView, true, unlocked, userStopped)
         if (!valid) revoke()
         return valid
