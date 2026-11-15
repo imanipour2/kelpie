@@ -22,6 +22,10 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionCode = 25
         versionName = "0.2.5"
+        if (providers.gradleProperty("kelpiePrivateCaptureQaProfile").orNull == "true") {
+            versionCode = 29
+            versionName = "0.2.9-qa"
+        }
         buildConfigField("int", "LOCAL_HTTP_PORT", "8420")
         buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
@@ -45,8 +49,6 @@ android {
                 buildConfigField("int", "LOCAL_HTTP_PORT", "18420")
             } else if (providers.gradleProperty("kelpiePrivateCaptureQaProfile").orNull == "true") {
                 applicationIdSuffix = ".pcverify"
-                versionCode = 29
-                versionName = "0.2.9-qa"
                 buildConfigField("int", "LOCAL_HTTP_PORT", "18437")
                 buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "true")
             }
