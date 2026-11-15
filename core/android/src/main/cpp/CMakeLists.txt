@@ -47,3 +47,12 @@ target_link_libraries(kelpie_jni
     kelpie_core_mcp
     kelpie_core_sync
 )
+
+
+# Android NDK r27 and earlier do not default to 16 KiB ELF LOAD alignment.
+# APK zipalign alone does not fix the ELF program headers. Required for
+# Android 15+/Google Play 16 KiB memory-page devices.
+target_link_options(kelpie_jni PRIVATE
+  "-Wl,-z,max-page-size=16384"
+  "-Wl,-z,common-page-size=16384"
+)
