@@ -42,7 +42,8 @@ class ConnectBrowser(
                 context.privateCaptureRestricted?.invoke() == true,
             )
         ) {
-            return com.kelpie.browser.network.errorResponse("PERMISSION_REQUIRED", "Private WebView capture owns the browser")
+            return com.kelpie.browser.network
+                .errorResponse("PERMISSION_REQUIRED", "Private WebView capture owns the browser")
         }
         if (command["operation"] == "open") {
             val gateway = context.browserGateway
