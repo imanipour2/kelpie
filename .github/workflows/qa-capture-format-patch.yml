@@ -8,6 +8,11 @@ on:
       - '.github/workflows/qa-capture-format-patch.yml'
   workflow_dispatch:
 
+# Cancel obsolete builds of the same PR instead of flooding Maven Central.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -22,6 +27,18 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v4.0.3
+      # Share dependency caches with Android CI to reduce Maven Central 429s.
+      # Dependencies and Gradle scripts remain pinned by the existing lockfiles.
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v5.0.5
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            apps/android/.gradle
+          key: gradle-${{ runner.os }}-${{ hashFiles('core/android/**/*.gradle*', 'apps/android/**/*.gradle*', 'apps/android/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
       - name: Format Kotlin without changing repository
         working-directory: apps/android
         run: ./gradlew --no-daemon :kelpie-browser:ktlintFormat :app:ktlintFormat
