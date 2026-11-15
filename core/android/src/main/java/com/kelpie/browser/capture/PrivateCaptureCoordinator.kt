@@ -47,6 +47,11 @@ class PrivateCaptureCoordinator(
     private var closed = false
     private var userStopped = false
 
+    // Internal, authenticated ownership: a random client or request ID cannot
+    // end another user's active capture by querying its status.
+    private var activeRequestId: String? = null
+    private var activeClientId: String? = null
+
     fun register(router: Router) {
         if (!qaEnabled) return
 
@@ -92,7 +97,17 @@ class PrivateCaptureCoordinator(
             val requestId =
                 body["requestId"] as? String
                     ?: return@register errorResponse("INVALID_PARAMS", "requestId required")
-            val status = registry.status(requestId, client)
+            // status() itself expires/revokes grants on the monotonic clock.
+            // Release the renderer in the same operation instead of depending
+            // on an Android background coroutine that may resume much later.
+            val status =
+                withContext(Dispatchers.Main.immediate) {
+                    val status = registry.status(requestId, client)
+                    if (PrivateCaptureExpiryCleanup.shouldRelease(activeRequestId, activeClientId, requestId, client, status)) {
+                        stopByUser()
+                    }
+                    status
+                }
             successResponse(
                 mapOf(
                     "status" to status,
@@ -134,6 +149,9 @@ class PrivateCaptureCoordinator(
                     Triple(tab.id, tab.documentVersion, tab.webView)
                 }
             if (frameTarget == null) {
+                withContext(Dispatchers.Main.immediate) {
+                    if (activeRequestId == requestId && activeClientId == client) stopByUser()
+                }
                 return@register errorResponse("PERMISSION_REQUIRED", "Private capture grant missing, expired or revoked")
             }
             val image = renderer.captureFreshPng()
@@ -159,6 +177,9 @@ class PrivateCaptureCoordinator(
                         renderer.canDeliverFrame()
                 }
             if (!stillAuthorized) {
+                withContext(Dispatchers.Main.immediate) {
+                    if (activeRequestId == requestId && activeClientId == client) stopByUser()
+                }
                 return@register errorResponse("PERMISSION_REQUIRED", "Capture identity or visibility changed before delivery")
             }
             // Revoke and release the private display as soon as the last
@@ -174,7 +195,9 @@ class PrivateCaptureCoordinator(
             val requestId =
                 body["requestId"] as? String
                     ?: return@register errorResponse("INVALID_PARAMS", "requestId required")
-            if (registry.status(requestId, client) == "NOT_FOUND") {
+            if (registry.status(requestId, client) == "NOT_FOUND" &&
+                !(activeRequestId == requestId && activeClientId == client)
+            ) {
                 return@register errorResponse("PERMISSION_REQUIRED", "Unknown capture for this client")
             }
             stopByUser()
@@ -190,6 +213,7 @@ class PrivateCaptureCoordinator(
                 return@withContext false
             }
             val tab = context.tabStore?.activeTab ?: return@withContext false
+            val approvedPrincipal = pending.value?.takeIf { it.requestId == requestId }?.clientId ?: return@withContext false
             val ok =
                 registry.approveOnDevice(
                     requestId,
@@ -209,10 +233,16 @@ class PrivateCaptureCoordinator(
                 renderer.stop()
                 return@withContext false
             }
+            activeRequestId = requestId
+            activeClientId = approvedPrincipal
             expiry?.cancel()
             expiry =
                 scope.launch {
                     delay(ConsentedCaptureLease.MAX_LEASE_MS)
+                    // Do not cancel this same expiry Job from stopByUser():
+                    // self-cancellation can interrupt the suspended renderer
+                    // cleanup and leave PRIVATE_DISPLAY after grant revocation.
+                    expiry = null
                     stopByUser()
                 }
             true
@@ -226,6 +256,8 @@ class PrivateCaptureCoordinator(
         withContext(Dispatchers.Main.immediate) {
             userStopped = true
             registry.revoke()
+            activeRequestId = null
+            activeClientId = null
             expiry?.cancel()
             expiry = null
             renderer.stop()
@@ -252,6 +284,8 @@ class PrivateCaptureCoordinator(
         closed = true
         userStopped = true
         registry.revoke()
+        activeRequestId = null
+        activeClientId = null
         expiry?.cancel()
         expiry = null
         renderer.dispose()
