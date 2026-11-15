@@ -37,7 +37,11 @@ class ConnectBrowser(
     }
 
     suspend fun execute(command: Map<String, Any?>): Map<String, Any?> {
-        if (context.privateCaptureRestricted?.invoke() == true) {
+        if (!com.kelpie.browser.capture.PrivateCaptureOperationPolicy.permits(
+                command["operation"] as? String ?: "",
+                context.privateCaptureRestricted?.invoke() == true,
+            )
+        ) {
             return com.kelpie.browser.network.errorResponse("PERMISSION_REQUIRED", "Private WebView capture owns the browser")
         }
         if (command["operation"] == "open") {
