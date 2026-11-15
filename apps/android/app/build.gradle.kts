@@ -34,6 +34,9 @@ android {
             } else if (providers.gradleProperty("kelpieVerificationProfile").orNull == "true") {
                 applicationIdSuffix = ".nessieverify"
                 buildConfigField("int", "LOCAL_HTTP_PORT", "18420")
+            } else if (providers.gradleProperty("kelpieApi36VerificationProfile").orNull == "true") {
+                applicationIdSuffix = ".api36verify"
+                buildConfigField("int", "LOCAL_HTTP_PORT", "18436")
             }
         }
         release {
