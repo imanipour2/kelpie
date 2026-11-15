@@ -97,6 +97,10 @@ android {
 }
 
 dependencies {
+    // P3 QA host composes the actual core TabWebViewContent; expose UI modules to the host.
+    implementation(platform("androidx.compose:compose-bom:2024.02.00"))
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.material3:material3")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
     implementation(project(":kelpie-browser"))
