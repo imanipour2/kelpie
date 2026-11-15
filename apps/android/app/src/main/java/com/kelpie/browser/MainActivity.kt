@@ -1,6 +1,8 @@
 package com.kelpie.browser
 
 class MainActivity : KelpieBrowserActivity() {
+    override fun enablePrivateCaptureQa(): Boolean = com.unlikeotherai.kelpie.app.BuildConfig.PRIVATE_CAPTURE_QA_ENABLED
+
     private val updates get() = (application as KelpieApp).updates
 
     override fun onResume() {
