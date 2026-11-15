@@ -181,6 +181,15 @@ class PrivateWebViewDisplay(
             releaseAndRestore(State.RESTORE_PENDING)
         }
 
+    /** Activity destruction must clean up without relying on a future coroutine. */
+    fun dispose() {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            releaseAndRestore(State.IDLE)
+        } else {
+            main.post { releaseAndRestore(State.IDLE) }
+        }
+    }
+
     /**
      * Native UI calls after it resumes: reattachment must finish before
      * returning PASS. No new WebView instance and no document reload.
@@ -223,6 +232,7 @@ class PrivateWebViewDisplay(
         worker?.quitSafely()
         worker = null
         composeRestore()
+        if (result == State.IDLE) view = null
         stateFlow.value = if (original == null) State.IDLE else result
     }
 
