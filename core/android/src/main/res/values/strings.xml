@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="p4_capture_title">Approve temporary Kelpie capture</string>
+    <string name="p4_capture_disclosure">Authenticated client: %1$s\nAttempt: %2$s\nSite: %3$s\n\nAllow up to 20 fresh screenshots in 90 seconds from this Kelpie tab only? Other apps cannot be captured. Returning to Kelpie, stopping capture, screen-off, expiry or device lock immediately revoke permission. The visible Stop control remains available. Sensitive page content may appear in captured frames.</string>
+    <string name="p4_capture_approve">Approve and start</string>
+    <string name="p4_capture_cancel">Cancel</string>
+    <string name="p4_capture_stop">Stop capture now</string>
+    <string name="p4_capture_error_title">Capture not approved</string>
+    <string name="p4_capture_error_expired">Request expired or the tab identity changed; no capture was authorized.</string>
+    <string name="p4_capture_error_notification">Android notifications are required so a visible Stop control remains available.</string>
+    <string name="p4_capture_error_denied">Capture was not approved; permission or notification is unavailable.</string>
+    <string name="p4_capture_dismiss">Close</string>
+    <string name="p4_capture_unknown_site">Unknown site</string>
+    <string name="p4_capture_notification_channel">Kelpie temporary capture</string>
+    <string name="p4_capture_notification_title">Kelpie capture is active</string>
+    <string name="p4_capture_notification_description">Tap Stop to revoke this limited session immediately.</string>
+    <string name="p4_capture_notification_stop">Stop</string>
+</resources>
