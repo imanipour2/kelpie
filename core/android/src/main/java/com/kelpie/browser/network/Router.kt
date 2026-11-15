@@ -66,6 +66,16 @@ class Router {
             }
         }
         val result = handler(body)
+        // An operation may have been admitted before a genuine local P4
+        // approval. Never deliver its old DOM/screenshot result after ownership
+        // transfers to the private WebView, even if the first gate passed.
+        if (!PrivateCaptureOperationPolicy.permits(
+                method,
+                handlerContext?.privateCaptureRestricted?.invoke() == true,
+            )
+        ) {
+            return 403 to errorResponse("PERMISSION_REQUIRED", "Private WebView capture owns the browser")
+        }
         val success = result["success"] as? Boolean ?: false
         val errorCode = (result["error"] as? Map<*, *>)?.get("code") as? String
         val status =
@@ -80,7 +90,7 @@ class Router {
             }
 
         val message = body["message"] as? String
-        if (message != null) {
+        if (message != null && handlerContext?.privateCaptureRestricted?.invoke() != true) {
             handlerContext?.showToast(message)
         }
 
