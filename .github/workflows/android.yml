@@ -29,6 +29,11 @@ on:
       - '.github/actions/browser-contract/**'
   workflow_dispatch:
 
+# Cancel obsolete builds of the same PR instead of flooding Maven Central.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
