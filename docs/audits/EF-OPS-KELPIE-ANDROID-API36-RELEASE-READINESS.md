@@ -30,3 +30,16 @@ Official [Android toolchain requirements](https://developer.android.com/build/re
 - Once CI passes, review dependencies, rebase carefully with consent/renderer work, and request independent review. Do not use a stale pre-API36 debug build as evidence for new Play compliance.
 
 **State:** `API36_BUILD_MIGRATION_DRAFT / HARDWARE_NOT_TESTED / PLAY_COMPLIANCE_NOT_VERIFIED / RELEASE_NO_GO`.
+
+
+### Current manifest security inventory (grounded in main, not assumed fixed)
+
+`apps/android/app/src/main/AndroidManifest.xml` currently declares `INTERNET`, network/Wi-Fi discovery permissions, `RECORD_AUDIO`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_CONNECTED_DEVICE`, and `POST_NOTIFICATIONS`. It also sets `android:allowBackup="false"` and `android:usesCleartextTraffic="true"`, and exports an OAuth callback Activity using a custom URI scheme. These are **facts from source**, not findings that all permissions are unjustified:
+
+- Trace microphone usage and runtime permission prompts; do not request RECORD_AUDIO unless a genuinely active user feature needs it.
+- Review `usesCleartextTraffic=true` in the context of paired LAN HTTP/MCP. Authentication is not equivalent to encrypted transport: protect bearer tokens, avoid unsafe public Wi-Fi and evaluate TLS/network security configuration without breaking local paired access. Confirm whether the gateway is restricted to a trusted interface and how clients verify device identity.
+- Audit the OAuth callback for exact redirect validation, state/nonce binding, replay protection, browser scheme hijacking risks and package signature identity.
+- Review Android 16 foreground-service restrictions and ensure the CONNECTED_DEVICE service type and its permissions are justified and disclosed.
+- Keep actual data extraction and Android Keystore protections under tests, including update/restore with matching signer, and verify that no credential backup path silently reappears.
+
+OWASP mapping: [MASVS-NETWORK](https://mas.owasp.org/MASVS/), [MASVS-AUTH](https://mas.owasp.org/MASVS/), [MASVS-PRIVACY](https://mas.owasp.org/MASVS/). **No manifest or runtime behavior changes in this audit-only note**.
