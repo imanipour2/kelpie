@@ -193,6 +193,23 @@ class ConsentedCaptureRequestRegistryTest {
         assertTrue(claim(first.requestId))
     }
 
+    @Test fun propertyForeignRequestsNeverChangeOwnerGrant() {
+        val req = submit()
+        assertTrue(approve(req.requestId))
+        val random = java.util.Random(0x504L)
+        repeat(500) {
+            val request = if (random.nextBoolean()) req.requestId else "unknown-$it"
+            val client = if (random.nextBoolean()) subject else "different-$it"
+            val attempted = if (random.nextBoolean()) attempt else "other-attempt-$it"
+            // Force every generated case to be foreign to at least one binding
+            // field; never consume the owner's frame budget in the property test.
+            val safeRequest = if (request == req.requestId && client == subject && attempted == attempt) "foreign-$it" else request
+            assertFalse(claim(safeRequest, client = client, currentAttempt = attempted))
+            assertEquals("APPROVED", registry.status(req.requestId, subject))
+        }
+        assertTrue(claim(req.requestId))
+    }
+
     @Test fun concurrentDistinctPrincipalsIsolated() {
         // Two independently named model principals; real paired-device isolation remains HARDWARE_NOT_TESTED.
         val req = submit()
