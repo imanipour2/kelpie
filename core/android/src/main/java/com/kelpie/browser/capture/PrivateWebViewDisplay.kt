@@ -55,6 +55,9 @@ class PrivateWebViewDisplay(
     private var view: WebView? = null
     private var display: VirtualDisplay? = null
     private var presentation: Presentation? = null
+    // Only detach a view during cleanup after it entered our private host.
+    // Before that, Compose may still own the original view (P3 mount RCA).
+    private var attachedToPrivateHost = false
     private var reader: ImageReader? = null
     private var worker: HandlerThread? = null
     private var previousScrollX = 0
@@ -117,6 +120,7 @@ class PrivateWebViewDisplay(
                 presentation = host
                 (original.parent as? ViewGroup)?.removeView(original)
                 host.setContentView(original)
+                attachedToPrivateHost = true
                 host.show()
                 active = true
                 stateFlow.value = State.PRIVATE_DISPLAY
@@ -231,7 +235,10 @@ class PrivateWebViewDisplay(
         active = false
         pendingImage.getAndSet(null)?.result?.cancel()
         val original = view
-        (original?.parent as? ViewGroup)?.removeView(original)
+        if (attachedToPrivateHost) {
+            (original?.parent as? ViewGroup)?.removeView(original)
+            attachedToPrivateHost = false
+        }
         presentation?.dismiss()
         presentation = null
         display?.release()
