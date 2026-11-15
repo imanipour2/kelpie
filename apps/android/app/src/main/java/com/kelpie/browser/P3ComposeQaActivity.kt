@@ -230,36 +230,24 @@ class P3ComposeQaActivity : ComponentActivity() {
         }
     }
 
-    /** Only Boolean guard names are logged; no URLs, cookies or page data. */
-    private fun invalidFlags(ticket: Int): String {
+    private fun snapshot(ticket: Int): P3GuardSnapshot {
         val tab = store.activeTab
-        val checks =
-            listOf(
-                "RUN" to active,
-                "TICKET" to (ticket == runToken),
-                "LEASE" to gate.allows(tabId, documentVersion),
-                "TAB" to (tab?.id == tabId),
-                "VIEW" to (tab?.webView === originalWebView),
-                "DOCUMENT" to (tab?.documentVersion == documentVersion),
-                "LOADING" to (tab?.isLoading == false),
-                "FIXTURE_ORIGIN" to fixtureVerified,
-                "VIEW_URL" to (tab?.webView?.url?.startsWith(P2OfflineFixture.BASE) == true),
-            )
-        return checks.filterNot { it.second }.joinToString("_") { it.first }.ifBlank { "UNKNOWN" }
+        return P3GuardSnapshot(
+            run = active,
+            token = ticket == runToken,
+            lease = gate.allows(tabId, documentVersion),
+            tab = tab?.id == tabId,
+            view = tab?.webView === originalWebView,
+            document = tab?.documentVersion == documentVersion,
+            ready = tab?.isLoading == false,
+            origin = fixtureVerified,
+            url = tab?.webView?.url?.startsWith(P2OfflineFixture.BASE) == true,
+        )
     }
 
-    private fun valid(ticket: Int): Boolean {
-        val tab = store.activeTab ?: return false
-        return active &&
-            ticket == runToken &&
-            gate.allows(tabId, documentVersion) &&
-            tab.id == tabId &&
-            tab.webView === originalWebView &&
-            tab.documentVersion == documentVersion &&
-            !tab.isLoading &&
-            fixtureVerified &&
-            tab.webView.url?.startsWith(P2OfflineFixture.BASE) == true
-    }
+    private fun valid(ticket: Int) = snapshot(ticket).valid
+
+    private fun invalidFlags(ticket: Int) = snapshot(ticket).failedFields()
 
     private fun locked(): Boolean = getSystemService(KeyguardManager::class.java).isKeyguardLocked
 
