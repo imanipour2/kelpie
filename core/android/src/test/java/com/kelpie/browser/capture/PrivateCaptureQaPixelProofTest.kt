@@ -30,6 +30,8 @@ class PrivateCaptureQaPixelProofTest {
         assertTrue(script.contains("location.hostname !== 'example.com'"))
         assertTrue(script.contains("location.port"))
         assertTrue(script.contains("aria-hidden"))
+        assertTrue(script.contains("left:50%"))
+        assertTrue(script.contains("top:50%"))
         assertTrue(PrivateCaptureQaPixelProof.REMOVE_SCRIPT.contains("remove()"))
     }
 }
