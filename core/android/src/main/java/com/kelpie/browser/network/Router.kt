@@ -39,6 +39,13 @@ class Router {
         bypassRecordingGate: Boolean = false,
         fromGateway: Boolean = false,
     ): Pair<Int, Map<String, Any?>> {
+        if (handlerContext?.privateCaptureRestricted?.invoke() == true &&
+            method != "mcp" &&
+            method != "browser-control" &&
+            !method.startsWith("capture-session-")
+        ) {
+            return 403 to errorResponse("PERMISSION_REQUIRED", "Private WebView capture owns the browser")
+        }
         val gateway = browserGateway
         if (gateway != null && !fromGateway && !bypassRecordingGate && method !in setOf("browser-control", "mcp", "ai-infer", "ai-record", "ai-cancel", "abort-script", "get-script-status")) {
             return gateway.legacy(method) { handle(method, body, bypassRecordingGate, fromGateway = true) }
