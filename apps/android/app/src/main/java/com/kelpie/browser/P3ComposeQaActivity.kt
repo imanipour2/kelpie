@@ -464,7 +464,14 @@ class P3ComposeQaActivity : ComponentActivity() {
         gate.cancel()
         fixtureVerified = false
         val view = originalWebView
-        (view?.parent as? ViewGroup)?.removeView(view)
+        // A fresh consent calls stop("RESTART") before any migration.
+        // Never detach a WebView that is still owned by the real Compose
+        // AndroidView. Doing so leaves Compose's remembered installed view
+        // unchanged and prevents the next consent from mounting it again.
+        // Only an already-migrated Presentation owns a view we may detach here.
+        if (migrated) {
+            (view?.parent as? ViewGroup)?.removeView(view)
+        }
         presentation?.dismiss()
         presentation = null
         display?.release()
