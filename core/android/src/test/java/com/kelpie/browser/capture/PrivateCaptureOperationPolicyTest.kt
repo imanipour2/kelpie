@@ -12,8 +12,21 @@ class PrivateCaptureOperationPolicyTest {
     }
 
     @Test fun noLegacyOperationCanBypassPrivateOwner() {
-        listOf("screenshot", "click", "tap", "type", "fill", "get-dom", "evaluate", "reload", "new-tab",
-            "connect-snapshot", "tab.screenshot", "tab.click", "ai-infer").forEach {
+        listOf(
+            "screenshot",
+            "click",
+            "tap",
+            "type",
+            "fill",
+            "get-dom",
+            "evaluate",
+            "reload",
+            "new-tab",
+            "connect-snapshot",
+            "tab.screenshot",
+            "tab.click",
+            "ai-infer",
+        ).forEach {
             assertFalse(PrivateCaptureOperationPolicy.permits(it, true))
         }
     }
