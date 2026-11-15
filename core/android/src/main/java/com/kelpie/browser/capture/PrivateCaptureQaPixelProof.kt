@@ -36,7 +36,8 @@ internal object PrivateCaptureQaPixelProof {
                     marker.id = id;
                     marker.setAttribute('aria-hidden', 'true');
                     marker.style.cssText =
-                        'position:fixed!important;left:0!important;top:0!important;' +
+                        'position:fixed!important;left:50%!important;top:50%!important;' +
+                        'transform:translate(-50%,-50%)!important;' +
                         'width:80px!important;height:80px!important;z-index:2147483647!important;' +
                         'pointer-events:none!important;opacity:1!important;' +
                         'border:0!important;margin:0!important;padding:0!important;';
