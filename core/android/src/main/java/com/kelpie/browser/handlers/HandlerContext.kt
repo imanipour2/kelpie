@@ -129,6 +129,10 @@ class HandlerContext(
     ): String =
         suspendCancellableCoroutine { cont ->
             val wv = webView
+            if (privateCaptureRestricted?.invoke() == true) {
+                cont.resumeWithException(IllegalStateException("Private WebView capture owns the browser"))
+                return@suspendCancellableCoroutine
+            }
             if (wv == null) {
                 cont.resumeWithException(IllegalStateException("No WebView"))
                 return@suspendCancellableCoroutine
@@ -137,11 +141,14 @@ class HandlerContext(
             mainHandler.post {
                 if (cont.isActive) {
                     try {
+                        check(privateCaptureRestricted?.invoke() != true) { "Private WebView capture owns the browser" }
                         check(guard?.invoke() != false) { "Tab document changed or job stopped" }
                         wv.evaluateJavascript(script) { result ->
                             browserRetirement.complete(ticket)
                             if (cont.isActive) {
-                                if (guard?.invoke() == false) {
+                                if (privateCaptureRestricted?.invoke() == true) {
+                                    cont.resumeWithException(IllegalStateException("Private WebView capture owns the browser"))
+                                } else if (guard?.invoke() == false) {
                                     cont.resumeWithException(IllegalStateException("Tab document changed or job stopped"))
                                 } else {
                                     cont.resume(result ?: "null")
@@ -324,6 +331,7 @@ class HandlerContext(
         quality: Int = 80,
         resolution: ScreenshotResolution = ScreenshotResolution.NATIVE,
     ): Map<String, Any?>? {
+        if (privateCaptureRestricted?.invoke() == true) return null
         val wv = webView ?: return null
         val normalizedFormat = if (format == "jpeg") "jpeg" else "png"
         val viewport = viewportMetrics()
@@ -331,6 +339,7 @@ class HandlerContext(
             suspendCoroutine<Bitmap?> { cont ->
                 mainHandler.post {
                     try {
+                        check(privateCaptureRestricted?.invoke() != true) { "Private WebView capture owns the browser" }
                         val bmp = Bitmap.createBitmap(wv.width, wv.height, Bitmap.Config.ARGB_8888)
                         val canvas = Canvas(bmp)
                         wv.draw(canvas)
