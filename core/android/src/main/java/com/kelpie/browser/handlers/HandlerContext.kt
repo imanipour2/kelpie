@@ -40,6 +40,8 @@ class HandlerContext(
         const val DEFAULT_OVERLAY_RGB = "59,130,246"
     }
 
+    /** QA-only: refuse ordinary remote commands while one WebView has private ownership. */
+    var privateCaptureRestricted: (() -> Boolean)? = null
     var remoteDocumentGuard: (() -> Boolean)? = null
     var remoteNavigationStart: (() -> Boolean)? = null
     var remoteNavigationReadGuard: (() -> Boolean)? = null
