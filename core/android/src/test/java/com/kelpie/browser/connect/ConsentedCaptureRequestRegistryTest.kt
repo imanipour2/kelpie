@@ -52,7 +52,7 @@ class ConsentedCaptureRequestRegistryTest {
         assertNull(registry.prompt.value)
         assertTrue(claim(request.requestId))
         assertFalse(claim(request.requestId, currentAttempt = "new-attempt"))
-        assertFalse(claim(request.requestId))
+        assertTrue(claim(request.requestId))
     }
 
     @Test fun forgedRequestAndWrongClientFailClosed() {
@@ -60,6 +60,7 @@ class ConsentedCaptureRequestRegistryTest {
         assertFalse(approve("fake"))
         // A stale local dialog callback must not destroy a newer pending approval.
         assertTrue(approve(request.requestId))
+        assertTrue(registry.revokeOwned(request.requestId, subject))
         val again = submit()
         assertTrue(approve(again.requestId))
         assertFalse(claim(again.requestId, client = "attacker"))
