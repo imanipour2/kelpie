@@ -18,4 +18,13 @@ internal object PrivateCaptureOperationPolicy {
         !privateOwnerActive ||
             method in captureMethods ||
             (outerEnvelope && method in setOf("mcp", "browser-control"))
+
+    /** Suppress any pre-consent result that finishes after private ownership starts. */
+    fun permitsDelivery(
+        method: String,
+        privateAtAdmission: Boolean,
+        privateAtDelivery: Boolean,
+    ): Boolean =
+        (!privateAtDelivery || privateAtAdmission) &&
+            permits(method, privateAtDelivery, outerEnvelope = privateAtAdmission)
 }
