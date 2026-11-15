@@ -8,7 +8,7 @@ on:
       - '.github/workflows/qa-android-private-capture.yml'
   workflow_dispatch:
 
-# Cancel obsolete builds of the same PR instead of flooding Maven Central.
+# Avoid redundant Maven Central traffic and stale code checks on the same PR.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -33,8 +33,6 @@ jobs:
       - uses: android-actions/setup-android@v4.0.3
       - name: Install Android SDK for QA
         run: sdkmanager "platforms;android-34" "build-tools;35.0.0"
-      # Share dependency caches with Android CI to reduce Maven Central 429s.
-      # Dependencies and Gradle scripts remain pinned by the existing lockfiles.
       - name: Cache Gradle dependencies
         uses: actions/cache@v5.0.5
         with:
@@ -53,7 +51,7 @@ jobs:
             :kelpie-browser:ktlintCheck \
             :kelpie-browser:testDebugUnitTest \
             :app:assembleDebug
-      - name: Verify isolated package, explicit feature flag, signature and SHA
+      - name: Verify isolated package, native alignment, signature and SHA
         shell: bash
         run: |
           set -euo pipefail
@@ -64,8 +62,6 @@ jobs:
           "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.browser.pcverify'"
           "$AAPT" dump badging "$APK" | grep -F "versionCode='29' versionName='0.2.9-qa'"
           "$SIGN" verify --verbose --print-certs "$APK"
-          # The QA profile uses extracted native libraries with AGP 8.3;
-          # nevertheless EVERY bundled native ELF must itself support 16 KiB pages.
           native_count=0
           while IFS= read -r member; do
             native_count=$((native_count + 1))
@@ -76,32 +72,7 @@ jobs:
                 exit 1
               fi
             done < <(readelf -lW /tmp/kelpie-qa-native.so | awk '$1 == "LOAD" {print $NF}')
-          done < <(unzip -Z1 "$APK" | grep -E '^lib/(arm64-v8a|x86_64)/.*[.]so
-          if grep -F 'android.permission.RECORD_AUDIO' /tmp/pc-qa-permissions.txt; then
-            echo "::error::Microphone permission must not be in capture QA APK"
-            exit 1
-          fi
-          # The base browser remains unchanged; production release requires API36/16K tests.
-          sha256sum "$APK" > apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
-          {
-            echo "source_commit=$(git rev-parse HEAD)"
-            echo "artifact_sha256=$(sha256sum "$APK" | awk '{print $1}')"
-            echo "package=com.kelpie.browser.pcverify"
-            echo "version=0.2.9-qa"
-            echo "port=18437"
-            echo "android_api_target=34"
-            echo "signature=debug-only; never use production signing material"
-          } > apps/android/app/build/outputs/apk/debug/provenance.txt
-      - uses: actions/upload-artifact@v4.6.2
-        with:
-          name: kelpie-pc-qa-${{ github.event.pull_request.head.sha || github.sha }}
-          path: |
-            apps/android/app/build/outputs/apk/debug/app-debug.apk
-            apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
-            apps/android/app/build/outputs/apk/debug/provenance.txt
-          if-no-files-found: error
-          retention-days: 14
-)
+          done < <(unzip -Z1 "$APK" | grep -E '^lib/(arm64-v8a|x86_64)/.*[.]so$')
           if (( native_count == 0 )); then
             echo "::error::No bundled JNI libraries for QA validation"
             exit 1
@@ -111,13 +82,22 @@ jobs:
             echo "::error::Microphone permission must not be in capture QA APK"
             exit 1
           fi
-          # The base browser remains unchanged; production release requires API36/16K tests.
           sha256sum "$APK" > apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
+          {
+            echo "source_commit=$(git rev-parse HEAD)"
+            echo "artifact_sha256=$(sha256sum "$APK" | awk '{print $1}')"
+            echo "package=com.kelpie.browser.pcverify"
+            echo "version=0.2.9-qa"
+            echo "port=18437"
+            echo "android_api_target=34"
+            echo "signature=debug-only"
+          } > apps/android/app/build/outputs/apk/debug/provenance.txt
       - uses: actions/upload-artifact@v4.6.2
         with:
-          name: kelpie-pc-qa-${{ github.sha }}
+          name: kelpie-pc-qa-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             apps/android/app/build/outputs/apk/debug/app-debug.apk
             apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
+            apps/android/app/build/outputs/apk/debug/provenance.txt
           if-no-files-found: error
           retention-days: 14
