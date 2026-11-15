@@ -30,6 +30,7 @@ class ConsentedCaptureRequestRegistry(
         val binding: ConsentedCaptureLease.Binding,
         val target: Any,
         val localToken: String,
+        val expiresAtMs: Long,
     )
 
     private val lease = ConsentedCaptureLease(clock, random)
@@ -91,7 +92,7 @@ class ConsentedCaptureRequestRegistry(
             revoke()
             return false
         }
-        approved = Approved(requestId, binding, currentView, token)
+        approved = Approved(requestId, binding, currentView, token, clock() + ConsentedCaptureLease.MAX_LEASE_MS)
         pending = null
         mutablePrompt.value = null
         return true
@@ -125,6 +126,32 @@ class ConsentedCaptureRequestRegistry(
         val valid = lease.claimFrame(a.localToken, binding, currentView, true, unlocked, userStopped)
         if (!valid) revoke()
         return valid
+    }
+
+    /** Safe status for the same already authenticated client; no token leaks. */
+    @Synchronized
+    fun status(
+        requestId: String,
+        verifiedClientId: String?,
+    ): String {
+        if (verifiedClientId.isNullOrBlank()) return "NOT_FOUND"
+        val queued = pending
+        if (queued?.prompt?.requestId == requestId &&
+            queued.prompt.clientId == verifiedClientId
+        ) {
+            if (clock() < queued.prompt.expiresAtMs) return "PENDING"
+            revoke()
+            return "EXPIRED"
+        }
+        val granted = approved
+        if (granted?.requestId == requestId &&
+            granted.binding.clientId == verifiedClientId
+        ) {
+            if (clock() < granted.expiresAtMs) return "APPROVED"
+            revoke()
+            return "EXPIRED"
+        }
+        return "NOT_FOUND"
     }
 
     @Synchronized
