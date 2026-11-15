@@ -367,7 +367,6 @@ class PrivateCaptureCoordinator(
         if (closed) return
         closed = true
         if (qaEnabled) activity.unregisterReceiver(screenOffReceiver)
-        context.privateCaptureRestricted = null
         userStopped = true
         registry.revoke()
         activeRequestId = null
@@ -375,6 +374,8 @@ class PrivateCaptureCoordinator(
         expiry?.cancel()
         expiry = null
         renderer.dispose()
+        // A posted off-main disposal may still own the original WebView.
+        // Never open a remote operation window during Activity destruction.
         PrivateCaptureNotification.hide(activity)
         scope.cancel()
     }
