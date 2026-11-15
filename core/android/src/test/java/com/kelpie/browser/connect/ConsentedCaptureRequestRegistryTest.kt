@@ -58,11 +58,12 @@ class ConsentedCaptureRequestRegistryTest {
     @Test fun forgedRequestAndWrongClientFailClosed() {
         val request = submit()
         assertFalse(approve("fake"))
-        assertFalse(claim(request.requestId))
+        // A stale local dialog callback must not destroy a newer pending approval.
+        assertTrue(approve(request.requestId))
         val again = submit()
         assertTrue(approve(again.requestId))
         assertFalse(claim(again.requestId, client = "attacker"))
-        assertFalse(claim(again.requestId))
+        assertTrue(claim(again.requestId))
     }
 
     @Test fun newDocumentOrWebViewAndLockRevokeImmediately() {
@@ -90,11 +91,10 @@ class ConsentedCaptureRequestRegistryTest {
     @Test fun localConsentIsExplicitAndSessionLimitStillApplies() {
         val req = submit()
         assertFalse(claim(req.requestId))
-        // Claim before approval revoked this pending request; caller must retry.
-        val second = submit()
-        assertTrue(approve(second.requestId))
+        // Unapproved frame requests must not destroy the legitimate pending consent.
+        assertTrue(approve(req.requestId))
         now += ConsentedCaptureLease.MAX_LEASE_MS
-        assertFalse(claim(second.requestId))
+        assertFalse(claim(req.requestId))
     }
 
     @Test fun finalFrameTriggersCleanupSignalOnlyAfterExactlyTwentyClaims() {
@@ -128,5 +128,89 @@ class ConsentedCaptureRequestRegistryTest {
         req = submit()
         assertTrue(approve(req.requestId))
         assertFalse(claim(req.requestId, client = null))
+        assertTrue(claim(req.requestId))
+    }
+
+    @Test fun wrongClientCannotRevokeOwner() {
+        val req = submit()
+        assertTrue(approve(req.requestId))
+        assertFalse(claim(req.requestId, client = "other-principal"))
+        assertEquals("APPROVED", registry.status(req.requestId, subject))
+        assertTrue(claim(req.requestId))
+    }
+
+    @Test fun wrongRequestCannotStopOwner() {
+        val req = submit()
+        assertTrue(approve(req.requestId))
+        assertFalse(registry.revokeOwned("wrong-id", subject))
+        assertFalse(registry.revokeOwned(req.requestId, "other-principal"))
+        assertEquals("APPROVED", registry.status(req.requestId, subject))
+        assertTrue(claim(req.requestId))
+    }
+
+    @Test fun staleAttemptCannotAffectNewGeneration() {
+        val old = submit()
+        assertTrue(approve(old.requestId))
+        assertTrue(registry.revokeOwned(old.requestId, subject))
+        val fresh = requireNotNull(registry.submitAuthenticated(subject, "attempt-74", tab, doc, view))
+        assertTrue(approve(fresh.requestId))
+        assertFalse(claim(old.requestId, currentAttempt = attempt))
+        assertFalse(claim(fresh.requestId, currentAttempt = attempt))
+        assertTrue(claim(fresh.requestId, currentAttempt = "attempt-74"))
+    }
+
+    @Test fun authenticatedClientSwapDenied() {
+        val req = submit()
+        assertTrue(approve(req.requestId))
+        assertFalse(claim(req.requestId, client = "swapped-authenticated-client"))
+        assertTrue(claim(req.requestId))
+    }
+
+    @Test fun ownerDocumentChangeRevokesAndReleases() {
+        // Pure registry test: release of Android native resources is separately gated.
+        val req = submit()
+        assertTrue(approve(req.requestId))
+        assertFalse(claim(req.requestId, currentDoc = "new-document"))
+        assertEquals("NOT_FOUND", registry.status(req.requestId, subject))
+        assertFalse(claim(req.requestId))
+    }
+
+    @Test fun replayAfterStopDenied() {
+        val req = submit()
+        assertTrue(approve(req.requestId))
+        assertTrue(registry.revokeOwned(req.requestId, subject))
+        assertFalse(registry.revokeOwned(req.requestId, subject))
+        assertFalse(claim(req.requestId))
+    }
+
+    @Test fun pendingConsentCannotBeOverwritten() {
+        val first = submit()
+        assertNull(registry.submitAuthenticated("other-principal", attempt, tab, doc, view))
+        assertEquals(first.requestId, registry.prompt.value?.requestId)
+        assertFalse(registry.revokeOwned(first.requestId, "other-principal"))
+        assertTrue(approve(first.requestId))
+        assertTrue(claim(first.requestId))
+    }
+
+    @Test fun concurrentDistinctPrincipalsIsolated() {
+        // Two independently named model principals; real paired-device isolation remains HARDWARE_NOT_TESTED.
+        val req = submit()
+        assertTrue(approve(req.requestId))
+        val start = java.util.concurrent.CountDownLatch(1)
+        val done = java.util.concurrent.CountDownLatch(1)
+        val intruder = Thread {
+            start.await()
+            repeat(200) {
+                registry.revokeOwned(req.requestId, "principal-B")
+                registry.claimFrame(req.requestId, "principal-B", attempt, tab, doc, view, true, false)
+            }
+            done.countDown()
+        }
+        intruder.start()
+        start.countDown()
+        assertTrue(done.await(3, java.util.concurrent.TimeUnit.SECONDS))
+        intruder.join()
+        assertEquals("APPROVED", registry.status(req.requestId, subject))
+        assertTrue(claim(req.requestId))
     }
 }
