@@ -79,9 +79,9 @@ class ConsentedCaptureRequestRegistry(
         unlocked: Boolean,
     ): Boolean {
         val p = pending
-        if (p == null ||
-            p.prompt.requestId != requestId ||
-            clock() >= p.prompt.expiresAtMs ||
+        // Stale/fabricated dialog callbacks must not revoke another pending generation.
+        if (p == null || p.prompt.requestId != requestId) return false
+        if (clock() >= p.prompt.expiresAtMs ||
             !unlocked ||
             p.prompt.tabId != currentTabId ||
             p.prompt.documentVersion != currentDocumentVersion ||
@@ -121,19 +121,16 @@ class ConsentedCaptureRequestRegistry(
         userStopped: Boolean,
     ): Boolean {
         val a = approved
+        // The caller is not the owner unless ALL three immutable identity fields match.
+        // Foreign, stale and unauthenticated requests have no side effects on the
+        // owner's pending or approved grant.
         if (a == null ||
             a.requestId != requestId ||
+            verifiedClientId == null ||
             verifiedClientId != a.binding.clientId ||
             attemptId != a.binding.agentAttemptId
-        ) {
-            revoke()
-            return false
-        }
-        val clientId =
-            verifiedClientId ?: run {
-                revoke()
-                return false
-            }
+        ) return false
+        val clientId = verifiedClientId
         val binding =
             ConsentedCaptureLease.Binding(currentTabId, currentDocumentVersion, clientId, attemptId)
         val valid = lease.claimFrame(a.localToken, binding, currentView, true, unlocked, userStopped)
@@ -185,6 +182,36 @@ class ConsentedCaptureRequestRegistry(
             return "EXPIRED"
         }
         return "NOT_FOUND"
+    }
+
+    /**
+     * Remote STOP may revoke only an authenticated owner's matching request.
+     * A foreign request ID or client identity can never terminate a new generation.
+     * The coordinator still owns native resource restoration and notification cleanup.
+     */
+    @Synchronized
+    fun revokeOwned(
+        requestId: String,
+        verifiedClientId: String?,
+    ): Boolean {
+        if (verifiedClientId.isNullOrBlank()) return false
+        val currentPending = pending
+        if (currentPending != null &&
+            currentPending.prompt.requestId == requestId &&
+            currentPending.prompt.clientId == verifiedClientId
+        ) {
+            revoke()
+            return true
+        }
+        val currentApproved = approved
+        if (currentApproved != null &&
+            currentApproved.requestId == requestId &&
+            currentApproved.binding.clientId == verifiedClientId
+        ) {
+            revoke()
+            return true
+        }
+        return false
     }
 
     @Synchronized
