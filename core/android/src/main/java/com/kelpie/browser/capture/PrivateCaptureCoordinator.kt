@@ -1,8 +1,13 @@
 package com.kelpie.browser.capture
 
 import android.app.KeyguardManager
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.SystemClock
 import androidx.activity.ComponentActivity
+import androidx.core.content.ContextCompat
 import com.kelpie.browser.connect.ConsentedCaptureLease
 import com.kelpie.browser.connect.ConsentedCaptureRequestRegistry
 import com.kelpie.browser.handlers.HandlerContext
@@ -51,6 +56,38 @@ class PrivateCaptureCoordinator(
     // end another user's active capture by querying its status.
     private var activeRequestId: String? = null
     private var activeClientId: String? = null
+
+    // Screen-off is a security boundary, not merely a pause in screenshot delivery.
+    // Use a context receiver because ACTION_SCREEN_OFF is not delivered to manifest receivers.
+    // Registration and removal are scoped to this QA-only coordinator's lifecycle.
+    private val screenOffReceiver =
+        object : BroadcastReceiver() {
+            override fun onReceive(
+                context: Context,
+                intent: Intent,
+            ) {
+                if (intent.action != Intent.ACTION_SCREEN_OFF || closed) return
+                val completion = goAsync()
+                scope.launch {
+                    try {
+                        stopByUser()
+                    } finally {
+                        completion.finish()
+                    }
+                }
+            }
+        }
+
+    init {
+        if (qaEnabled) {
+            ContextCompat.registerReceiver(
+                activity,
+                screenOffReceiver,
+                IntentFilter(Intent.ACTION_SCREEN_OFF),
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+        }
+    }
 
     fun register(router: Router) {
         if (!qaEnabled) return
@@ -281,7 +318,9 @@ class PrivateCaptureCoordinator(
     }
 
     fun close() {
+        if (closed) return
         closed = true
+        if (qaEnabled) activity.unregisterReceiver(screenOffReceiver)
         userStopped = true
         registry.revoke()
         activeRequestId = null
