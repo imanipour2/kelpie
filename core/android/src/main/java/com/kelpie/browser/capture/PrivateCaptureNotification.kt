@@ -31,7 +31,7 @@ internal object PrivateCaptureNotification {
         val permission =
             Build.VERSION.SDK_INT < 33 ||
                 ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
-                    PackageManager.PERMISSION_GRANTED
+                PackageManager.PERMISSION_GRANTED
         return permission && context.getSystemService(NotificationManager::class.java).areNotificationsEnabled()
     }
 
@@ -57,13 +57,15 @@ internal object PrivateCaptureNotification {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
         val stopAction =
-            Notification.Action.Builder(
-                android.R.drawable.ic_media_pause,
-                "توقف",
-                stopPending,
-            ).build()
+            Notification.Action
+                .Builder(
+                    android.R.drawable.ic_media_pause,
+                    "توقف",
+                    stopPending,
+                ).build()
         val notification =
-            Notification.Builder(activity, CHANNEL)
+            Notification
+                .Builder(activity, CHANNEL)
                 .setSmallIcon(android.R.drawable.ic_menu_camera)
                 .setContentTitle("کلپی: تصویربرداری محدود فعال")
                 .setContentText("برای لغو فوری، «توقف» را انتخاب کنید.")
@@ -82,8 +84,7 @@ internal object PrivateCaptureNotification {
         active.clear()
     }
 
-    fun activeCoordinator(action: String?): PrivateCaptureCoordinator? =
-        if (action == ACTION_STOP) active.get() else null
+    fun activeCoordinator(action: String?): PrivateCaptureCoordinator? = if (action == ACTION_STOP) active.get() else null
 }
 
 /** Non-exported receiver. STOP always revokes consent before it touches UI. */
