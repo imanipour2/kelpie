@@ -264,7 +264,8 @@ class PrivateWebViewDisplay(
     suspend fun verifyRestored(): Boolean =
         withContext(Dispatchers.Main.immediate) {
             if (stateFlow.value != State.RESTORE_PENDING && stateFlow.value != State.FAILED) return@withContext false
-            val original = view ?: run {
+            val original =
+                view ?: run {
                 stateFlow.value = State.IDLE
                 return@withContext true
             }
@@ -335,6 +336,7 @@ class PrivateWebViewDisplay(
         pendingImage.getAndSet(null)?.result?.cancel()
         val original = view
         val cleanup = PrivateCaptureCleanupSequence()
+
         // Failure of Presentation.dismiss() must never skip releasing the
         // VirtualDisplay, ImageReader, worker or Compose ownership.
         if (attachedToPrivateHost) {
