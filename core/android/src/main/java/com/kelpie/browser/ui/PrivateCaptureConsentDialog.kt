@@ -1,6 +1,12 @@
 package com.kelpie.browser.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -18,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kelpie.browser.browser.TabStore
@@ -39,7 +46,23 @@ fun PrivateCaptureConsentDialog(
     val pending by coordinator.pending.collectAsState()
     val captureState by coordinator.rendererState.collectAsState()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var afterNotificationPermission by remember { mutableStateOf<String?>(null) }
+    val notificationPermission =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
+            val requestId = afterNotificationPermission
+            afterNotificationPermission = null
+            if (allowed && requestId != null) {
+                scope.launch {
+                    if (!coordinator.approveOnDevice(requestId)) {
+                        errorMessage = "مجوز تصویربرداری صادر نشد؛ نشست یا اعلان نامعتبر است."
+                    }
+                }
+            } else {
+                errorMessage = "برای نمایش دکمه توقف فوری، اجازه اعلان اندروید الزامی است."
+            }
+        }
 
     val request = pending
     if (request != null) {
@@ -68,9 +91,19 @@ fun PrivateCaptureConsentDialog(
                 TextButton(
                     onClick = {
                         val requestId = request.requestId
-                        scope.launch {
-                            if (!coordinator.approveOnDevice(requestId)) {
-                                errorMessage = "درخواست منقضی شد یا هویت تب تغییر کرد؛ مجوز صادر نشد."
+                        if (Build.VERSION.SDK_INT >= 33 &&
+                            ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.POST_NOTIFICATIONS,
+                            ) != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            afterNotificationPermission = requestId
+                            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            scope.launch {
+                                if (!coordinator.approveOnDevice(requestId)) {
+                                    errorMessage = "درخواست منقضی شد یا هویت تب تغییر کرد؛ مجوز صادر نشد."
+                                }
                             }
                         }
                     },
