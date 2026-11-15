@@ -268,6 +268,8 @@ class HTTPServer(
         principal: AuthDecision.Authenticated,
         overrideMethod: String? = null,
     ) {
+        // User-scoped control, DOM, frames and pairing responses must never be cached.
+        call.response.header("Cache-Control", "no-store")
         // Validate Content-Length BEFORE reading the body to ensure a single
         // malicious multi-GB POST never gets buffered. Missing Content-Length
         // on POST is rejected.
