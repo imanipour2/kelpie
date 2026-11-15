@@ -15,8 +15,9 @@ class AuthenticatedClientContext private constructor(
     val clientId: String,
 ) : AbstractCoroutineContextElement(Key) {
     companion object Key : CoroutineContext.Key<AuthenticatedClientContext> {
-        fun fromVerifiedDecision(decision: AuthDecision.Authenticated): AuthenticatedClientContext =
-            AuthenticatedClientContext(decision.clientId)
+        fun fromVerifiedDecision(
+            decision: AuthDecision.Authenticated,
+        ): AuthenticatedClientContext = AuthenticatedClientContext(decision.clientId)
     }
 }
 
