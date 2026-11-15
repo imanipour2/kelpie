@@ -178,74 +178,74 @@ class PrivateCaptureCoordinator(
                 return@register errorResponse("RECORDING_IN_PROGRESS", "Capture frame already pending")
             }
             try {
-            val frameTarget =
-                withContext(Dispatchers.Main.immediate) {
-                    val tab = context.tabStore?.activeTab ?: return@withContext null
-                    if (!PrivateCaptureQaOrigin.permitted(tab.currentUrl, tab.webView.url)) {
-                        return@withContext null
+                val frameTarget =
+                    withContext(Dispatchers.Main.immediate) {
+                        val tab = context.tabStore?.activeTab ?: return@withContext null
+                        if (!PrivateCaptureQaOrigin.permitted(tab.currentUrl, tab.webView.url)) {
+                            return@withContext null
+                        }
+                        if (!registry.claimFrame(
+                                requestId,
+                                client,
+                                attemptId,
+                                tab.id,
+                                tab.documentVersion,
+                                tab.webView,
+                                unlocked = !isLocked(),
+                                userStopped = userStopped || closed,
+                            )
+                        ) {
+                            return@withContext null
+                        }
+                        Triple(tab.id, tab.documentVersion, tab.webView)
                     }
-                    if (!registry.claimFrame(
-                            requestId,
-                            client,
-                            attemptId,
-                            tab.id,
-                            tab.documentVersion,
-                            tab.webView,
-                            unlocked = !isLocked(),
-                            userStopped = userStopped || closed,
-                        )
-                    ) {
-                        return@withContext null
-                    }
-                    Triple(tab.id, tab.documentVersion, tab.webView)
-                }
-            if (frameTarget == null) {
-                withContext(Dispatchers.Main.immediate) {
-                    if (activeRequestId == requestId && activeClientId == client) {
-                        val tab = context.tabStore?.activeTab
-                        val invalidOrigin =
-                            tab == null || !PrivateCaptureQaOrigin.permitted(tab.currentUrl, tab.webView.url)
-                        // A wrong attempt with a legitimate requestId must not stop
-                        // an otherwise valid owner's private display.
-                        if (invalidOrigin || registry.status(requestId, client) != "APPROVED") {
-                            stopByUser()
+                if (frameTarget == null) {
+                    withContext(Dispatchers.Main.immediate) {
+                        if (activeRequestId == requestId && activeClientId == client) {
+                            val tab = context.tabStore?.activeTab
+                            val invalidOrigin =
+                                tab == null || !PrivateCaptureQaOrigin.permitted(tab.currentUrl, tab.webView.url)
+                            // A wrong attempt with a legitimate requestId must not stop
+                            // an otherwise valid owner's private display.
+                            if (invalidOrigin || registry.status(requestId, client) != "APPROVED") {
+                                stopByUser()
+                            }
                         }
                     }
+                    return@register errorResponse("PERMISSION_REQUIRED", "Private capture grant missing, expired or revoked")
                 }
-                return@register errorResponse("PERMISSION_REQUIRED", "Private capture grant missing, expired or revoked")
-            }
-            val image = renderer.captureFreshPng()
-            if (image == null) {
-                if (registry.finalFrameClaimed(requestId, client)) stopByUser()
-                return@register errorResponse("SCREENSHOT_FAILED", "No fresh private frame available")
-            }
+                val image = renderer.captureFreshPng()
+                if (image == null) {
+                    if (registry.finalFrameClaimed(requestId, client)) stopByUser()
+                    return@register errorResponse("SCREENSHOT_FAILED", "No fresh private frame available")
+                }
 
-            // Navigation/STOP/expiry may occur during ImageReader or PNG encoding.
-            // Do not send a frame unless the same approved document is still hidden.
-            val stillAuthorized =
-                withContext(Dispatchers.Main.immediate) {
-                    val tab = context.tabStore?.activeTab
-                    tab != null &&
-                        tab.id == frameTarget.first &&
-                        tab.documentVersion == frameTarget.second &&
-                        tab.webView === frameTarget.third &&
-                        PrivateCaptureQaOrigin.permitted(tab.currentUrl, tab.webView.url) &&
-                        registry.status(requestId, client) == "APPROVED" &&
-                        !closed &&
-                        !userStopped &&
-                        !isLocked() &&
-                        renderer.canDeliverFrame()
+                // Navigation/STOP/expiry may occur during ImageReader or PNG encoding.
+                // Do not send a frame unless the same approved document is still hidden.
+                val stillAuthorized =
+                    withContext(Dispatchers.Main.immediate) {
+                        val tab = context.tabStore?.activeTab
+                        tab != null &&
+                            tab.id == frameTarget.first &&
+                            tab.documentVersion == frameTarget.second &&
+                            tab.webView === frameTarget.third &&
+                            PrivateCaptureQaOrigin.permitted(tab.currentUrl, tab.webView.url) &&
+                            registry.status(requestId, client) == "APPROVED" &&
+                            !closed &&
+                            !userStopped &&
+                            !isLocked() &&
+                            renderer.canDeliverFrame()
+                    }
+                if (!stillAuthorized) {
+                    withContext(Dispatchers.Main.immediate) {
+                        if (activeRequestId == requestId && activeClientId == client) stopByUser()
+                    }
+                    return@register errorResponse("PERMISSION_REQUIRED", "Capture identity or visibility changed before delivery")
                 }
-            if (!stillAuthorized) {
-                withContext(Dispatchers.Main.immediate) {
-                    if (activeRequestId == requestId && activeClientId == client) stopByUser()
-                }
-                return@register errorResponse("PERMISSION_REQUIRED", "Capture identity or visibility changed before delivery")
-            }
-            // Revoke and release the private display as soon as the last
-            // locally approved frame is encoded. A 21st request is not needed.
-            if (registry.finalFrameClaimed(requestId, client)) stopByUser()
-            successResponse(image)
+                // Revoke and release the private display as soon as the last
+                // locally approved frame is encoded. A 21st request is not needed.
+                if (registry.finalFrameClaimed(requestId, client)) stopByUser()
+                successResponse(image)
             } finally {
                 frameFlight.unlock()
             }
