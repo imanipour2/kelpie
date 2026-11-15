@@ -1,5 +1,6 @@
 package com.kelpie.browser.capture
 
+import com.kelpie.browser.R
 import android.Manifest
 import android.app.Activity
 import android.app.Notification
@@ -42,7 +43,7 @@ internal object PrivateCaptureNotification {
         if (!canNotify(activity)) return false
         val manager = activity.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
-            NotificationChannel(CHANNEL, "Kelpie temporary capture", NotificationManager.IMPORTANCE_LOW),
+            NotificationChannel(CHANNEL, activity.getString(R.string.p4_capture_notification_channel), NotificationManager.IMPORTANCE_LOW),
         )
         val stopIntent =
             Intent(activity, PrivateCaptureStopReceiver::class.java).apply {
@@ -60,15 +61,15 @@ internal object PrivateCaptureNotification {
             Notification.Action
                 .Builder(
                     android.R.drawable.ic_media_pause,
-                    "توقف",
+                    activity.getString(R.string.p4_capture_notification_stop),
                     stopPending,
                 ).build()
         val notification =
             Notification
                 .Builder(activity, CHANNEL)
                 .setSmallIcon(android.R.drawable.ic_menu_camera)
-                .setContentTitle("کلپی: تصویربرداری محدود فعال")
-                .setContentText("برای لغو فوری، «توقف» را انتخاب کنید.")
+                .setContentTitle(activity.getString(R.string.p4_capture_notification_title))
+                .setContentText(activity.getString(R.string.p4_capture_notification_description))
                 .setVisibility(Notification.VISIBILITY_PRIVATE)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
