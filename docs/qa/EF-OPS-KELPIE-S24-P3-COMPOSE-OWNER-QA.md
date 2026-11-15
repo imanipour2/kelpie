@@ -1,6 +1,6 @@
 # S24 P3 — actual Compose AndroidView owner, isolated WebView reparenting research
 
-**Date:** 2026-11-15 | **Status:** SOURCE / CI PENDING / PHYSICAL NOT TESTED / RELEASE NO-GO  
+**Date:** 2026-11-15 | **Status:** BASELINE CI PASS a3ef90b / SECURITY REMEDIATION CI IN PROGRESS 1a80674 / PHYSICAL NOT TESTED / RELEASE NO-GO  
 **Predecessors:** [P1](EF-OPS-KELPIE-S24-P1-SAME-WEBVIEW-HARDWARE.md) and [P2](EF-OPS-KELPIE-S24-P2-TABSTORE-SURFACE-PLAN.md).  
 **Project tracker:** [ENERFOAM issue #98](https://github.com/imanipour2/enerfoam-website/issues/98).  
 **Authority:** CDG `EF-OPS-KELPIE-S24-SPIKE-005` approves **bounded local synthetic experiment only**, not production browser release. Product parity in Kelpie AGENTS remains mandatory when proposing a real feature on Android/iOS.
@@ -32,3 +32,14 @@ P3 uses the **actual** production `TabWebViewContent` Compose function, wrapped 
 - [Android activity lifecycle](https://developer.android.com/guide/components/activities/activity-lifecycle) and [foreground service restrictions](https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start) — no background Activity launch or keyguard bypass.
 
 **No claims of actual Compose fidelity or physical acceptance until CI + Samsung device readback.**
+
+
+## Follow-up preflight: inherited Android permissions, remediation (2026-11-15)
+
+On a physical Samsung SM-S928B / Android 17, the **original** P3 artifact (source `a3ef90bcbddd1af0428fbdfe9f51d0bcacee54f5`) was downloaded from dedicated GitHub Actions [43675894457](https://github.com/imanipour2/kelpie/actions/runs/43675894457), artifact `14146364248`. The ZIP SHA256 was `43aa59e5bc890e4031a8fb5bc6961bb897c56197358f33aabb0e3f01de245445`; embedded APK and installed `base.apk` both matched `853b5afb3b1b506371f17e74c10adccbaa0d3c24e94d76dba3c971ad6019f690`. The separate `com.kelpie.browser.p3verify` package installed successfully (version 0.2.7-qa/code 27); original `com.kelpie.browser.unifiedverify`, P0/P1 and P2 were preserved. ADB forwarding was empty.
+
+**Security finding P3-SEC-001:** Android package-manager inspection of the installed P3 app found inherited `android.permission.INTERNET`, `ACCESS_NETWORK_STATE`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_CONNECTED_DEVICE` and a requested but denied `RECORD_AUDIO`, despite the synthetic fixture's `blockNetworkLoads` guard. This is inconsistent with the owner's bounded, zero-permission PoC boundary. No foreground capture, real URLs, user tabs, account or background screenshots were exercised on this APK. Baseline P3 **hardware acceptance is NOT established**.
+
+Remediation restricted to this Draft branch: create `apps/android/app/src/p3Qa/AndroidManifest.xml` containing targeted `tools:node="remove"` permission removals; bind that manifest overlay to **only** Gradle's opt-in `kelpieP3VerificationProfile`, leaving normal, P1/P2 and unified builds untouched; add a dedicated CI APK AAPT check that fails closed on **any** `uses-permission` declaration. Changes: `b50d1d0`, `223b4a1`, `1a80674`. [Remediation CI](https://github.com/imanipour2/kelpie/actions/runs/43677776850) was running at the time of this entry, so no permission-free APK is yet claimed.
+
+Further gates: latest exact-SHA CI PASS, package and permission audit of actual APK, isolated P3-only replacement and installed-base SHA readback, local affirmative on-device user consent, HOME and ChatGPT 20/20 fresh pixel runs, **actual Compose remount same WebView** restore, negative tests, evidence sync and independent security review. Keep Draft / RELEASE_NO_GO.
