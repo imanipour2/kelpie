@@ -62,7 +62,10 @@ class PrivateCaptureCoordinator(
     // Registration and removal are scoped to this QA-only coordinator's lifecycle.
     private val screenOffReceiver =
         object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
+            override fun onReceive(
+                context: Context,
+                intent: Intent,
+            ) {
                 if (intent.action != Intent.ACTION_SCREEN_OFF || closed) return
                 val completion = goAsync()
                 scope.launch {
