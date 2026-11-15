@@ -22,3 +22,17 @@
 No new CI status is asserted in this document until an exact-branch workflow run is inspected. Tests must record commit SHA, APK SHA256, signer, installed package, Android API, authentic consent and evidence timing.
 
 **Required further work:** Android JVM unit tests, Kotlin formatting, Lint, Android build, emulator integration; fault-injection for each create/dismiss/reparent/restore failure; 20-frame/device negative tests; 50-cycle heap/native memory/thread/surface trends; rollback rehearsal.
+
+
+## Additional mandatory timing and failure matrix
+
+| Test | Expected | Status |
+|---|---|---|
+| Handler admitted before consent but returns screenshot after P4 transfer | post-handler admission rejects image | SOURCE-ONLY / integration pending |
+| JS evaluation scheduled before consent, executed after ownership swap | HandlerContext throws without touching private WebView | SOURCE-ONLY / integration pending |
+| STOP while HTTP coroutine is cancelled during native release | complete release despite cancellation; no lingering notification | SOURCE-ONLY / fault injection pending |
+| Failed foreground `start()` before Compose owner reattachment | automatic restoration without waiting for onResume | SOURCE-ONLY / Android instrumentation pending |
+| Repeated STOP while `RESTORE_PENDING` | no duplicate Compose restoration | SOURCE-ONLY / Android instrumentation pending |
+| 50 loops of native display, threads, Java WebViews, Private Other/RSS | bounded resources with delayed settling | NOT TESTED |
+
+The Android official WebView memory guide requires checking both Activity/WebView instance counts and host + isolated renderer native memory; `dumpsys meminfo` for the host alone is insufficient. No current S24 resource measurements on the new branch exist.
