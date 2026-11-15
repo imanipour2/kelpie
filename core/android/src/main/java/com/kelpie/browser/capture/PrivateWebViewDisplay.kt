@@ -151,20 +151,24 @@ class PrivateWebViewDisplay(
             if (!active || activityVisible || isLocked() || stateFlow.value != State.PRIVATE_DISPLAY) {
                 null
             } else {
-                withContext(Dispatchers.Default) {
-                    val bytes = ByteArrayOutputStream()
-                    if (!image.compress(Bitmap.CompressFormat.PNG, 100, bytes)) {
-                        null
-                    } else {
-                        mapOf(
-                            "image" to Base64.getEncoder().encodeToString(bytes.toByteArray()),
-                            "width" to image.width,
-                            "height" to image.height,
-                            "format" to "png",
-                            "coordinateSpace" to "viewport-css-pixels",
-                        )
+                val encoded =
+                    withContext(Dispatchers.Default) {
+                        val bytes = ByteArrayOutputStream()
+                        if (!image.compress(Bitmap.CompressFormat.PNG, 100, bytes)) {
+                            null
+                        } else {
+                            mapOf(
+                                "image" to Base64.getEncoder().encodeToString(bytes.toByteArray()),
+                                "width" to image.width,
+                                "height" to image.height,
+                                "format" to "png",
+                                "coordinateSpace" to "viewport-css-pixels",
+                            )
+                        }
                     }
-                }
+                if (active && !activityVisible && !isLocked() &&
+                    stateFlow.value == State.PRIVATE_DISPLAY
+                ) encoded else null
             }
         } finally {
             image.recycle()
