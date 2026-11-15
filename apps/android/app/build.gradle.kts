@@ -83,6 +83,16 @@ android {
         jvmTarget = "17"
     }
 
+    lint {
+        // P3 is a permission-free offline-only QA flavor; its launch path never
+        // executes the browser's notification helper, retained in shared sources.
+        // Suppress ONLY this unreachable legacy permission lint on P3, without
+        // re-granting POST_NOTIFICATIONS or disabling lint in normal builds.
+        if (providers.gradleProperty("kelpieP3VerificationProfile").orNull == "true") {
+            disable += "NotificationPermission"
+        }
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
