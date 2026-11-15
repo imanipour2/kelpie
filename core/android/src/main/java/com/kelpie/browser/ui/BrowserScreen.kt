@@ -50,6 +50,7 @@ import com.kelpie.browser.handlers.enter3DInspector
 import com.kelpie.browser.network.PairApprovalCoordinator
 import com.kelpie.browser.network.Router
 import kotlinx.coroutines.launch
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BrowserScreen(
@@ -211,22 +212,26 @@ fun BrowserScreen(
 
             com.kelpie.browser.connect
                 .ConnectControls(compact = true)
-            if (!captureMoved) BrowserViewport(
-                tabStore,
-                browserState,
-                handlerContext,
-                tabletMobileStagePresetId,
-                onAvailablePresets = { availableTabletViewportPresets = it },
-                onScrollDirectionChange = { bottomBarCollapsed = it == ScrollDirection.DOWN },
-                onScrolled = { activeTab?.let(sampler::request) },
-                onWebViewReady = {
-                    webView = it
-                    router.webView = it
-                    handlerContext.webView = it
-                },
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-            ) else Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                androidx.compose.material3.Text("تب اصلی در نمایشگر خصوصی محدود کلپی است")
+            if (!captureMoved) {
+                BrowserViewport(
+                    tabStore,
+                    browserState,
+                    handlerContext,
+                    tabletMobileStagePresetId,
+                    onAvailablePresets = { availableTabletViewportPresets = it },
+                    onScrollDirectionChange = { bottomBarCollapsed = it == ScrollDirection.DOWN },
+                    onScrolled = { activeTab?.let(sampler::request) },
+                    onWebViewReady = {
+                        webView = it
+                        router.webView = it
+                        handlerContext.webView = it
+                    },
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
+            } else {
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    androidx.compose.material3.Text("تب اصلی در نمایشگر خصوصی محدود کلپی است")
+                }
             }
 
             if (!isScriptRecording) {
