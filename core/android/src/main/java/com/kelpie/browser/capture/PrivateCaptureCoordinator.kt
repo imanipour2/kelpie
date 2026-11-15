@@ -206,7 +206,7 @@ class PrivateCaptureCoordinator(
         registry.revoke()
         expiry?.cancel()
         expiry = null
-        scope.launch { renderer.stop() }
+        renderer.dispose()
         scope.cancel()
     }
 
