@@ -1,6 +1,7 @@
 package com.kelpie.browser.capture
 
 import android.app.KeyguardManager
+import android.net.Uri
 import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import com.kelpie.browser.connect.ConsentedCaptureLease
@@ -61,6 +62,9 @@ class PrivateCaptureCoordinator(
                 if (closed || renderer.state.value != PrivateWebViewDisplay.State.IDLE) {
                     return@withContext errorResponse("RECORDING_IN_PROGRESS", "Private capture busy")
                 }
+                if (!allowedQaOrigin(tab.currentUrl, tab.webView.url)) {
+                    return@withContext errorResponse("PERMISSION_REQUIRED", "QA capture limited to public example.com")
+                }
                 val request =
                     registry.submitAuthenticated(
                         verifiedClient,
@@ -103,7 +107,8 @@ class PrivateCaptureCoordinator(
             val permitted =
                 withContext(Dispatchers.Main.immediate) {
                     val tab = context.tabStore?.activeTab ?: return@withContext false
-                    registry.claimFrame(
+                    allowedQaOrigin(tab.currentUrl, tab.webView.url) &&
+                        registry.claimFrame(
                         requestId,
                         client,
                         attemptId,
@@ -154,7 +159,10 @@ class PrivateCaptureCoordinator(
                     tab.webView,
                     unlocked = !isLocked(),
                 )
-            if (!ok) return@withContext false
+            if (!ok || !allowedQaOrigin(tab.currentUrl, tab.webView.url)) {
+                registry.revoke()
+                return@withContext false
+            }
             userStopped = false
             val ready = renderer.start(tab.webView)
             if (!ready) {
@@ -208,6 +216,13 @@ class PrivateCaptureCoordinator(
         expiry = null
         renderer.dispose()
         scope.cancel()
+    }
+
+    private fun allowedQaOrigin(tabUrl: String, actualUrl: String?): Boolean {
+        val tab = Uri.parse(tabUrl)
+        val view = Uri.parse(actualUrl.orEmpty())
+        return tab.scheme == "https" && tab.host == "example.com" &&
+            view.scheme == "https" && view.host == "example.com"
     }
 
     private fun isLocked(): Boolean =
