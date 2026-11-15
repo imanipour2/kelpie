@@ -24,7 +24,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
+import com.kelpie.browser.R
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.kelpie.browser.browser.TabStore
@@ -56,11 +58,11 @@ fun PrivateCaptureConsentDialog(
             if (allowed && requestId != null) {
                 scope.launch {
                     if (!coordinator.approveOnDevice(requestId)) {
-                        errorMessage = "مجوز تصویربرداری صادر نشد؛ نشست یا اعلان نامعتبر است."
+                        errorMessage = context.getString(R.string.p4_capture_error_denied)
                     }
                 }
             } else {
-                errorMessage = "برای نمایش دکمه توقف فوری، اجازه اعلان اندروید الزامی است."
+                errorMessage = context.getString(R.string.p4_capture_error_notification)
             }
         }
 
@@ -72,19 +74,18 @@ fun PrivateCaptureConsentDialog(
             runCatching {
                 val parsed = Uri.parse(url)
                 parsed.scheme + "://" + parsed.host
-            }.getOrDefault("نامشخص")
+            }.getOrDefault(stringResource(R.string.p4_capture_unknown_site))
         AlertDialog(
             onDismissRequest = { coordinator.denyOnDevice() },
-            title = { Text("تأیید محدود تصویربرداری در کلپی") },
+            title = { Text(stringResource(R.string.p4_capture_title)) },
             text = {
                 Text(
-                    "کلاینت احرازشده: " + request.clientId + "\n" +
-                        "درخواست: " + request.attemptId + "\n" +
-                        "وب‌سایت: " + origin + "\n\n" +
-                        "آیا اجازه می‌دهید فقط تب فعلی، تا ۹۰ ثانیه و حداکثر " +
-                        "۲۰ فریم تصویربرداری شود؟ تصویربرداری از برنامه‌های دیگر " +
-                        "مجاز نیست. با بازگشت به کلپی یا دکمه «توقف» مجوز باطل می‌شود. " +
-                        "اطلاعات حساس نمایش‌داده‌شده ممکن است در تصویر دیده شوند.",
+                    stringResource(
+                        R.string.p4_capture_disclosure,
+                        request.clientId,
+                        request.attemptId,
+                        origin,
+                    ),
                 )
             },
             confirmButton = {
@@ -102,18 +103,18 @@ fun PrivateCaptureConsentDialog(
                         } else {
                             scope.launch {
                                 if (!coordinator.approveOnDevice(requestId)) {
-                                    errorMessage = "درخواست منقضی شد یا هویت تب تغییر کرد؛ مجوز صادر نشد."
+                                    errorMessage = context.getString(R.string.p4_capture_error_expired)
                                 }
                             }
                         }
                     },
                 ) {
-                    Text("تأیید و شروع")
+                    Text(stringResource(R.string.p4_capture_approve))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { coordinator.denyOnDevice() }) {
-                    Text("لغو")
+                    Text(stringResource(R.string.p4_capture_cancel))
                 }
             },
         )
@@ -130,7 +131,7 @@ fun PrivateCaptureConsentDialog(
                     onClick = { scope.launch { coordinator.stopByUser() } },
                     modifier = Modifier.padding(8.dp),
                 ) {
-                    Text("توقف فوری تصویربرداری")
+                    Text(stringResource(R.string.p4_capture_stop))
                 }
             }
         }
@@ -139,10 +140,10 @@ fun PrivateCaptureConsentDialog(
     errorMessage?.let { message ->
         AlertDialog(
             onDismissRequest = { errorMessage = null },
-            title = { Text("مجوز صادر نشد") },
+            title = { Text(stringResource(R.string.p4_capture_error_title)) },
             text = { Text(message) },
             confirmButton = {
-                TextButton(onClick = { errorMessage = null }) { Text("بستن") }
+                TextButton(onClick = { errorMessage = null }) { Text(stringResource(R.string.p4_capture_dismiss)) }
             },
         )
     }
