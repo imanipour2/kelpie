@@ -24,7 +24,11 @@ class ConsentedCaptureRequestRegistry(
         val expiresAtMs: Long,
     )
 
-    private data class Pending(val prompt: Prompt, val target: Any)
+    private data class Pending(
+        val prompt: Prompt,
+        val target: Any,
+    )
+
     private data class Approved(
         val requestId: String,
         val binding: ConsentedCaptureLease.Binding,
@@ -73,8 +77,12 @@ class ConsentedCaptureRequestRegistry(
         unlocked: Boolean,
     ): Boolean {
         val p = pending
-        if (p == null || p.prompt.requestId != requestId || clock() >= p.prompt.expiresAtMs ||
-            !unlocked || p.prompt.tabId != currentTabId || p.prompt.documentVersion != currentDocumentVersion ||
+        if (p == null ||
+            p.prompt.requestId != requestId ||
+            clock() >= p.prompt.expiresAtMs ||
+            !unlocked ||
+            p.prompt.tabId != currentTabId ||
+            p.prompt.documentVersion != currentDocumentVersion ||
             p.target !== currentView
         ) {
             revoke()
@@ -87,10 +95,11 @@ class ConsentedCaptureRequestRegistry(
                 p.prompt.clientId,
                 p.prompt.attemptId,
             )
-        val token = lease.approveLocally(binding, currentView) ?: run {
-            revoke()
-            return false
-        }
+        val token =
+            lease.approveLocally(binding, currentView) ?: run {
+                revoke()
+                return false
+            }
         approved = Approved(requestId, binding, currentView, token)
         pending = null
         mutablePrompt.value = null
@@ -110,16 +119,19 @@ class ConsentedCaptureRequestRegistry(
         userStopped: Boolean,
     ): Boolean {
         val a = approved
-        if (a == null || a.requestId != requestId || verifiedClientId != a.binding.clientId ||
+        if (a == null ||
+            a.requestId != requestId ||
+            verifiedClientId != a.binding.clientId ||
             attemptId != a.binding.agentAttemptId
         ) {
             revoke()
             return false
         }
-        val clientId = verifiedClientId ?: run {
-            revoke()
-            return false
-        }
+        val clientId =
+            verifiedClientId ?: run {
+                revoke()
+                return false
+            }
         val binding =
             ConsentedCaptureLease.Binding(currentTabId, currentDocumentVersion, clientId, attemptId)
         val valid = lease.claimFrame(a.localToken, binding, currentView, true, unlocked, userStopped)
