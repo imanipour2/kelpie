@@ -63,6 +63,7 @@ class PrivateWebViewDisplay(
             "matchedNonceFrames" to matchingFrameCount.get(),
             "lastFrameOutcome" to lastFrameOutcome,
         )
+
     private val main = Handler(Looper.getMainLooper())
     private var view: WebView? = null
     private var display: VirtualDisplay? = null
