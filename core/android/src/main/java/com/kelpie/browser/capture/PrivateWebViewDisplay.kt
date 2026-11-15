@@ -245,7 +245,11 @@ class PrivateWebViewDisplay(
     /** Always clean the capture image and surfaces, even if Compose is paused. */
     suspend fun stop() =
         withContext(Dispatchers.Main.immediate) {
-            releaseAndRestore(State.RESTORE_PENDING)
+            // Repeated STOP must not reparent the same WebView or replay
+            // composeRestore() while an earlier restore is still settling.
+            if (stateFlow.value != State.IDLE && stateFlow.value != State.RESTORE_PENDING) {
+                releaseAndRestore(State.RESTORE_PENDING)
+            }
         }
 
     /** Activity destruction must clean up without relying on a future coroutine. */
