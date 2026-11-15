@@ -763,3 +763,12 @@ On iOS and Android, Favourites uses a full-screen tree below 600 points/dp and a
 All three clients share the ordered `browser/bookmarks` UOA setting. Nodes have a UUID, `kind` (`bookmark` or `folder`), `parentId` (null at the top level), title, URL and creation date. Existing flat bookmarks load as top-level pages. Signed-out collections stay local and separate from the signed-in collection. Unknown account records and metadata survive edits.
 
 Signed-in clients subscribe to UOA's reusable settings WebSocket. The initial snapshot establishes an opaque version; later frames contain a version-fenced array splice or replacement. A gap, invalid frame or reconnect obtains a new snapshot. Writes still use fresh reads and conditional saves; the stream pauses during queued writes and restarts afterward so an older response cannot overwrite a pushed change. No account favourites are persisted locally. Offline errors remain visible and changes are not reported as saved until UOA acknowledges them.
+
+
+## Consented background capture (development only; not shipped)
+
+The normal Android/iOS browser does **not yet** offer unattended background screenshots. A separate offline synthetic Android P3 proof demonstrated 20/20 fresh private-display frames with the app hidden and recovery of the same Compose/WebView/scroll state on a Galaxy S24 Ultra; the P3 QA package must not be confused with the installable production browser.
+
+A proposed native consent **foundation**, shared by Android and Apple, binds a prospective future capture session to one tab, document version, authenticated client, agent attempt and WebView identity. It has a 90-second maximum lifetime, a 20-frame default budget and explicit STOP, expiry, keyguard and identity-change revocation policy. No remote client may grant or renew consent. Code exists behind this feature branch only: **no UI, background renderer, capture endpoint, release, or Android install has been enabled by these policy classes**.
+
+The full privacy/security contract and gated rollout are in [EF-OPS-KELPIE-PRODUCTION-SESSION-FOUNDATION-001](plans/EF-OPS-KELPIE-PRODUCTION-SESSION-FOUNDATION-001.md). Until the real-browser integration passes separate consent, signing, iOS parity, hardware and review gates, foreground capture and existing secure recovery behavior remain unchanged.
