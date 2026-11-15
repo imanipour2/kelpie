@@ -334,41 +334,34 @@ class PrivateWebViewDisplay(
         active = false
         pendingImage.getAndSet(null)?.result?.cancel()
         val original = view
-        var cleanupFailed = false
-        // Each native resource is independent: failure of Presentation.dismiss()
-        // must never skip releasing VirtualDisplay, ImageReader or the worker.
-        fun releaseStep(action: () -> Unit) {
-            try {
-                action()
-            } catch (_: Exception) {
-                cleanupFailed = true
-            }
-        }
+        val cleanup = PrivateCaptureCleanupSequence()
+        // Failure of Presentation.dismiss() must never skip releasing the
+        // VirtualDisplay, ImageReader, worker or Compose ownership.
         if (attachedToPrivateHost) {
-            releaseStep { original?.evaluateJavascript(PrivateCaptureQaPixelProof.REMOVE_SCRIPT, null) }
-            releaseStep { (original?.parent as? ViewGroup)?.removeView(original) }
+            cleanup.release { original?.evaluateJavascript(PrivateCaptureQaPixelProof.REMOVE_SCRIPT, null) }
+            cleanup.release { (original?.parent as? ViewGroup)?.removeView(original) }
             attachedToPrivateHost = false
         }
         val oldPresentation = presentation
         presentation = null
-        releaseStep { oldPresentation?.dismiss() }
+        cleanup.release { oldPresentation?.dismiss() }
         val oldDisplay = display
         display = null
-        releaseStep { oldDisplay?.release() }
+        cleanup.release { oldDisplay?.release() }
         val oldReader = reader
         reader = null
-        releaseStep {
+        cleanup.release {
             oldReader?.setOnImageAvailableListener(null, null)
             oldReader?.close()
         }
         val oldWorker = worker
         worker = null
-        releaseStep { oldWorker?.quitSafely() }
-        releaseStep { composeRestore() }
-        if (result == State.IDLE && !cleanupFailed) view = null
+        cleanup.release { oldWorker?.quitSafely() }
+        cleanup.release { composeRestore() }
+        if (result == State.IDLE && !cleanup.failed) view = null
         stateFlow.value =
             when {
-                cleanupFailed -> State.FAILED
+                cleanup.failed -> State.FAILED
                 original == null || result == State.IDLE -> State.IDLE
                 else -> result
             }
