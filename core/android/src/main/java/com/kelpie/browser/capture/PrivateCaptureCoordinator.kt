@@ -85,7 +85,7 @@ class PrivateCaptureCoordinator(
     init {
         if (qaEnabled) {
             context.privateCaptureRestricted = {
-                renderer.state.value != PrivateWebViewDisplay.State.IDLE
+                closed || renderer.state.value != PrivateWebViewDisplay.State.IDLE
             }
             ContextCompat.registerReceiver(
                 activity,
