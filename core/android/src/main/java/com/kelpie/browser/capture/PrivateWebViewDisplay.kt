@@ -76,6 +76,10 @@ class PrivateWebViewDisplay(
     private var worker: HandlerThread? = null
     private var previousScrollX = 0
     private var previousScrollY = 0
+    // WebView native scroll offsets may use a different scale from CSS pixels
+    // after moving between the real Activity and a private virtual display.
+    private var previousCssScrollX = 0.0
+    private var previousCssScrollY = 0.0
     private var qaFrameSequence = 0
 
     @Volatile private var active = false
@@ -99,6 +103,11 @@ class PrivateWebViewDisplay(
             if (stateFlow.value != State.IDLE || isLocked() || !activityVisible) {
                 return@withContext false
             }
+            // Record real document CSS scroll BEFORE releasing Compose ownership.
+            // The native offsets alone did not preserve scroll across displays.
+            val cssScroll = readCssScroll(original) ?: return@withContext false
+            previousCssScrollX = cssScroll.first
+            previousCssScrollY = cssScroll.second
             stateFlow.value = State.RELEASING_COMPOSE
             view = original
             previousScrollX = original.scrollX
@@ -259,15 +268,43 @@ class PrivateWebViewDisplay(
                 stateFlow.value = State.FAILED
                 return@withContext false
             }
+            // First restore Android's native offset, then correct the document
+            // using its original CSS coordinates, as established in the P3 QA.
             original.scrollTo(previousScrollX, previousScrollY)
             delay(150)
-            val matched =
-                original.scrollX == previousScrollX &&
-                    original.scrollY == previousScrollY
+            var matched = false
+            for (attempt in 0..2) {
+                original.evaluateJavascript(
+                    "window.scrollTo($previousCssScrollX,$previousCssScrollY)",
+                    null,
+                )
+                delay(175)
+                val current = readCssScroll(original)
+                if (current != null &&
+                    kotlin.math.abs(current.first - previousCssScrollX) <= 1.5 &&
+                    kotlin.math.abs(current.second - previousCssScrollY) <= 1.5
+                ) {
+                    matched = true
+                    break
+                }
+            }
             stateFlow.value = if (matched) State.IDLE else State.FAILED
             if (matched) view = null
             matched
         }
+
+    /** Only document-local CSS values are used, never cross-display native pixels. */
+    private suspend fun readCssScroll(original: WebView): Pair<Double, Double>? {
+        suspend fun coordinate(expression: String): Double? {
+            val reply = CompletableDeferred<String>()
+            original.evaluateJavascript(expression) { raw -> reply.complete(raw) }
+            val value = withTimeoutOrNull(800L) { reply.await() }?.toDoubleOrNull()
+            return value?.takeIf { it.isFinite() && it >= 0.0 }
+        }
+        val x = coordinate("window.scrollX") ?: return null
+        val y = coordinate("window.scrollY") ?: return null
+        return x to y
+    }
 
     private fun releaseAndRestore(result: State) {
         check(Looper.myLooper() == Looper.getMainLooper())
