@@ -129,7 +129,9 @@ class ConsentedCaptureRequestRegistry(
             verifiedClientId == null ||
             verifiedClientId != a.binding.clientId ||
             attemptId != a.binding.agentAttemptId
-        ) return false
+        ) {
+            return false
+        }
         val clientId = verifiedClientId
         val binding =
             ConsentedCaptureLease.Binding(currentTabId, currentDocumentVersion, clientId, attemptId)
