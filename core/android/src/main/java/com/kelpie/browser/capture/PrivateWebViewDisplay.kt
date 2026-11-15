@@ -18,10 +18,10 @@ import android.webkit.WebView
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.ByteArrayOutputStream
 import java.util.Base64
 import java.util.concurrent.atomic.AtomicReference
@@ -59,7 +59,9 @@ class PrivateWebViewDisplay(
     private var worker: HandlerThread? = null
     private var previousScrollX = 0
     private var previousScrollY = 0
+
     @Volatile private var active = false
+
     @Volatile private var activityVisible = true
 
     /** Native lifecycle owns this flag; a remote client cannot change it. */
@@ -100,15 +102,16 @@ class PrivateWebViewDisplay(
                 reader = images
                 images.setOnImageAvailableListener({ onImage(images) }, Handler(backgroundThread.looper))
                 val manager = activity.getSystemService(DisplayManager::class.java)
-                val virtual = manager.createVirtualDisplay(
-                    "KelpiePrivateWebView",
-                    width,
-                    height,
-                    activity.resources.displayMetrics.densityDpi,
-                    images.surface,
-                    DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION or
-                        DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY,
-                ) ?: error("Private display unavailable")
+                val virtual =
+                    manager.createVirtualDisplay(
+                        "KelpiePrivateWebView",
+                        width,
+                        height,
+                        activity.resources.displayMetrics.densityDpi,
+                        images.surface,
+                        DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION or
+                            DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY,
+                    ) ?: error("Private display unavailable")
                 display = virtual
                 val host = Presentation(activity, virtual.display)
                 presentation = host
@@ -166,9 +169,15 @@ class PrivateWebViewDisplay(
                             )
                         }
                     }
-                if (active && !activityVisible && !isLocked() &&
+                if (active &&
+                    !activityVisible &&
+                    !isLocked() &&
                     stateFlow.value == State.PRIVATE_DISPLAY
-                ) encoded else null
+                ) {
+                    encoded
+                } else {
+                    null
+                }
             }
         } finally {
             image.recycle()
