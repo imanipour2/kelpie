@@ -73,6 +73,9 @@ class PrivateWebViewDisplay(
         activityVisible = visible
     }
 
+    /** Re-check hidden/locked/STOP state on Main immediately before frame delivery. */
+    fun canDeliverFrame(): Boolean = active && !activityVisible && !isLocked() && stateFlow.value == State.PRIVATE_DISPLAY
+
     /**
      * Call on explicit local consent with the actual tab's WebView, after the
      * user has seen the client, selected tab, expiry and STOP disclosure.
