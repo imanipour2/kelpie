@@ -27,7 +27,8 @@ internal object PrivateCaptureQaPixelProof {
         val hex = expectedRgb.toString(16).padStart(6, '0')
         return """
             (() => {
-                if (location.protocol !== 'https:' || location.hostname !== 'example.com' ||\n                    (location.port && location.port !== '443')) return false;
+                if (location.protocol !== 'https:' || location.hostname !== 'example.com' ||
+                    (location.port && location.port !== '443')) return false;
                 const id = '__kelpie_private_qa_pixel__';
                 let marker = document.getElementById(id);
                 if (!marker) {
