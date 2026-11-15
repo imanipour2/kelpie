@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.SystemClock
+import android.os.PowerManager
 import androidx.activity.ComponentActivity
 import androidx.core.content.ContextCompat
 import com.kelpie.browser.connect.ConsentedCaptureLease
@@ -24,6 +25,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 
 /**
@@ -51,6 +53,7 @@ class PrivateCaptureCoordinator(
     private var expiry: Job? = null
     private var closed = false
     private var userStopped = false
+    private val frameFlight = Mutex()
 
     // Internal, authenticated ownership: a random client or request ID cannot
     // end another user's active capture by querying its status.
@@ -145,6 +148,8 @@ class PrivateCaptureCoordinator(
                     }
                     status
                 }
+            // No cross-client renderer state, image counts or outcome disclosure.
+            if (status == "NOT_FOUND") return@register successResponse(mapOf("status" to "NOT_FOUND"))
             successResponse(
                 mapOf(
                     "status" to status,
@@ -164,6 +169,12 @@ class PrivateCaptureCoordinator(
             val attemptId =
                 body["attemptId"] as? String
                     ?: return@register errorResponse("INVALID_PARAMS", "attemptId required")
+            // Reject overlap instead of queuing: a denied concurrent request must
+            // consume neither the grant's frame budget nor the QA pixel sequence.
+            if (!frameFlight.tryLock()) {
+                return@register errorResponse("RECORDING_IN_PROGRESS", "Capture frame already pending")
+            }
+            try {
             val frameTarget =
                 withContext(Dispatchers.Main.immediate) {
                     val tab = context.tabStore?.activeTab ?: return@withContext null
@@ -223,6 +234,9 @@ class PrivateCaptureCoordinator(
             // locally approved frame is encoded. A 21st request is not needed.
             if (registry.finalFrameClaimed(requestId, client)) stopByUser()
             successResponse(image)
+            } finally {
+                frameFlight.unlock()
+            }
         }
 
         router.register("capture-session-stop") { body ->
@@ -232,9 +246,9 @@ class PrivateCaptureCoordinator(
             val requestId =
                 body["requestId"] as? String
                     ?: return@register errorResponse("INVALID_PARAMS", "requestId required")
-            if (registry.status(requestId, client) == "NOT_FOUND" &&
-                !(activeRequestId == requestId && activeClientId == client)
-            ) {
+            val owned = registry.revokeOwned(requestId, client)
+            val activeOwned = activeRequestId == requestId && activeClientId == client
+            if (!owned && !activeOwned) {
                 return@register errorResponse("PERMISSION_REQUIRED", "Unknown capture for this client")
             }
             stopByUser()
@@ -297,8 +311,11 @@ class PrivateCaptureCoordinator(
             activeClientId = null
             expiry?.cancel()
             expiry = null
-            renderer.stop()
-            PrivateCaptureNotification.hide(activity)
+            try {
+                renderer.stop()
+            } finally {
+                PrivateCaptureNotification.hide(activity)
+            }
         }
 
     fun onPause() {
@@ -335,5 +352,6 @@ class PrivateCaptureCoordinator(
     private fun isLocked(): Boolean =
         activity.isFinishing ||
             activity.isDestroyed ||
+            !activity.getSystemService(PowerManager::class.java).isInteractive ||
             activity.getSystemService(KeyguardManager::class.java).isKeyguardLocked
 }
