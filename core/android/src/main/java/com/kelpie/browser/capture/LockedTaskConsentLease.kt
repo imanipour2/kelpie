@@ -106,14 +106,17 @@ internal class LockedTaskConsentLease(
 
     @Synchronized
     fun activeForOwner(clientId: String?): Boolean {
-        return grant?.let { it.binding.clientId == clientId && elapsedMs() < it.expiresAtMs } ?: false
+        val current = grant ?: return false
+        return current.binding.clientId == clientId && elapsedMs() < current.expiresAtMs
     }
 
     private fun validBinding(binding: Binding): Boolean {
         val identifiers = listOf(binding.clientId, binding.attemptId, binding.tabId, binding.documentVersion)
-        return identifiers.all { id ->
-            id.isNotBlank() && id.length <= 128 && id.none { char -> char.isISOControl() }
-        } && originPermitted(binding.tabUrl)
+        val identifiersValid =
+            identifiers.all { id ->
+                id.isNotBlank() && id.length <= 128 && id.none { char -> char.isISOControl() }
+            }
+        return identifiersValid && originPermitted(binding.tabUrl)
     }
 
     private fun originPermitted(value: String?): Boolean {
