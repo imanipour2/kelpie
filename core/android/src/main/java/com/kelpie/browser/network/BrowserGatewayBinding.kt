@@ -1,6 +1,7 @@
 package com.kelpie.browser.network
 
 import com.kelpie.browser.ai.openai.AgentBrowserPolicy
+import com.kelpie.browser.capture.PrivateCaptureOperationPolicy
 import com.kelpie.browser.ai.openai.OpenAIJson
 import com.kelpie.browser.handlers.HandlerContext
 import com.kelpie.browser.nativecore.BrowserGatewayNative
@@ -101,8 +102,10 @@ class BrowserGatewayBinding(
         allowActions: Boolean,
         pinned: String?,
     ): Boolean =
-        (ctx.privateCaptureRestricted?.invoke() != true ||
-            (request["method"] as? String) in setOf("capture-session-frame", "capture-session-status", "capture-session-stop")) &&
+        PrivateCaptureOperationPolicy.permits(
+            request["method"] as? String ?: "",
+            ctx.privateCaptureRestricted?.invoke() == true,
+        ) &&
             ctx.scriptPlaybackState?.recordingError(request["method"] as? String ?: "browser-control") == null &&
             BrowserGatewayTabPolicy.permits(
                 request,
