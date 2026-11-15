@@ -119,8 +119,10 @@ class PrivateWebViewDisplay(
                 val host = Presentation(activity, virtual.display)
                 presentation = host
                 (original.parent as? ViewGroup)?.removeView(original)
-                host.setContentView(original)
+                // Compose relinquished ownership. Cleanup must now restore it,
+                // even if setContentView/show throws before the host is visible.
                 attachedToPrivateHost = true
+                host.setContentView(original)
                 host.show()
                 active = true
                 stateFlow.value = State.PRIVATE_DISPLAY
