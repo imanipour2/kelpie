@@ -27,6 +27,14 @@ android {
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
+    sourceSets {
+        getByName("debug") {
+            if (providers.gradleProperty("kelpiePrivateCaptureQaProfile").orNull == "true") {
+                manifest.srcFile("src/privateCaptureQa/AndroidManifest.xml")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             if (providers.gradleProperty("kelpieEmbeddingVerificationProfile").orNull == "true") {
