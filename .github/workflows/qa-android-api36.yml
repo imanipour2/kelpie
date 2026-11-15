@@ -53,6 +53,7 @@ jobs:
           "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.browser.api36verify'"
           "$AAPT" dump badging "$APK" | grep -F "targetSdkVersion:'36'"
           "$ZIPALIGN" -c -P 16 4 "$APK"
+          python3 scripts/testing/android-elf-page-check.py "$APK"
           "$SIGNER" verify --verbose --print-certs "$APK"
           sha256sum "$APK" > apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
 
