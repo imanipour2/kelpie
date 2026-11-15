@@ -35,6 +35,7 @@ class ConsentedCaptureRequestRegistry(
         val target: Any,
         val localToken: String,
         val expiresAtMs: Long,
+        var claimedFrames: Int = 0,
     )
 
     private val lease = ConsentedCaptureLease(clock, random)
@@ -136,8 +137,28 @@ class ConsentedCaptureRequestRegistry(
         val binding =
             ConsentedCaptureLease.Binding(currentTabId, currentDocumentVersion, clientId, attemptId)
         val valid = lease.claimFrame(a.localToken, binding, currentView, true, unlocked, userStopped)
-        if (!valid) revoke()
+        if (!valid) {
+            revoke()
+        } else {
+            a.claimedFrames++
+        }
         return valid
+    }
+
+    /**
+     * Signals the transport to end the private display after delivering the
+     * final permitted frame, without requiring a denied 21st remote request.
+     * A revoked or unrelated request can never claim the active session.
+     */
+    @Synchronized
+    fun finalFrameClaimed(
+        requestId: String,
+        verifiedClientId: String?,
+    ): Boolean {
+        val current = approved ?: return false
+        return current.requestId == requestId &&
+            current.binding.clientId == verifiedClientId &&
+            current.claimedFrames >= ConsentedCaptureLease.DEFAULT_FRAME_LIMIT
     }
 
     /** Safe status for the same already authenticated client; no token leaks. */

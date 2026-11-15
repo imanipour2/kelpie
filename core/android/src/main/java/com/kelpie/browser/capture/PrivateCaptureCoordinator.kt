@@ -136,9 +136,11 @@ class PrivateCaptureCoordinator(
             if (frameTarget == null) {
                 return@register errorResponse("PERMISSION_REQUIRED", "Private capture grant missing, expired or revoked")
             }
-            val image =
-                renderer.captureFreshPng()
-                    ?: return@register errorResponse("SCREENSHOT_FAILED", "No fresh private frame available")
+            val image = renderer.captureFreshPng()
+            if (image == null) {
+                if (registry.finalFrameClaimed(requestId, client)) stopByUser()
+                return@register errorResponse("SCREENSHOT_FAILED", "No fresh private frame available")
+            }
 
             // Navigation/STOP/expiry may occur during ImageReader or PNG encoding.
             // Do not send a frame unless the same approved document is still hidden.
@@ -159,6 +161,9 @@ class PrivateCaptureCoordinator(
             if (!stillAuthorized) {
                 return@register errorResponse("PERMISSION_REQUIRED", "Capture identity or visibility changed before delivery")
             }
+            // Revoke and release the private display as soon as the last
+            // locally approved frame is encoded. A 21st request is not needed.
+            if (registry.finalFrameClaimed(requestId, client)) stopByUser()
             successResponse(image)
         }
 

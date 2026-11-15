@@ -97,6 +97,23 @@ class ConsentedCaptureRequestRegistryTest {
         assertFalse(claim(second.requestId))
     }
 
+    @Test fun finalFrameTriggersCleanupSignalOnlyAfterExactlyTwentyClaims() {
+        val req = submit()
+        assertTrue(approve(req.requestId))
+        assertFalse(registry.finalFrameClaimed(req.requestId, subject))
+        assertFalse(registry.finalFrameClaimed(req.requestId, "other-client"))
+        repeat(ConsentedCaptureLease.DEFAULT_FRAME_LIMIT - 1) {
+            assertTrue(claim(req.requestId))
+            assertFalse(registry.finalFrameClaimed(req.requestId, subject))
+        }
+        assertTrue(claim(req.requestId))
+        assertTrue(registry.finalFrameClaimed(req.requestId, subject))
+        assertFalse(registry.finalFrameClaimed(req.requestId, "other-client"))
+        registry.revoke()
+        assertFalse(registry.finalFrameClaimed(req.requestId, subject))
+        assertFalse(claim(req.requestId))
+    }
+
     @Test fun injectionOrOverlongIdentifiersAreRejected() {
         assertNull(registry.submitAuthenticated(subject, "a\nb", tab, doc, view))
         assertNull(registry.submitAuthenticated(subject, "x".repeat(129), tab, doc, view))
