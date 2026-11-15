@@ -1,6 +1,5 @@
 package com.kelpie.browser
 
-import androidx.activity.ComponentActivity
 import android.app.AlertDialog
 import android.app.KeyguardManager
 import android.app.Presentation
@@ -19,6 +18,7 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.activity.ComponentActivity
 import com.kelpie.browser.browser.BrowserState
 import com.kelpie.browser.browser.HistoryStore
 import com.kelpie.browser.browser.HomeStore
@@ -263,7 +263,10 @@ class P3ComposeQaActivity : ComponentActivity() {
 
     private fun locked(): Boolean = getSystemService(KeyguardManager::class.java).isKeyguardLocked
 
-    private fun migrate(ticket: Int, attempt: Int) {
+    private fun migrate(
+        ticket: Int,
+        attempt: Int,
+    ) {
         if (!valid(ticket) || locked()) {
             stop("MIGRATION_GUARD_FAILED")
             return
@@ -405,7 +408,12 @@ class P3ComposeQaActivity : ComponentActivity() {
         main.postDelayed({ verifyRestored(view, identity, runToken, 0) }, 400)
     }
 
-    private fun verifyRestored(view: WebView, identity: Boolean, token: Int, attempt: Int) {
+    private fun verifyRestored(
+        view: WebView,
+        identity: Boolean,
+        token: Int,
+        attempt: Int,
+    ) {
         if (!restoring || runToken != token) return
         val attached =
             composeHost.lastAttached === view &&
@@ -438,14 +446,23 @@ class P3ComposeQaActivity : ComponentActivity() {
         matched: Boolean,
         proof: String,
     ) {
-        val saved = P3EvidenceJournal.append(
-            File(filesDir, "p3-compose-surface.jsonl"),
-            event, sequence, visible,
-            store.activeTab?.webView === originalWebView,
-            store.activeTab?.documentVersion == documentVersion,
-            composeHost.ownsCompose, composeHost.mountCount,
-            matched, sample?.r, sample?.g, sample?.b, sample?.receivedNs, proof,
-        )
+        val saved =
+            P3EvidenceJournal.append(
+                File(filesDir, "p3-compose-surface.jsonl"),
+                event,
+                sequence,
+                visible,
+                store.activeTab?.webView === originalWebView,
+                store.activeTab?.documentVersion == documentVersion,
+                composeHost.ownsCompose,
+                composeHost.mountCount,
+                matched,
+                sample?.r,
+                sample?.g,
+                sample?.b,
+                sample?.receivedNs,
+                proof,
+            )
         if (!saved) status.post { status.text = "QA evidence write FAILED; result invalid." }
     }
 

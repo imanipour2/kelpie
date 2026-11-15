@@ -31,29 +31,30 @@ internal class P3ComposeTabHost(
     var mountCount = 0
         private set
 
-    val view: ComposeView = ComposeView(activity).apply {
-        id = View.generateViewId()
-        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-        setContent {
-            if (compositionOwns) {
-                TabWebViewContent(
-                    tabStore = store,
-                    browserState = state,
-                    handlerContext = handlers,
-                    onScrollDirectionChange = {},
-                    onWebViewReady = { webView ->
-                        lastAttached = webView
-                        mountCount++
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                Box(Modifier.fillMaxSize()) {
-                    Text("QA-only private display: Compose relinquished its original WebView")
+    val view: ComposeView =
+        ComposeView(activity).apply {
+            id = View.generateViewId()
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                if (compositionOwns) {
+                    TabWebViewContent(
+                        tabStore = store,
+                        browserState = state,
+                        handlerContext = handlers,
+                        onScrollDirectionChange = {},
+                        onWebViewReady = { webView ->
+                            lastAttached = webView
+                            mountCount++
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    Box(Modifier.fillMaxSize()) {
+                        Text("QA-only private display: Compose relinquished its original WebView")
+                    }
                 }
             }
         }
-    }
 
     fun release() {
         lastAttached = null
