@@ -93,7 +93,10 @@ class ConsentedCaptureLease(
     }
 
     /** A zero-width token comparison avoids normal string early-exit timing. */
-    private fun constantTimeEquals(a: String, b: String): Boolean {
+    private fun constantTimeEquals(
+        a: String,
+        b: String,
+    ): Boolean {
         val ab = a.toByteArray(Charsets.UTF_8)
         val bb = b.toByteArray(Charsets.UTF_8)
         return java.security.MessageDigest.isEqual(ab, bb)
