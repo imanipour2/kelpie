@@ -1,7 +1,6 @@
 package com.kelpie.browser.capture
 
 import java.net.URI
-import java.security.SecureRandom
 
 /**
  * Pure, currently UNWIRED research policy for a separately consented locked-screen task.
@@ -12,7 +11,6 @@ import java.security.SecureRandom
  */
 internal class LockedTaskConsentLease(
     private val elapsedMs: () -> Long,
-    private val random: SecureRandom = SecureRandom(),
 ) {
     internal enum class Action {
         SNAPSHOT,
