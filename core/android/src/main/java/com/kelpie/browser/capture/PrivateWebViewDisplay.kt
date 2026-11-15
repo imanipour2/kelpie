@@ -392,7 +392,10 @@ class PrivateWebViewDisplay(
                 return
             }
             matchingFrameCount.incrementAndGet()
-            if (!pendingImage.compareAndSet(waiting, null)) return
+            // Keep the request published until the awaiting coroutine takes it,
+            // or STOP closes its holder. Removing it here creates a leak window:
+            // native shutdown could no longer reach an in-flight bitmap.
+            if (pendingImage.get() !== waiting || !waiting.result.isOpen) return
             val bitmap = runCatching { copyImage(image) }.getOrNull()
             if (bitmap != null) {
                 waiting.result.publish(bitmap)
