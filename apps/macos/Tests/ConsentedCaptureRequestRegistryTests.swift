@@ -24,10 +24,13 @@ final class ConsentedCaptureRequestRegistryTests: XCTestCase {
             documentVersion: "doc",
             view: view
         )
-        XCTAssertNotNil(pending)
+        guard let requestId = pending?.requestId else {
+            XCTFail("Pending request missing")
+            return
+        }
         XCTAssertFalse(
             inbox.claimFrame(
-                requestId: pending!.requestId,
+                requestId: requestId,
                 verifiedClientId: "client",
                 attemptId: "attempt",
                 currentTabId: "tab",
