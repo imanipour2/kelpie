@@ -64,7 +64,14 @@ class PrivateCaptureCoordinator(
         object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 if (intent.action != Intent.ACTION_SCREEN_OFF || closed) return
-                scope.launch { stopByUser() }
+                val completion = goAsync()
+                scope.launch {
+                    try {
+                        stopByUser()
+                    } finally {
+                        completion.finish()
+                    }
+                }
             }
         }
 
