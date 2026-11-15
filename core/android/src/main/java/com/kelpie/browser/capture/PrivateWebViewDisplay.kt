@@ -12,7 +12,6 @@ import android.media.ImageReader
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
-import android.os.SystemClock
 import android.view.ViewGroup
 import android.webkit.WebView
 import kotlinx.coroutines.CompletableDeferred
@@ -46,7 +45,7 @@ class PrivateWebViewDisplay(
     val state = stateFlow.asStateFlow()
 
     private data class FrameWait(
-        val requestedAtNs: Long,
+        val expectedRgb: Int,
         val result: CompletableDeferred<Bitmap?>,
     )
 
@@ -63,6 +62,7 @@ class PrivateWebViewDisplay(
     private var worker: HandlerThread? = null
     private var previousScrollX = 0
     private var previousScrollY = 0
+    private var qaFrameSequence = 0
 
     @Volatile private var active = false
 
@@ -89,6 +89,7 @@ class PrivateWebViewDisplay(
             view = original
             previousScrollX = original.scrollX
             previousScrollY = original.scrollY
+            qaFrameSequence = 0
             val width = original.width.coerceIn(64, MAX_WIDTH)
             val height = original.height.coerceIn(64, MAX_HEIGHT)
             composeRelease()
@@ -149,11 +150,20 @@ class PrivateWebViewDisplay(
                     return@withContext null
                 }
                 val images = reader ?: return@withContext null
-                // Drain preexisting frames; NEVER send a stale screenshot.
+                val current = view ?: return@withContext null
+                if (qaFrameSequence >= 20) return@withContext null
+                // Reader timestamps and SystemClock can have different timebases.
+                // A matching pixel nonce is proof of the NEW render, not a cached frame.
                 runCatching { images.acquireLatestImage()?.close() }
-                val wait = FrameWait(SystemClock.elapsedRealtimeNanos(), CompletableDeferred())
+                val expectedRgb = PrivateCaptureQaPixelProof.rgb(++qaFrameSequence)
+                val wait = FrameWait(expectedRgb, CompletableDeferred())
                 if (!pendingImage.compareAndSet(null, wait)) return@withContext null
-                view?.postInvalidateOnAnimation()
+                current.evaluateJavascript(PrivateCaptureQaPixelProof.repaintScript(expectedRgb)) { result ->
+                    if (result != "true" && pendingImage.compareAndSet(wait, null)) {
+                        wait.result.complete(null)
+                    }
+                }
+                current.postInvalidateOnAnimation()
                 wait
             } ?: return null
 
@@ -242,6 +252,7 @@ class PrivateWebViewDisplay(
         pendingImage.getAndSet(null)?.result?.cancel()
         val original = view
         if (attachedToPrivateHost) {
+            original?.evaluateJavascript(PrivateCaptureQaPixelProof.REMOVE_SCRIPT, null)
             (original?.parent as? ViewGroup)?.removeView(original)
             attachedToPrivateHost = false
         }
@@ -262,17 +273,29 @@ class PrivateWebViewDisplay(
         val image = runCatching { images.acquireLatestImage() }.getOrNull() ?: return
         try {
             val waiting = pendingImage.get() ?: return
-            if (image.timestamp <= waiting.requestedAtNs) return
+            if (!active || isLocked() || activityVisible || !waiting.result.isActive) return
+            // Ignore every stale/blank/foreign frame. Only this request's
+            // actual page-repaint pixel can complete the one-shot promise.
+            val rgb = runCatching { sampleRgb(image) }.getOrNull() ?: return
+            if (!PrivateCaptureQaPixelProof.matches(waiting.expectedRgb, rgb)) return
             if (!pendingImage.compareAndSet(waiting, null)) return
-            if (!active || isLocked() || activityVisible || !waiting.result.isActive) {
-                waiting.result.cancel()
-                return
-            }
             val bitmap = runCatching { copyImage(image) }.getOrNull()
             if (!waiting.result.complete(bitmap)) bitmap?.recycle()
         } finally {
             image.close()
         }
+    }
+
+    private fun sampleRgb(image: Image): Int {
+        require(image.width > 12 && image.height > 12)
+        val plane = image.planes.single()
+        require(plane.pixelStride == 4)
+        val offset = 12 * plane.rowStride + 12 * plane.pixelStride
+        val buffer = plane.buffer
+        require(offset + 2 < buffer.limit())
+        return ((buffer.get(offset).toInt() and 255) shl 16) or
+            ((buffer.get(offset + 1).toInt() and 255) shl 8) or
+            (buffer.get(offset + 2).toInt() and 255)
     }
 
     private fun copyImage(image: Image): Bitmap {
