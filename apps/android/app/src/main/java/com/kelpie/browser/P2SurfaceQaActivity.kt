@@ -200,7 +200,7 @@ class P2SurfaceQaActivity : Activity() {
                 }
                 view.evaluateJavascript("window.kelpieSeed(); window.kelpieProof()") { proof ->
                     if (!valid(ticket)) {
-                        stop("STALE_BEFORE_MIGRATION")
+                        stop("STALE_BEFORE_MIGRATION_" + invalidFlags(ticket))
                         return@evaluateJavascript
                     }
                     initialProof = proof
@@ -209,6 +209,24 @@ class P2SurfaceQaActivity : Activity() {
                 }
             }
         }
+    }
+
+    /** Only Boolean guard names are logged; no URLs, cookies or page data. */
+    private fun invalidFlags(ticket: Int): String {
+        val tab = store.activeTab
+        val checks =
+            listOf(
+                "RUN" to active,
+                "TICKET" to (ticket == runToken),
+                "LEASE" to gate.allows(tabId, documentVersion),
+                "TAB" to (tab?.id == tabId),
+                "VIEW" to (tab?.webView === originalWebView),
+                "DOCUMENT" to (tab?.documentVersion == documentVersion),
+                "LOADING" to (tab?.isLoading == false),
+                "TAB_URL" to (tab?.currentUrl?.startsWith(P2OfflineFixture.BASE) == true),
+                "VIEW_URL" to (tab?.webView?.url?.startsWith(P2OfflineFixture.BASE) == true),
+            )
+        return checks.filterNot { it.second }.joinToString("_") { it.first }.ifBlank { "UNKNOWN" }
     }
 
     private fun valid(ticket: Int): Boolean {
