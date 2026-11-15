@@ -45,7 +45,7 @@ internal object PrivateCaptureQaPixelProof {
                 marker.style.setProperty('background-color', '#$hex', 'important');
                 return true;
             })()
-        """.trimIndent()
+            """.trimIndent()
     }
 
     const val REMOVE_SCRIPT = "document.getElementById('__kelpie_private_qa_pixel__')?.remove()"
