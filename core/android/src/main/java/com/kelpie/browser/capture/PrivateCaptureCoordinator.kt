@@ -294,7 +294,17 @@ class PrivateCaptureCoordinator(
             val ready = renderer.start(tab.webView)
             if (!ready || !PrivateCaptureNotification.show(activity, this@PrivateCaptureCoordinator)) {
                 registry.revoke()
-                renderer.stop()
+                // An unsuccessful START runs while the Activity is already visible;
+                // there may be no future onResume() to finish restoration.
+                withContext(NonCancellable) {
+                    renderer.stop()
+                    if (renderer.state.value == PrivateWebViewDisplay.State.RESTORE_PENDING ||
+                        renderer.state.value == PrivateWebViewDisplay.State.FAILED
+                    ) {
+                        renderer.verifyRestored()
+                    }
+                    PrivateCaptureNotification.hide(activity)
+                }
                 return@withContext false
             }
             activeRequestId = requestId
