@@ -78,6 +78,7 @@ class PrivateWebViewDisplay(
     private var previousScrollY = 0
     // WebView native scroll offsets may use a different scale from CSS pixels
     // after moving between the real Activity and a private virtual display.
+    // RCA/rollback: docs/qa/EF-OPS-KELPIE-S24-P4-CSS-SCROLL-REMEDIATION-20261115.md
     private var previousCssScrollX = 0.0
     private var previousCssScrollY = 0.0
     private var qaFrameSequence = 0
