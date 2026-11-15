@@ -8,10 +8,12 @@ import androidx.activity.enableEdgeToEdge
 open class KelpieBrowserActivity : ComponentActivity() {
     private lateinit var browser: KelpieBrowserSession
 
+    protected open fun enablePrivateCaptureQa(): Boolean = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        browser = KelpieBrowserSession(this)
+        browser = KelpieBrowserSession(this, privateCaptureQaEnabled = enablePrivateCaptureQa())
         setContentView(browser.view())
     }
 
