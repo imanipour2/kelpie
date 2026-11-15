@@ -1,8 +1,8 @@
 package com.kelpie.browser.network
 
 import android.webkit.WebView
-import com.kelpie.browser.handlers.HandlerContext
 import com.kelpie.browser.capture.PrivateCaptureOperationPolicy
+import com.kelpie.browser.handlers.HandlerContext
 
 typealias RouteHandler = suspend (body: Map<String, Any?>) -> Map<String, Any?>
 
