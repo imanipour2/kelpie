@@ -97,6 +97,7 @@ class PrivateCaptureCoordinator(
                 mapOf(
                     "status" to status,
                     "renderer" to renderer.state.value.name,
+                    "qaFrameDiagnostics" to renderer.qaDiagnostics(),
                 ),
             )
         }
