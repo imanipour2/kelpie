@@ -146,7 +146,7 @@ class PrivateCaptureCoordinator(
     /** Only the native positive dialog's callback may call this function. */
     suspend fun approveOnDevice(requestId: String): Boolean =
         withContext(Dispatchers.Main.immediate) {
-            if (closed || !qaEnabled || isLocked()) {
+            if (closed || !qaEnabled || isLocked() || !PrivateCaptureNotification.canNotify(activity)) {
                 registry.revoke()
                 return@withContext false
             }
@@ -165,7 +165,7 @@ class PrivateCaptureCoordinator(
             }
             userStopped = false
             val ready = renderer.start(tab.webView)
-            if (!ready) {
+            if (!ready || !PrivateCaptureNotification.show(activity, this@PrivateCaptureCoordinator)) {
                 registry.revoke()
                 renderer.stop()
                 return@withContext false
@@ -190,6 +190,7 @@ class PrivateCaptureCoordinator(
             expiry?.cancel()
             expiry = null
             renderer.stop()
+            PrivateCaptureNotification.hide(activity)
         }
 
     fun onPause() {
@@ -215,6 +216,7 @@ class PrivateCaptureCoordinator(
         expiry?.cancel()
         expiry = null
         renderer.dispose()
+        PrivateCaptureNotification.hide(activity)
         scope.cancel()
     }
 
