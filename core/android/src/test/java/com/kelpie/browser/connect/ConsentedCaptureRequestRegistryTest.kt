@@ -199,14 +199,15 @@ class ConsentedCaptureRequestRegistryTest {
         assertTrue(approve(req.requestId))
         val start = java.util.concurrent.CountDownLatch(1)
         val done = java.util.concurrent.CountDownLatch(1)
-        val intruder = Thread {
-            start.await()
-            repeat(200) {
-                registry.revokeOwned(req.requestId, "principal-B")
-                registry.claimFrame(req.requestId, "principal-B", attempt, tab, doc, view, true, false)
+        val intruder =
+            Thread {
+                start.await()
+                repeat(200) {
+                    registry.revokeOwned(req.requestId, "principal-B")
+                    registry.claimFrame(req.requestId, "principal-B", attempt, tab, doc, view, true, false)
+                }
+                done.countDown()
             }
-            done.countDown()
-        }
         intruder.start()
         start.countDown()
         assertTrue(done.await(3, java.util.concurrent.TimeUnit.SECONDS))
