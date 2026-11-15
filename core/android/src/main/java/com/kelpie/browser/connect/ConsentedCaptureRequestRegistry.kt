@@ -50,7 +50,8 @@ class ConsentedCaptureRequestRegistry(
         documentVersion: String,
         view: Any,
     ): Prompt? {
-        if (pending != null && clock() >= pending!!.prompt.expiresAtMs) revoke()
+        val previous = pending
+        if (previous != null && clock() >= previous.prompt.expiresAtMs) revoke()
         if (pending != null || approved != null || verifiedClientId.isNullOrBlank()) return null
         if (!validId(verifiedClientId) || !validId(attemptId) || !validId(tabId) || !validId(documentVersion)) return null
         val now = clock()
