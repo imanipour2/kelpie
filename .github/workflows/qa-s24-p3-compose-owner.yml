@@ -32,7 +32,7 @@ jobs:
           set -euo pipefail
           ./gradlew --no-daemon :kelpie-browser:ktlintFormat :app:ktlintFormat -PkelpieP3VerificationProfile=true
           git -C ../.. diff --check
-          if ! git -C ../.. diff --quiet -- apps/android/app/src/main/java/com/kelpie/browser/P3ComposeQaActivity.kt apps/android/app/src/main/java/com/kelpie/browser/P3ComposeTabHost.kt apps/android/app/src/main/java/com/kelpie/browser/P3EvidenceJournal.kt; then
+          if ! git -C ../.. diff --quiet -- apps/android/app/src/main/java/com/kelpie/browser/P3ComposeQaActivity.kt apps/android/app/src/main/java/com/kelpie/browser/P3ComposeTabHost.kt apps/android/app/src/main/java/com/kelpie/browser/P3EvidenceJournal.kt apps/android/app/src/main/java/com/kelpie/browser/P3GuardSnapshot.kt apps/android/app/src/test/java/com/kelpie/browser/P3GuardSnapshotTest.kt; then
             git -C ../.. diff -- apps/android/app/src/main/java/com/kelpie/browser/P3ComposeQaActivity.kt apps/android/app/src/main/java/com/kelpie/browser/P3ComposeTabHost.kt apps/android/app/src/main/java/com/kelpie/browser/P3EvidenceJournal.kt
             echo "::error::P3 sources require committed Kotlin formatter changes"
             exit 1
@@ -44,6 +44,7 @@ jobs:
             :kelpie-browser:ktlintCheck \
             :app:ktlintCheck \
             :kelpie-browser:testDebugUnitTest \
+            :app:testDebugUnitTest \
             :app:lintDebug \
             :app:assembleDebug \
             -PkelpieP3VerificationProfile=true
