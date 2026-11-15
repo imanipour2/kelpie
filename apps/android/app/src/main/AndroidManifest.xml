@@ -42,6 +42,18 @@
         </activity>
 
 
+        <!-- P3 is an isolated Compose QA app, disabled in every normal build. -->
+        <activity
+            android:name="com.kelpie.browser.P3ComposeQaActivity"
+            android:enabled="${p3QaEnabled}"
+            android:exported="true"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
         <!-- P2 is a separate, explicitly launched debug QA package. Disabled in every normal build. -->
         <activity
             android:name="com.kelpie.browser.P2SurfaceQaActivity"

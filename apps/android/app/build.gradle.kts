@@ -24,15 +24,34 @@ android {
         versionName = "0.2.7-qa"
         buildConfigField("int", "LOCAL_HTTP_PORT", "8420")
         buildConfigField("boolean", "P2_QA_ENABLED", "false")
+        buildConfigField("boolean", "P3_QA_ENABLED", "false")
         manifestPlaceholders["p2QaEnabled"] = "false"
+        manifestPlaceholders["p3QaEnabled"] = "false"
         manifestPlaceholders["p2AppLabel"] = "Kelpie"
         manifestPlaceholders["p2NormalBrowserEnabled"] = "true"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
+    // Only the explicitly opted-in isolated P3 QA variant removes inherited
+    // browser permissions. Standard, P2 and unified builds use their own manifest.
+    sourceSets {
+        getByName("debug") {
+            if (providers.gradleProperty("kelpieP3VerificationProfile").orNull == "true") {
+                manifest.srcFile("src/p3Qa/AndroidManifest.xml")
+            }
+        }
+    }
+
     buildTypes {
         debug {
-            if (providers.gradleProperty("kelpieP2VerificationProfile").orNull == "true") {
+            if (providers.gradleProperty("kelpieP3VerificationProfile").orNull == "true") {
+                applicationIdSuffix = ".p3verify"
+                buildConfigField("int", "LOCAL_HTTP_PORT", "18451")
+                buildConfigField("boolean", "P3_QA_ENABLED", "true")
+                manifestPlaceholders["p3QaEnabled"] = "true"
+                manifestPlaceholders["p2AppLabel"] = "Kelpie P3 Compose QA"
+                manifestPlaceholders["p2NormalBrowserEnabled"] = "false"
+            } else if (providers.gradleProperty("kelpieP2VerificationProfile").orNull == "true") {
                 applicationIdSuffix = ".p2verify"
                 buildConfigField("int", "LOCAL_HTTP_PORT", "18450")
                 buildConfigField("boolean", "P2_QA_ENABLED", "true")
@@ -64,6 +83,16 @@ android {
         jvmTarget = "17"
     }
 
+    lint {
+        // P3 is a permission-free offline-only QA flavor; its launch path never
+        // executes the browser's notification helper, retained in shared sources.
+        // Suppress ONLY this unreachable legacy permission lint on P3, without
+        // re-granting POST_NOTIFICATIONS or disabling lint in normal builds.
+        if (providers.gradleProperty("kelpieP3VerificationProfile").orNull == "true") {
+            disable += "NotificationPermission"
+        }
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
@@ -88,6 +117,10 @@ android {
 }
 
 dependencies {
+    // P3 QA host composes the actual core TabWebViewContent; expose UI modules to the host.
+    implementation(platform("androidx.compose:compose-bom:2024.02.00"))
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.material3:material3")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
     implementation(project(":kelpie-browser"))
