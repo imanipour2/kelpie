@@ -1,5 +1,4 @@
 package com.kelpie.browser.ui
-
 import android.app.Activity
 import android.content.Context
 import android.webkit.WebView
@@ -41,6 +40,7 @@ import com.kelpie.browser.browser.BrowserState
 import com.kelpie.browser.browser.KeyboardObserver
 import com.kelpie.browser.browser.SessionStore
 import com.kelpie.browser.browser.TabStore
+import com.kelpie.browser.capture.PrivateCaptureCoordinator
 import com.kelpie.browser.connect.NessieConnection
 import com.kelpie.browser.device.DeviceInfo
 import com.kelpie.browser.handlers.HandlerContext
@@ -62,9 +62,11 @@ fun BrowserScreen(
     isServerRunning: Boolean,
     isMDNSAdvertising: Boolean,
     pairingCoordinator: PairApprovalCoordinator,
+    captureCoordinator: PrivateCaptureCoordinator? = null,
 ) {
     var showPairedClients by remember { mutableStateOf(false) }
     val browserState = remember { BrowserState() }
+    val captureMoved = captureCoordinator?.relinquished?.collectAsState()?.value == true
     val context = LocalContext.current
     val tabStore = remember { TabStore(context, handlerContext, browserState) }
     val tabs by tabStore.tabs.collectAsState()
@@ -210,21 +212,27 @@ fun BrowserScreen(
 
             com.kelpie.browser.connect
                 .ConnectControls(compact = true)
-            BrowserViewport(
-                tabStore,
-                browserState,
-                handlerContext,
-                tabletMobileStagePresetId,
-                onAvailablePresets = { availableTabletViewportPresets = it },
-                onScrollDirectionChange = { bottomBarCollapsed = it == ScrollDirection.DOWN },
-                onScrolled = { activeTab?.let(sampler::request) },
-                onWebViewReady = {
-                    webView = it
-                    router.webView = it
-                    handlerContext.webView = it
-                },
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-            )
+            if (!captureMoved) {
+                BrowserViewport(
+                    tabStore,
+                    browserState,
+                    handlerContext,
+                    tabletMobileStagePresetId,
+                    onAvailablePresets = { availableTabletViewportPresets = it },
+                    onScrollDirectionChange = { bottomBarCollapsed = it == ScrollDirection.DOWN },
+                    onScrolled = { activeTab?.let(sampler::request) },
+                    onWebViewReady = {
+                        webView = it
+                        router.webView = it
+                        handlerContext.webView = it
+                    },
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
+            } else {
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    androidx.compose.material3.Text("تب اصلی در نمایشگر خصوصی محدود کلپی است")
+                }
+            }
 
             if (!isScriptRecording) {
                 BottomBar(
@@ -403,18 +411,11 @@ fun BrowserScreen(
     }
 
     if (showPairedClients) {
-        ModalBottomSheet(
-            onDismissRequest = { showPairedClients = false },
-            sheetState = rememberModalBottomSheetState(),
-        ) {
-            PairedClientsScreen(
-                coordinator = pairingCoordinator,
-                onBack = { showPairedClients = false },
-            )
-        }
+        PairedClientsSheet(coordinator = pairingCoordinator, onDismiss = { showPairedClients = false })
     }
 
     PairingDialog(coordinator = pairingCoordinator)
+    captureCoordinator?.let { PrivateCaptureConsentDialog(it, tabStore) }
 
     LaunchedEffect(showSettings, pendingWelcomeFromHelp) {
         if (!showSettings && pendingWelcomeFromHelp) {

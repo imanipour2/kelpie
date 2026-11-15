@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="p4_capture_title">تأیید تصویربرداری موقت کلپی</string>
+    <string name="p4_capture_disclosure">کلاینت احرازشده: %1$s\nدرخواست: %2$s\nسایت: %3$s\n\nآیا اجازه می‌دهید فقط از همین تب کلپی، حداکثر ۲۰ تصویر تازه در ۹۰ ثانیه گرفته شود؟ تصویربرداری از برنامه‌های دیگر ممکن نیست. بازگشت به کلپی، توقف، خاموشی صفحه، انقضا یا قفل دستگاه بلافاصله مجوز را باطل می‌کند. دکمه توقف در دسترس خواهد بود. محتوای حساس صفحه ممکن است در تصویر دیده شود.</string>
+    <string name="p4_capture_approve">تأیید و شروع</string>
+    <string name="p4_capture_cancel">لغو</string>
+    <string name="p4_capture_stop">توقف فوری تصویربرداری</string>
+    <string name="p4_capture_error_title">تصویربرداری تأیید نشد</string>
+    <string name="p4_capture_error_expired">درخواست منقضی شد یا هویت تب تغییر کرد؛ مجوزی صادر نشد.</string>
+    <string name="p4_capture_error_notification">برای نمایش کنترل توقف، مجوز اعلان اندروید الزامی است.</string>
+    <string name="p4_capture_error_denied">مجوز تصویربرداری صادر نشد؛ نشست یا اعلان معتبر نیست.</string>
+    <string name="p4_capture_dismiss">بستن</string>
+    <string name="p4_capture_unknown_site">سایت نامشخص</string>
+    <string name="p4_capture_notification_channel">تصویربرداری موقت کلپی</string>
+    <string name="p4_capture_notification_title">تصویربرداری کلپی فعال است</string>
+    <string name="p4_capture_notification_description">برای ابطال فوری نشست محدود، «توقف» را انتخاب کنید.</string>
+    <string name="p4_capture_notification_stop">توقف</string>
+</resources>

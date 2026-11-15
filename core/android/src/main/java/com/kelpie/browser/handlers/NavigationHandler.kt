@@ -122,7 +122,10 @@ class NavigationHandler(
         )
     }
 
-    private fun mayNavigate(): Boolean = ctx.remoteDocumentGuard?.invoke() != false && ctx.remoteNavigationStart?.invoke() != false
+    private fun mayNavigate(): Boolean =
+        ctx.privateCaptureRestricted?.invoke() != true &&
+            ctx.remoteDocumentGuard?.invoke() != false &&
+            ctx.remoteNavigationStart?.invoke() != false
 
     private suspend fun navigationState(script: String): Map<String, Any?> = if (ctx.remoteNavigationReadGuard != null) ctx.navigationSnapshot() else ctx.evaluateJSReturningJSON(script)
 

@@ -111,7 +111,7 @@ class HTTPServer(
                         when (val decision = middleware.evaluate(parsed)) {
                             is AuthDecision.Reject -> respondReject(call, decision)
                             AuthDecision.Unauthenticated -> respondReject(call, AuthDecision.Reject(401, "UNAUTHORIZED", "Authentication required"))
-                            is AuthDecision.Authenticated -> handleAuthenticatedPost(call, "mcp")
+                            is AuthDecision.Authenticated -> handleAuthenticatedPost(call, decision, "mcp")
                         }
                     }
                     get("/mcp") {
@@ -224,7 +224,7 @@ class HTTPServer(
                                         call,
                                         AuthDecision.Reject(401, "UNAUTHORIZED", "Authentication required"),
                                     )
-                                is AuthDecision.Authenticated -> handleAuthenticatedPost(call)
+                                is AuthDecision.Authenticated -> handleAuthenticatedPost(call, decision)
                             }
                         }
                     }
@@ -265,8 +265,11 @@ class HTTPServer(
 
     private suspend fun handleAuthenticatedPost(
         call: ApplicationCall,
+        principal: AuthDecision.Authenticated,
         overrideMethod: String? = null,
     ) {
+        // User-scoped control, DOM, frames and pairing responses must never be cached.
+        call.response.header("Cache-Control", "no-store")
         // Validate Content-Length BEFORE reading the body to ensure a single
         // malicious multi-GB POST never gets buffered. Missing Content-Length
         // on POST is rejected.
@@ -323,7 +326,10 @@ class HTTPServer(
             )
             return
         }
-        val (status, result) = router.handle(method, body)
+        val (status, result) =
+            kotlinx.coroutines.withContext(AuthenticatedClientContext.fromVerifiedDecision(principal)) {
+                router.handle(method, body)
+            }
         if (method == "mcp" && status == 200 && result.isEmpty()) {
             call.respondText("", status = HttpStatusCode.Accepted)
             return

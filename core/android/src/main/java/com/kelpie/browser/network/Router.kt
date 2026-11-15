@@ -1,6 +1,7 @@
 package com.kelpie.browser.network
 
 import android.webkit.WebView
+import com.kelpie.browser.capture.PrivateCaptureOperationPolicy
 import com.kelpie.browser.handlers.HandlerContext
 
 typealias RouteHandler = suspend (body: Map<String, Any?>) -> Map<String, Any?>
@@ -39,6 +40,15 @@ class Router {
         bypassRecordingGate: Boolean = false,
         fromGateway: Boolean = false,
     ): Pair<Int, Map<String, Any?>> {
+        val privateOwnerAtAdmission = handlerContext?.privateCaptureRestricted?.invoke() == true
+        if (!PrivateCaptureOperationPolicy.permits(
+                method,
+                privateOwnerAtAdmission,
+                outerEnvelope = true,
+            )
+        ) {
+            return 403 to errorResponse("PERMISSION_REQUIRED", "Private WebView capture owns the browser")
+        }
         val gateway = browserGateway
         if (gateway != null && !fromGateway && !bypassRecordingGate && method !in setOf("browser-control", "mcp", "ai-infer", "ai-record", "ai-cancel", "abort-script", "get-script-status")) {
             return gateway.legacy(method) { handle(method, body, bypassRecordingGate, fromGateway = true) }
@@ -57,6 +67,18 @@ class Router {
             }
         }
         val result = handler(body)
+        // A command admitted before P4 may not leak stale DOM/screenshot data
+        // after transfer. Existing private-envelope calls are allowed through
+        // only if Gateway/MCPSession has independently checked their inner method.
+        val privateOwnerAtDelivery = handlerContext?.privateCaptureRestricted?.invoke() == true
+        if (!PrivateCaptureOperationPolicy.permitsDelivery(
+                method,
+                privateOwnerAtAdmission,
+                privateOwnerAtDelivery,
+            )
+        ) {
+            return 403 to errorResponse("PERMISSION_REQUIRED", "Private WebView capture owns the browser")
+        }
         val success = result["success"] as? Boolean ?: false
         val errorCode = (result["error"] as? Map<*, *>)?.get("code") as? String
         val status =
@@ -71,7 +93,7 @@ class Router {
             }
 
         val message = body["message"] as? String
-        if (message != null) {
+        if (message != null && handlerContext?.privateCaptureRestricted?.invoke() != true) {
             handlerContext?.showToast(message)
         }
 

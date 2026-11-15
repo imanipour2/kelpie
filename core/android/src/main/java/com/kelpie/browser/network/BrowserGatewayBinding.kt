@@ -2,6 +2,7 @@ package com.kelpie.browser.network
 
 import com.kelpie.browser.ai.openai.AgentBrowserPolicy
 import com.kelpie.browser.ai.openai.OpenAIJson
+import com.kelpie.browser.capture.PrivateCaptureOperationPolicy
 import com.kelpie.browser.handlers.HandlerContext
 import com.kelpie.browser.nativecore.BrowserGatewayNative
 import kotlinx.coroutines.Dispatchers
@@ -101,7 +102,11 @@ class BrowserGatewayBinding(
         allowActions: Boolean,
         pinned: String?,
     ): Boolean =
-        ctx.scriptPlaybackState?.recordingError(request["method"] as? String ?: "browser-control") == null &&
+        PrivateCaptureOperationPolicy.permits(
+            request["method"] as? String ?: "",
+            ctx.privateCaptureRestricted?.invoke() == true,
+        ) &&
+            ctx.scriptPlaybackState?.recordingError(request["method"] as? String ?: "browser-control") == null &&
             BrowserGatewayTabPolicy.permits(
                 request,
                 mutates,
@@ -143,6 +148,9 @@ class BrowserGatewayBinding(
         action: suspend () -> T,
     ): T =
         withBrowserGatewayLease(lock, ctx.browserRetirement) {
+            check(PrivateCaptureOperationPolicy.permits(method, ctx.privateCaptureRestricted?.invoke() == true)) {
+                "Private WebView capture owns the browser"
+            }
             // Methods outside the admitted read catalogue can mutate; invalidate conservatively before dispatch.
             if (method !in READ_METHODS) sessions.forEach { it.invalidateLocked() }
             // Legacy HTTP calls arrive on a server thread, unlike canonical
@@ -165,6 +173,9 @@ class BrowserGatewayBinding(
         pinned: String?,
     ): Map<String, Any?> =
         withContext(Dispatchers.Main.immediate) {
+            if (!PrivateCaptureOperationPolicy.permits(method, ctx.privateCaptureRestricted?.invoke() == true)) {
+                return@withContext errorResponse("PERMISSION_REQUIRED", "Private WebView capture owns the browser")
+            }
             val store = ctx.tabStore
             val boundary = BrowserGatewayDispatch({ store?.activeTabId?.value ?: "0" }, { if (store == null) ctx.webView else store.activeTab?.webView })
             boundary.execute(method, params, pinned) { view ->
@@ -184,6 +195,9 @@ class BrowserGatewayBinding(
         method: String,
         params: Map<String, Any?>,
     ): Map<String, Any?> {
+        if (!PrivateCaptureOperationPolicy.permits(method, ctx.privateCaptureRestricted?.invoke() == true)) {
+            return errorResponse("PERMISSION_REQUIRED", "Private WebView capture owns the browser")
+        }
         if (method != "browser-control-evaluate") return router.handle(method, params, fromGateway = true).second
         val expression = params["expression"] as? String ?: error("Missing fixed reader")
         if (ctx.webView == null) return errorResponse("NO_WEBVIEW", "No WebView")
@@ -198,6 +212,9 @@ class BrowserGatewayBinding(
     /** Captures an owned renderer without changing the visible tab; only the fixed common reader is admitted. */
     suspend fun contextSnapshot(tabId: String?): Map<String, Any?> =
         withContext(Dispatchers.Main.immediate) {
+            if (ctx.privateCaptureRestricted?.invoke() == true) {
+                return@withContext errorResponse("PERMISSION_REQUIRED", "Private WebView capture owns the browser")
+            }
             val store = ctx.tabStore
             val target = tabId ?: store?.activeTabId?.value ?: "0"
             val view =
@@ -212,7 +229,9 @@ class BrowserGatewayBinding(
                 }
             if (view == null) return@withContext errorResponse("TAB_NOT_FOUND", "The context tab is unavailable")
 
-            fun owned(): Boolean = if (store == null) ctx.webView === view else store.tabs.value.any { it.id == target && it.webView === view }
+            fun owned(): Boolean =
+                ctx.privateCaptureRestricted?.invoke() != true &&
+                    (if (store == null) ctx.webView === view else store.tabs.value.any { it.id == target && it.webView === view })
             val gateway =
                 BrowserGatewaySession(
                     mapOf(

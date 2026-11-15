@@ -37,6 +37,14 @@ class ConnectBrowser(
     }
 
     suspend fun execute(command: Map<String, Any?>): Map<String, Any?> {
+        if (!com.kelpie.browser.capture.PrivateCaptureOperationPolicy.permits(
+                command["operation"] as? String ?: "",
+                context.privateCaptureRestricted?.invoke() == true,
+            )
+        ) {
+            return com.kelpie.browser.network
+                .errorResponse("PERMISSION_REQUIRED", "Private WebView capture owns the browser")
+        }
         if (command["operation"] == "open") {
             val gateway = context.browserGateway
             if (gateway != null) return gateway.legacy("new-tab") { executeBrowser(command) }
