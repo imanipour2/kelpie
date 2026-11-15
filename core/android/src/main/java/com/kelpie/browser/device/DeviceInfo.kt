@@ -27,8 +27,9 @@ data class DeviceInfo(
         ): DeviceInfo {
             val id = DeviceIdentity.getOrCreate(context)
             val userId = AndroidProfilePort.userId(Process.myUid())
-            val name = "${Build.MANUFACTURER} ${Build.MODEL}".trim() +
-                if (userId == 0) "" else " (Android profile)"
+            val name =
+                "${Build.MANUFACTURER} ${Build.MODEL}".trim() +
+                    if (userId == 0) "" else " (Android profile)"
             val model = Build.MODEL
 
             val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
