@@ -12,19 +12,19 @@ import androidx.core.content.ContextCompat
 import com.kelpie.browser.connect.ConsentedCaptureLease
 import com.kelpie.browser.connect.ConsentedCaptureRequestRegistry
 import com.kelpie.browser.handlers.HandlerContext
-import com.kelpie.browser.network.errorResponse
 import com.kelpie.browser.network.Router
+import com.kelpie.browser.network.errorResponse
 import com.kelpie.browser.network.successResponse
 import com.kelpie.browser.network.verifiedClientId
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 
