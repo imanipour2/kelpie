@@ -318,7 +318,7 @@ class PrivateWebViewDisplay(
         require(image.width > 12 && image.height > 12)
         val plane = image.planes.single()
         require(plane.pixelStride == 4)
-        val offset = 12 * plane.rowStride + 12 * plane.pixelStride
+        val offset = (image.height / 2) * plane.rowStride + (image.width / 2) * plane.pixelStride
         val buffer = plane.buffer
         require(offset + 2 < buffer.limit())
         return ((buffer.get(offset).toInt() and 255) shl 16) or
