@@ -45,4 +45,22 @@ class PrivateCaptureOperationPolicyTest {
         assertFalse(PrivateCaptureOperationPolicy.permits("mcp", true))
         assertFalse(PrivateCaptureOperationPolicy.permits("tab.screenshot", true, outerEnvelope = true))
     }
+
+    @Test fun staleEnvelopeIsDiscardedAfterLocalConsent() {
+        assertFalse(PrivateCaptureOperationPolicy.permitsDelivery("mcp", false, true))
+        assertFalse(PrivateCaptureOperationPolicy.permitsDelivery("browser-control", false, true))
+        assertFalse(PrivateCaptureOperationPolicy.permitsDelivery("screenshot", false, true))
+    }
+
+    @Test fun alreadyPrivateEnvelopeRequiresInnerAdmission() {
+        assertTrue(PrivateCaptureOperationPolicy.permitsDelivery("mcp", true, true))
+        assertTrue(PrivateCaptureOperationPolicy.permitsDelivery("browser-control", true, true))
+        assertFalse(PrivateCaptureOperationPolicy.permitsDelivery("screenshot", true, true))
+        assertTrue(PrivateCaptureOperationPolicy.permitsDelivery("capture-session-frame", true, true))
+    }
+
+    @Test fun disabledP4DoesNotChangeNormalBrowserTransport() {
+        assertTrue(PrivateCaptureOperationPolicy.permitsDelivery("mcp", false, false))
+        assertTrue(PrivateCaptureOperationPolicy.permitsDelivery("screenshot", false, false))
+    }
 }
