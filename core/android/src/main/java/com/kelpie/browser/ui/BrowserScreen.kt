@@ -411,15 +411,7 @@ fun BrowserScreen(
     }
 
     if (showPairedClients) {
-        ModalBottomSheet(
-            onDismissRequest = { showPairedClients = false },
-            sheetState = rememberModalBottomSheetState(),
-        ) {
-            PairedClientsScreen(
-                coordinator = pairingCoordinator,
-                onBack = { showPairedClients = false },
-            )
-        }
+        PairedClientsSheet(coordinator = pairingCoordinator, onDismiss = { showPairedClients = false })
     }
 
     PairingDialog(coordinator = pairingCoordinator)
