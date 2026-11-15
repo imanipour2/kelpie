@@ -266,9 +266,9 @@ class PrivateWebViewDisplay(
             if (stateFlow.value != State.RESTORE_PENDING && stateFlow.value != State.FAILED) return@withContext false
             val original =
                 view ?: run {
-                stateFlow.value = State.IDLE
-                return@withContext true
-            }
+                    stateFlow.value = State.IDLE
+                    return@withContext true
+                }
             val attached =
                 withTimeoutOrNull(RELEASE_TIMEOUT_MS) {
                     while (!original.isAttachedToWindow) delay(100)
