@@ -76,7 +76,6 @@ class P3ComposeQaActivity : ComponentActivity() {
         check(BuildConfig.P3_QA_ENABLED && packageName == "com.kelpie.browser.p3verify") {
             "P3 Compose hardware QA is unavailable in the normal browser"
         }
-        // This is a separate package, but clear its OWN synthetic URL session on launch.
         SessionStore.clear(this)
         HomeStore.init(this)
         HistoryStore.init(this)
@@ -136,6 +135,10 @@ class P3ComposeQaActivity : ComponentActivity() {
     }
 
     private fun start() {
+        if (migrated || restoring || active) {
+            status.text = "Finish previous run via Restore or STOP first."
+            return
+        }
         stop("RESTART")
         runToken++
         val ticket = runToken
@@ -161,12 +164,10 @@ class P3ComposeQaActivity : ComponentActivity() {
             stop("COMPOSE_MOUNT_MISSING")
             return
         }
-        // No network requests even if a malformed fixture introduces subresources.
         view.settings.blockNetworkLoads = true
         view.settings.allowFileAccess = false
         view.settings.allowContentAccess = false
         view.settings.javaScriptEnabled = true
-        // Keep this view attached to the real Compose AndroidView until release().
         tab.isStartPage = false
         view.loadDataWithBaseURL(
             P2OfflineFixture.BASE,
@@ -206,10 +207,7 @@ class P3ComposeQaActivity : ComponentActivity() {
             if (value != "true" || tab.isLoading) {
                 main.postDelayed({ awaitFixture(ticket, attempt + 1) }, 200)
             } else {
-                // The offline fixture origin was verified in the actual page realm.
-                // Android URL readbacks may not equal loadDataWithBaseURL's document origin.
                 fixtureVerified = true
-                // Preserve the genuine TabStore WebViewClient, including its documentVersion.
                 documentVersion = tab.documentVersion
                 if (!gate.begin(tab.id, documentVersion)) {
                     stop("LEASE_FAILED")
@@ -260,7 +258,6 @@ class P3ComposeQaActivity : ComponentActivity() {
             return
         }
         val view = webView ?: return
-        // The real production AndroidView must release the original WebView first.
         if (composeHost.ownsCompose || view.isAttachedToWindow) {
             if (attempt < 16) {
                 main.postDelayed({ migrate(ticket, attempt + 1) }, 100)
@@ -294,7 +291,6 @@ class P3ComposeQaActivity : ComponentActivity() {
                         image.close()
                     }
                 } catch (_: RuntimeException) {
-                    // A stopped/closed ImageReader may race with the callback.
                 }
             }, Handler(thread.looper))
             val privateDisplay =
@@ -325,6 +321,10 @@ class P3ComposeQaActivity : ComponentActivity() {
         ticket: Int,
         sequence: Int,
     ) {
+        if (sequence == 1 && visible && valid(ticket) && !locked()) {
+            main.postDelayed({ step(ticket, sequence) }, 350)
+            return
+        }
         if (!valid(ticket) || locked() || !gate.claim(sequence, tabId, documentVersion)) {
             stop("STEP_GUARD_FAILED")
             return
@@ -464,11 +464,6 @@ class P3ComposeQaActivity : ComponentActivity() {
         gate.cancel()
         fixtureVerified = false
         val view = originalWebView
-        // A fresh consent calls stop("RESTART") before any migration.
-        // Never detach a WebView that is still owned by the real Compose
-        // AndroidView. Doing so leaves Compose's remembered installed view
-        // unchanged and prevents the next consent from mounting it again.
-        // Only an already-migrated Presentation owns a view we may detach here.
         if (migrated) {
             (view?.parent as? ViewGroup)?.removeView(view)
         }
