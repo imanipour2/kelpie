@@ -3,7 +3,7 @@ name: S24 P3 Compose WebView Ownership QA
 on:
   push:
     branches:
-      - experiment/s24-p2-real-tab-surface-qa-20261115
+      - experiment/s24-p3-compose-owner-qa-20261115
   workflow_dispatch:
 
 concurrency:
@@ -33,7 +33,7 @@ jobs:
           ./gradlew --no-daemon :kelpie-browser:ktlintFormat :app:ktlintFormat -PkelpieP3VerificationProfile=true
           git -C ../.. diff --check
           if ! git -C ../.. diff --quiet -- apps/android/app/src/main/java/com/kelpie/browser/P3ComposeQaActivity.kt apps/android/app/src/main/java/com/kelpie/browser/P3ComposeTabHost.kt apps/android/app/src/main/java/com/kelpie/browser/P3EvidenceJournal.kt; then
-            git -C ../.. diff -- core/android/src/main/java/com/kelpie/browser/qa core/android/src/test/java/com/kelpie/browser/qa apps/android/app/src/main/java/com/kelpie/browser/P2SurfaceQaActivity.kt
+            git -C ../.. diff -- apps/android/app/src/main/java/com/kelpie/browser/P3ComposeQaActivity.kt apps/android/app/src/main/java/com/kelpie/browser/P3ComposeTabHost.kt apps/android/app/src/main/java/com/kelpie/browser/P3EvidenceJournal.kt
             echo "::error::P3 sources require committed Kotlin formatter changes"
             exit 1
           fi
