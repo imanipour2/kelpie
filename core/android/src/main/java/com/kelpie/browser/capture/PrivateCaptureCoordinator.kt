@@ -259,13 +259,17 @@ class PrivateCaptureCoordinator(
             val requestId =
                 body["requestId"] as? String
                     ?: return@register errorResponse("INVALID_PARAMS", "requestId required")
-            val owned = registry.revokeOwned(requestId, client)
-            val activeOwned = activeRequestId == requestId && activeClientId == client
-            if (!owned && !activeOwned) {
-                return@register errorResponse("PERMISSION_REQUIRED", "Unknown capture for this client")
+            // Principal and generation comparison are serialized with local
+            // approval on Main; a stale STOP cannot interrupt a replacement.
+            withContext(Dispatchers.Main.immediate) {
+                val owned = registry.revokeOwned(requestId, client)
+                val activeOwned = activeRequestId == requestId && activeClientId == client
+                if (!owned && !activeOwned) {
+                    return@withContext errorResponse("PERMISSION_REQUIRED", "Unknown capture for this client")
+                }
+                stopByUser()
+                successResponse(mapOf("stopped" to true))
             }
-            stopByUser()
-            successResponse(mapOf("stopped" to true))
         }
     }
 
