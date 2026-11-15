@@ -415,7 +415,7 @@ class P3ComposeQaActivity : ComponentActivity() {
             stop("COMPOSE_REATTACH_TIMEOUT")
             return
         }
-        view.evaluateJavascript("window.kelpieProof()") { proof ->
+        view.evaluateJavascript(P3ScrollRestore.script(initialProof)) { proof ->
             if (!restoring || runToken != token) return@evaluateJavascript
             val ok = identity && proof == initialProof && frames == 20 && passed == 20
             write("RESTORE_VERDICT", 0, null, ok, proof)
