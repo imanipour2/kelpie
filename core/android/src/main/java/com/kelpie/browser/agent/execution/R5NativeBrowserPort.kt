@@ -7,6 +7,7 @@ import com.kelpie.browser.agent.contract.Operation
 import com.kelpie.browser.capture.PrivateWebViewDisplay
 import com.kelpie.browser.handlers.HandlerContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -68,6 +69,42 @@ internal class R5NativeBrowserPort(
                             ?: return@withContext AdapterOutcome.Failed
                         Pair(json, mapOf("kind" to "dom", "snapshotJson" to json))
                     }
+                    Operation.NAVIGATE -> {
+                        val requested = command.targetUrl ?: return@withContext AdapterOutcome.Failed
+                        view.loadUrl(requested)
+                        val committed =
+                            withTimeoutOrNull(12_000L) {
+                                while (view.url?.substringBefore("#") != requested.substringBefore("#")) {
+                                    delay(80)
+                                }
+                                true
+                            } ?: false
+                        if (!committed) return@withContext AdapterOutcome.Uncertain
+                        Pair(requested, mapOf("kind" to "navigate"))
+                    }
+                    Operation.CLICK -> {
+                        val selector = command.selector ?: return@withContext AdapterOutcome.Failed
+                        val previousUrl = view.url.orEmpty()
+                        val outcome = evaluate(view, R5WebViewActionScripts.click(selector))
+                        if (outcome != "\"DISPATCHED\"") return@withContext AdapterOutcome.Failed
+                        Pair(previousUrl, mapOf("kind" to "click", "mayHaveCompleted" to true))
+                    }
+                    Operation.FILL, Operation.TYPE -> {
+                        val selector = command.selector ?: return@withContext AdapterOutcome.Failed
+                        val text = command.inputText ?: return@withContext AdapterOutcome.Failed
+                        if (evaluate(view, R5WebViewActionScripts.fill(selector, text)) != "true") {
+                            return@withContext AdapterOutcome.Failed
+                        }
+                        Pair(null, mapOf("kind" to "fill"))
+                    }
+                    Operation.SCROLL -> {
+                        val beforeScroll = evaluate(view, R5WebViewActionScripts.SCROLL)
+                            ?: return@withContext AdapterOutcome.Failed
+                        if (evaluate(view, R5WebViewActionScripts.scroll(command.scrollDeltaX, command.scrollDeltaY)) != "true") {
+                            return@withContext AdapterOutcome.Failed
+                        }
+                        Pair(beforeScroll, mapOf("kind" to "scroll"))
+                    }
                     Operation.SCREENSHOT -> {
                         // Only the app's private virtual display supplies hidden frames.
                         // Foreground/system or other-app capture is never a fallback.
@@ -97,9 +134,26 @@ internal class R5NativeBrowserPort(
                 proof = null
                 return@withContext false
             }
-            // The adapter additionally checks consent, epoch and exact host at
-            // delivery; a read is independently proved by a real live target.
-            actualTarget(after.tabId) == after
+            // Independently read current effect; a DOM/script callback alone
+            // cannot claim a remote mutation has succeeded.
+            val live = ctx.tabStore?.activeTab ?: return@withContext false
+            if (actualTarget(after.tabId) != after) return@withContext false
+            when (command.operation) {
+                Operation.NAVIGATE -> live.webView.url?.substringBefore("#") == recorded.expected?.substringBefore("#")
+                Operation.FILL, Operation.TYPE -> {
+                    val selector = command.selector ?: return@withContext false
+                    val input = command.inputText ?: return@withContext false
+                    evaluate(live.webView, R5WebViewActionScripts.verifyFill(selector, input)) == "true"
+                }
+                Operation.SCROLL -> {
+                    val final = evaluate(live.webView, R5WebViewActionScripts.SCROLL)
+                    final != null && final != recorded.expected
+                }
+                Operation.CLICK -> live.webView.url != recorded.expected || before.documentEpoch != after.documentEpoch
+                Operation.SCREENSHOT -> privateRenderer.canDeliverFrame()
+                Operation.READ_DOM -> recorded.expected?.isNotBlank() == true
+                else -> false
+            }
         }
 
     /** Called only after a VERIFIED_EFFECT receipt and final grant recheck. */
