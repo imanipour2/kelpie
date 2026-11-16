@@ -41,7 +41,7 @@ import java.util.UUID
  *
  * Pure command admission and result transport are in a separate file.
  */
-internal class R5AgentCoordinator(
+class R5AgentCoordinator(
     private val activity: ComponentActivity,
     private val ctx: HandlerContext,
 ) {
@@ -110,6 +110,8 @@ internal class R5AgentCoordinator(
             }
         }
     }
+
+    fun isReady(): Boolean = !closed && ready
 
     /** A single authenticated command ingress for HTTP and validated MCP envelopes. */
     fun register(router: Router) {
