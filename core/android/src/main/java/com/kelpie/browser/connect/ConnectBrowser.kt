@@ -37,19 +37,27 @@ class ConnectBrowser(
     }
 
     suspend fun execute(command: Map<String, Any?>): Map<String, Any?> {
-        if (!com.kelpie.browser.capture.PrivateCaptureOperationPolicy.permits(
-                command["operation"] as? String ?: "",
-                context.privateCaptureRestricted?.invoke() == true,
-            )
-        ) {
+        fun admitted() = com.kelpie.browser.capture.PrivateCaptureOperationPolicy.permits(
+            command["operation"] as? String ?: "",
+            context.privateCaptureRestricted?.invoke() == true,
+        )
+        if (!admitted()) {
             return com.kelpie.browser.network
                 .errorResponse("PERMISSION_REQUIRED", "Private WebView capture owns the browser")
         }
-        if (command["operation"] == "open") {
-            val gateway = context.browserGateway
-            if (gateway != null) return gateway.legacy("new-tab") { executeBrowser(command) }
+        // An operation can be admitted before a native P4 consent arrives.
+        // Its response must be re-admitted after all suspensions, like Router.handle.
+        val result =
+            if (command["operation"] == "open" && context.browserGateway != null) {
+                context.browserGateway!!.legacy("new-tab") { executeBrowser(command) }
+            } else {
+                executeBrowser(command)
+            }
+        if (!admitted()) {
+            return com.kelpie.browser.network
+                .errorResponse("PERMISSION_REQUIRED", "Private WebView capture owns the browser")
         }
-        return executeBrowser(command)
+        return result
     }
 
     private suspend fun executeBrowser(command: Map<String, Any?>): Map<String, Any?> {
@@ -64,7 +72,10 @@ class ConnectBrowser(
         if (operation == "open") {
             check(context.scriptPlaybackState?.recordingError("new-tab") == null) { "Recording is in progress" }
             val store = context.tabStore ?: error("Browser unavailable")
-            val tab = NessieConnection.changeTabRemotely { store.addTab(webUrl(input["url"])) }
+            val tab = NessieConnection.changeTabRemotely {
+                check(context.privateCaptureRestricted?.invoke() != true) { "Private WebView capture owns the browser" }
+                store.addTab(webUrl(input["url"]))
+            }
             NessieConnection.claimTab(tab.id)
             settle(tab.id)
             return mapOf("tabId" to tab.id, "tabVersion" to version(tab.id), "tabs" to tabs())
@@ -77,6 +88,7 @@ class ConnectBrowser(
         val select: suspend () -> Unit = {
             currentCoroutineContext().ensureActive()
             check(authority(command)) { "Job authority changed" }
+            check(context.privateCaptureRestricted?.invoke() != true) { "Private WebView capture owns the browser" }
             verify(tabId, expected)
             NessieConnection.changeTabRemotely { store.selectTab(tabId) }
             NessieConnection.claimTab(tabId)
@@ -88,8 +100,12 @@ class ConnectBrowser(
             HandlerContext(context.browserRetirement).apply {
                 webView = tab.webView
                 scriptPlaybackState = context.scriptPlaybackState
+                // The job's isolated HandlerContext must inherit P4's live
+                // capture restriction, not just the original entrypoint check.
+                privateCaptureRestricted = { context.privateCaptureRestricted?.invoke() == true }
                 remoteDocumentGuard = {
-                    coroutine[kotlinx.coroutines.Job]?.isActive == true &&
+                    context.privateCaptureRestricted?.invoke() != true &&
+                        coroutine[kotlinx.coroutines.Job]?.isActive == true &&
                         authority(command) &&
                         store.tabs.value.any { it === tab } &&
                         tab.documentVersion == expected &&
@@ -154,7 +170,10 @@ class ConnectBrowser(
             }
         val lease = ConnectNavigationLease(expected, destination)
 
-        fun authorized() = authority(command) && context.tabStore?.activeTab?.id == tab.id
+        fun authorized() =
+            context.privateCaptureRestricted?.invoke() != true &&
+                authority(command) &&
+                context.tabStore?.activeTab?.id == tab.id
         isolated.remoteNavigationStart = { lease.arm(tab.documentVersion, authorized()) }
         isolated.remoteNavigationReadGuard = { lease.allowsRead(tab.documentVersion, tab.isLoading, authorized()) }
         isolated.remoteNavigationWaitGuard = { lease.allowsWait(tab.documentVersion, authorized()) }
