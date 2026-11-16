@@ -128,4 +128,29 @@ class AgentConsentPolicyTest {
         assertEquals(active, session.snapshot())
         assertTrue(active.generation.isNotBlank())
     }
+    @Test
+    fun fiftyApprovedCoreCyclesRequireUniqueGenerationAndExplicitStop() {
+        val session = SessionConsentCore({ 100L })
+        val generations = mutableSetOf<String>()
+        repeat(50) {
+            assertEquals(SessionConsentCore.State.Off, session.snapshot())
+            val pending = session.requestNativeConsent("paired")!!
+            assertNull(session.requestNativeConsent("other-client"))
+            assertNull(session.approveFromNativeUi("forged-prompt", true))
+            val active = session.approveFromNativeUi(pending.promptId, true)!!
+            assertTrue(generations.add(active.generation))
+            assertEquals("paired", active.principalId)
+            session.setDeviceLocked(true)
+            assertTrue((session.snapshot() as SessionConsentCore.State.Active).locked)
+            session.setDeviceLocked(false)
+            val resumed = session.snapshot() as SessionConsentCore.State.Active
+            assertEquals(active.generation, resumed.generation)
+            assertEquals(2L, resumed.safetyEpoch)
+            session.stop()
+            assertEquals(SessionConsentCore.State.Off, session.snapshot())
+            assertNull(session.approveFromNativeUi(pending.promptId, true))
+        }
+        assertEquals(50, generations.size)
+    }
+
 }
