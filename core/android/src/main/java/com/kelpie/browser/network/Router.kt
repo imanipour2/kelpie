@@ -16,6 +16,9 @@ class Router {
     /** Isolated R5 consent QA never accepts legacy remote browser operations. */
     var consentOnlyQa = false
 
+    /** Opt-in isolated R5 read-only pilot; all legacy mutators remain denied. */
+    var agentObservationQa = false
+
     /** Snapshot of currently-registered method names. */
     val registeredMethods: Set<String>
         get() = routes.keys.toSet()
@@ -45,7 +48,10 @@ class Router {
     ): Pair<Int, Map<String, Any?>> {
         // This QA build has no real agent browser-action authorization adapter.
         // Reject legacy routes, including nested MCP and any gateway bypass.
-        if (consentOnlyQa && method !in CONSENT_QA_METHODS) {
+        if (consentOnlyQa &&
+            method !in CONSENT_QA_METHODS &&
+            !(agentObservationQa && method in OBSERVATION_QA_METHODS)
+        ) {
             return 403 to errorResponse("PERMISSION_REQUIRED", "R5 QA permits consent/status/STOP only")
         }
         val privateOwnerAtAdmission = handlerContext?.privateCaptureRestricted?.invoke() == true
@@ -111,6 +117,10 @@ class Router {
     companion object {
         private val CONSENT_QA_METHODS =
             setOf("agent-session-request", "agent-session-status", "agent-session-stop", "get-device-info")
+
+        // MCP is a transport, not an authority. Every inner method still
+        // passes this same Router gate and its verified-client context.
+        private val OBSERVATION_QA_METHODS = setOf("agent-observe", "mcp")
     }
 
     fun registerFallbacks() {
