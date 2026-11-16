@@ -32,3 +32,10 @@ At pinned P4 source, Android `ConsentedCaptureRequestRegistry` already returns `
 - P4 remains a Draft stacked dependency; this PR targets the P4 branch (not `main`) to avoid promoting unaccepted P4 code. Never merge into `main` until owner decisions, Apple parity and hardware gates are cleared.
 - Do not confuse this correction with the laptop-only Agent Runtime R5 HEAD `0a49477b0bd584b7ae17474d0e0abf3913187f19`; it is separately unpushed.
 - No WordPress TEST/STAGING/LIVE changes. `SYNC_BLOCKED_MAIN / RELEASE_NO_GO` until complete applicable acceptance and separate approvals.
+
+## Device-free automated XCTest gate (added on this review branch)
+
+- `.github/workflows/qa-p4-apple-consent.yml` runs a dedicated `macos-15` PR job when these Apple consent production/test files or its own harness change.
+- `scripts/qa/test-p4-apple-consent.sh` creates a temporary Swift Package using **copies of the exact four repository files**: two `core/apple/shared/Browser/ConsentedCapture*.swift` sources and two `apps/macos/Tests/ConsentedCapture*Tests.swift` files. It invokes `swift test` and fails if its log lacks **9 executed XCTest cases with zero failures**. The temporary package is deleted at exit; no vendored sources, generated files or binaries are committed.
+- This proves only the Apple consent model and regression suite against the exact checked-out PR SHA, not the complete macOS/CEF application, iOS WebKit runtime, native UI gesture, app background lifetime or Samsung hardware acceptance.
+- Record the **actual** Actions run URL, SHA and conclusion after it completes. An in-progress or queued job is not a PASS. Preserve `RELEASE_NO_GO` regardless of isolated XCTest result.
