@@ -63,7 +63,8 @@ internal class R5NativeBrowserPort(
             val view = ctx.tabStore?.activeTab?.webView ?: return@withContext null
             val foreground =
                 activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
-                    activity.window.decorView.isShown && view.isShown
+                    activity.window.decorView.isShown &&
+                    view.isShown
             if (!foreground && !privateRenderer.canDeliverFrame()) return@withContext null
             target
         }
@@ -82,8 +83,9 @@ internal class R5NativeBrowserPort(
                 when (command.operation) {
                     Operation.READ_DOM -> {
                         val raw = evaluate(view, R5WebViewActionScripts.SNAPSHOT) ?: return@withContext AdapterOutcome.Failed
-                        val json = runCatching { Json.decodeFromString<String>(raw) }.getOrNull()
-                            ?: return@withContext AdapterOutcome.Failed
+                        val json =
+                            runCatching { Json.decodeFromString<String>(raw) }.getOrNull()
+                                ?: return@withContext AdapterOutcome.Failed
                         Pair(json, mapOf("kind" to "dom", "snapshotJson" to json))
                     }
                     Operation.NAVIGATE -> {
@@ -115,8 +117,9 @@ internal class R5NativeBrowserPort(
                         Pair(null, mapOf("kind" to "fill"))
                     }
                     Operation.SCROLL -> {
-                        val beforeScroll = evaluate(view, R5WebViewActionScripts.SCROLL)
-                            ?: return@withContext AdapterOutcome.Failed
+                        val beforeScroll =
+                            evaluate(view, R5WebViewActionScripts.SCROLL)
+                                ?: return@withContext AdapterOutcome.Failed
                         if (evaluate(view, R5WebViewActionScripts.scroll(command.scrollDeltaX, command.scrollDeltaY)) != "true") {
                             return@withContext AdapterOutcome.Failed
                         }
@@ -144,8 +147,10 @@ internal class R5NativeBrowserPort(
         withContext(Dispatchers.Main.immediate) {
             val entry = proof ?: return@withContext false
             val recorded = entry.second
-            if (entry.first != evidenceId || recorded.commandId != command.commandId ||
-                recorded.tabId != after.tabId || before.rendererIdentity != after.rendererIdentity ||
+            if (entry.first != evidenceId ||
+                recorded.commandId != command.commandId ||
+                recorded.tabId != after.tabId ||
+                before.rendererIdentity != after.rendererIdentity ||
                 recorded.identity != after.rendererIdentity
             ) {
                 proof = null
@@ -188,7 +193,10 @@ internal class R5NativeBrowserPort(
         proof = null
     }
 
-    private suspend fun evaluate(view: WebView, script: String): String? =
+    private suspend fun evaluate(
+        view: WebView,
+        script: String,
+    ): String? =
         withTimeoutOrNull(5_000L) {
             withContext(Dispatchers.Main.immediate) {
                 suspendCancellableCoroutine { continuation ->

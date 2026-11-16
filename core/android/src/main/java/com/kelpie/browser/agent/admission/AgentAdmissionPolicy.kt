@@ -55,7 +55,8 @@ object AgentAdmissionPolicy {
             if (!safeWebDestination(command.targetUrl)) return AdmissionResult(AdmissionCode.UNSAFE_URL)
         }
         if (command.operation in setOf(Operation.CLICK, Operation.TYPE, Operation.FILL, Operation.SELECT)) {
-            if (command.selector.isNullOrBlank() || command.selector.length > 500 ||
+            if (command.selector.isNullOrBlank() ||
+                command.selector.length > 500 ||
                 command.selector.any(Char::isISOControl)
             ) {
                 return AdmissionResult(AdmissionCode.INVALID_TARGET)
@@ -67,9 +68,12 @@ object AgentAdmissionPolicy {
             }
         }
         if (command.operation == Operation.SCROLL &&
-            (!command.scrollDeltaX.isFinite() || !command.scrollDeltaY.isFinite() ||
-                kotlin.math.abs(command.scrollDeltaX) > 3_000.0 ||
-                kotlin.math.abs(command.scrollDeltaY) > 3_000.0)
+            (
+                !command.scrollDeltaX.isFinite() ||
+                    !command.scrollDeltaY.isFinite() ||
+                    kotlin.math.abs(command.scrollDeltaX) > 3_000.0 ||
+                    kotlin.math.abs(command.scrollDeltaY) > 3_000.0
+            )
         ) {
             return AdmissionResult(AdmissionCode.INVALID_TARGET)
         }

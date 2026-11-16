@@ -70,8 +70,7 @@ internal object AgentSessionNotification {
                         context.getString(
                             if (fullAgentQa) R.string.r5_agent_full_notification_desc else R.string.r5_agent_notification_desc,
                         ),
-                    )
-                    .setOngoing(true)
+                    ).setOngoing(true)
                     .setOnlyAlertOnce(true)
                     .setPriority(NotificationCompat.PRIORITY_LOW)
                     .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)

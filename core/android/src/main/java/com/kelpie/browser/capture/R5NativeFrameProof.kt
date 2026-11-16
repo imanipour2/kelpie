@@ -49,9 +49,7 @@ internal class R5NativeFrameProof(
         }
     }
 
-    fun expectedRgb(sequence: Int): Int {
-        return R5FrameNonce.color(seed, sequence)
-    }
+    fun expectedRgb(sequence: Int): Int = R5FrameNonce.color(seed, sequence)
 
     fun repaint(expectedRgb: Int) {
         check(root != null) { "Native proof renderer is not attached" }

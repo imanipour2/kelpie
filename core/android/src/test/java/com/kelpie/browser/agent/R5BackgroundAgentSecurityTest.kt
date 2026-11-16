@@ -1,10 +1,10 @@
 package com.kelpie.browser.agent
 
 import com.kelpie.browser.agent.admission.AgentAdmissionPolicy
-import com.kelpie.browser.agent.execution.R5AgentDeliveryGuard
 import com.kelpie.browser.agent.contract.AdmissionCode
 import com.kelpie.browser.agent.contract.AgentCommand
 import com.kelpie.browser.agent.contract.Operation
+import com.kelpie.browser.agent.execution.R5AgentDeliveryGuard
 import com.kelpie.browser.agent.session.SessionConsentCore
 import com.kelpie.browser.capture.R5FrameNonce
 import com.kelpie.browser.network.Router
@@ -29,16 +29,17 @@ class R5BackgroundAgentSecurityTest {
         val consent = SessionConsentCore({ 100L })
         val pending = consent.requestNativeConsent("paired-a")!!
         val active = consent.approveFromNativeUi(pending.promptId, true)!!
-        val base = AgentCommand(
-            commandId = "op-1",
-            principalId = "paired-a",
-            consentGeneration = active.generation,
-            tabId = "tab",
-            observedDocumentEpoch = "epoch",
-            operation = Operation.SCROLL,
-            scrollDeltaY = 100.0,
-            clientSequence = 1,
-        )
+        val base =
+            AgentCommand(
+                commandId = "op-1",
+                principalId = "paired-a",
+                consentGeneration = active.generation,
+                tabId = "tab",
+                observedDocumentEpoch = "epoch",
+                operation = Operation.SCROLL,
+                scrollDeltaY = 100.0,
+                clientSequence = 1,
+            )
         assertEquals(AdmissionCode.ALLOWED, AgentAdmissionPolicy.check(active, base, "tab", "epoch").code)
         assertEquals(
             AdmissionCode.INVALID_TARGET,
@@ -59,23 +60,35 @@ class R5BackgroundAgentSecurityTest {
     }
 
     @Test
-    fun fullAgentQaAcceptsOnlyNewGuardedRoutesEvenWithGatewayBypassFlags() = runBlocking {
-        val router = Router().apply { consentOnlyQa = true; backgroundAgentQa = true }
-        val reached = mutableSetOf<String>()
-        for (method in listOf("navigate", "click", "fill", "screenshot", "browser-control", "evaluate", "capture-session-frame")) {
-            router.register(method) { reached += method; successResponse() }
-            for (fromGateway in listOf(false, true)) {
-                val (status, body) = router.handle(method, emptyMap(), bypassRecordingGate = true, fromGateway = fromGateway)
-                assertEquals(403, status)
-                assertFalse(body["success"] == true)
+    fun fullAgentQaAcceptsOnlyNewGuardedRoutesEvenWithGatewayBypassFlags() =
+        runBlocking {
+            val router =
+                Router().apply {
+                    consentOnlyQa = true
+                    backgroundAgentQa = true
+                }
+            val reached = mutableSetOf<String>()
+            for (method in listOf("navigate", "click", "fill", "screenshot", "browser-control", "evaluate", "capture-session-frame")) {
+                router.register(method) {
+                    reached += method
+                    successResponse()
+                }
+                for (fromGateway in listOf(false, true)) {
+                    val (status, body) = router.handle(method, emptyMap(), bypassRecordingGate = true, fromGateway = fromGateway)
+                    assertEquals(403, status)
+                    assertFalse(body["success"] == true)
+                }
             }
+            router.register("agent-runtime-status") {
+                reached += "agent-runtime-status"
+                successResponse()
+            }
+            val (status, body) = router.handle("agent-runtime-status", emptyMap())
+            assertEquals(200, status)
+            assertTrue(body["success"] == true)
+            assertEquals(setOf("agent-runtime-status"), reached)
         }
-        router.register("agent-runtime-status") { reached += "agent-runtime-status"; successResponse() }
-        val (status, body) = router.handle("agent-runtime-status", emptyMap())
-        assertEquals(200, status)
-        assertTrue(body["success"] == true)
-        assertEquals(setOf("agent-runtime-status"), reached)
-    }
+
     @Test
     fun inFlightMcpOrHttpResultCannotOutliveItsNativeGrantGeneration() {
         val consent = SessionConsentCore({ 1L })

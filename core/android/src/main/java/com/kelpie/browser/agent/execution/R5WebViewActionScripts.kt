@@ -19,7 +19,8 @@ internal object R5WebViewActionScripts {
           scroll:{x:scrollX,y:scrollY}}))()
         """
 
-    fun click(selector: String): String = """
+    fun click(selector: String): String =
+        """
         (()=>{const e=document.querySelector(${q(selector)});
           if(!e||!e.getClientRects().length) return 'DENIED';
           const t=(e.getAttribute('aria-label')||e.innerText||'').slice(0,200);
@@ -28,7 +29,11 @@ internal object R5WebViewActionScripts {
           e.click(); return 'DISPATCHED';})()
         """
 
-    fun fill(selector: String, value: String): String = """
+    fun fill(
+        selector: String,
+        value: String,
+    ): String =
+        """
         (()=>{const e=document.querySelector(${q(selector)});
           if(!e||!e.getClientRects().length||!
             (e instanceof HTMLInputElement||e instanceof HTMLTextAreaElement)) return false;
@@ -42,11 +47,15 @@ internal object R5WebViewActionScripts {
           e.dispatchEvent(new Event('change',{bubbles:true})); return true;})()
         """
 
-    fun verifyFill(selector: String, value: String): String =
-        "(()=>{const e=document.querySelector(${q(selector)});return !!e&&e.value===${q(value)};})()"
+    fun verifyFill(
+        selector: String,
+        value: String,
+    ): String = "(()=>{const e=document.querySelector(${q(selector)});return !!e&&e.value===${q(value)};})()"
 
-    fun scroll(x: Double, y: Double) =
-        "(()=>{window.scrollBy($x,$y);return true;})()"
+    fun scroll(
+        x: Double,
+        y: Double,
+    ) = "(()=>{window.scrollBy($x,$y);return true;})()"
 
     const val SCROLL = "JSON.stringify({x:scrollX,y:scrollY})"
 }

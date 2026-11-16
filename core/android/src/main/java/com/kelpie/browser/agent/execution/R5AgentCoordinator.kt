@@ -1,10 +1,10 @@
 package com.kelpie.browser.agent.execution
 
+import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.app.KeyguardManager
 import android.os.PowerManager
 import androidx.activity.ComponentActivity
 import androidx.core.content.ContextCompat
@@ -23,7 +23,6 @@ import com.kelpie.browser.network.successResponse
 import com.kelpie.browser.network.verifiedClientId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -61,18 +60,23 @@ class R5AgentCoordinator(
     private val consent = AndroidAgentProcessSession.runtimeConsent()
     private val nativePort = R5NativeBrowserPort(activity, ctx, renderer)
     private var ownership = WebViewOwnershipState()
+
     @Volatile private var runtime = newRuntime()
     private var currentGeneration: String? = null
     private var currentTabId: String? = null
+
     @Volatile private var ready = false
+
     @Volatile private var closed = false
 
-    private fun newRuntime(): AgentOperationRuntime =
-        AgentOperationRuntime(consent, VerifiedNativeBrowserAdapter(consent, ownership, nativePort))
+    private fun newRuntime(): AgentOperationRuntime = AgentOperationRuntime(consent, VerifiedNativeBrowserAdapter(consent, ownership, nativePort))
 
     private val screenOffReceiver =
         object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
+            override fun onReceive(
+                context: Context,
+                intent: Intent,
+            ) {
                 if (intent.action != Intent.ACTION_SCREEN_OFF || closed) return
                 // Authority reducer independently suspends the grant. Renderer
                 // disposal does not rely on eventual HTTP reads or wakeup.
@@ -143,15 +147,20 @@ class R5AgentCoordinator(
             }
             withContext(Dispatchers.Main.immediate) {
                 val store = ctx.tabStore ?: return@withContext errorResponse("NO_WEBVIEW", "No owned tab store")
-                val tabs = store.tabs.value.take(40).map { tab ->
-                    mapOf(
-                        "tabId" to tab.id,
-                        "documentEpoch" to tab.documentVersion,
-                        "active" to (tab.id == store.activeTabId.value),
-                        "title" to tab.pageTitle.take(256),
-                        "urlWithoutQuery" to tab.currentUrl.substringBefore("?").substringBefore("#").take(2048),
-                    )
-                }
+                val tabs =
+                    store.tabs.value.take(40).map { tab ->
+                        mapOf(
+                            "tabId" to tab.id,
+                            "documentEpoch" to tab.documentVersion,
+                            "active" to (tab.id == store.activeTabId.value),
+                            "title" to tab.pageTitle.take(256),
+                            "urlWithoutQuery" to
+                                tab.currentUrl
+                                    .substringBefore("?")
+                                    .substringBefore("#")
+                                    .take(2048),
+                        )
+                    }
                 if (!canUse(client, body["consentGeneration"] as? String, consent.snapshot() as? SessionConsentCore.State.Active)) {
                     errorResponse("SESSION_REVOKED", "Consent ended during tab observation")
                 } else {
@@ -169,10 +178,12 @@ class R5AgentCoordinator(
             val operation =
                 (body["operation"] as? String)?.let { runCatching { Operation.valueOf(it.uppercase()) }.getOrNull() }
                     ?: return@register errorResponse("INVALID_PARAMS", "Unknown agent operation")
-            val tabId = body["tabId"] as? String
-                ?: return@register errorResponse("INVALID_PARAMS", "An observed tabId is required")
-            val epoch = body["documentEpoch"] as? String
-                ?: return@register errorResponse("INVALID_PARAMS", "A fresh documentEpoch is required")
+            val tabId =
+                body["tabId"] as? String
+                    ?: return@register errorResponse("INVALID_PARAMS", "An observed tabId is required")
+            val epoch =
+                body["documentEpoch"] as? String
+                    ?: return@register errorResponse("INVALID_PARAMS", "A fresh documentEpoch is required")
             val command =
                 AgentCommand(
                     commandId = body["commandId"] as? String ?: UUID.randomUUID().toString(),
@@ -204,7 +215,8 @@ class R5AgentCoordinator(
             // are being read from Main. Never expose those bytes afterwards.
             val deliverable =
                 canUse(client, generation, consent.snapshot() as? SessionConsentCore.State.Active) &&
-                    ready && selectedRuntime === runtime
+                    ready &&
+                    selectedRuntime === runtime
             if (!deliverable) {
                 return@register errorResponse("SESSION_REVOKED", "Agent result was invalidated before delivery")
             }
@@ -214,8 +226,10 @@ class R5AgentCoordinator(
                     "status" to receipt.status.name,
                     "code" to receipt.code?.name,
                     "admission" to receipt.admission?.name,
-                    "mayHaveCompleted" to (operation !in setOf(Operation.READ_DOM, Operation.SCREENSHOT) &&
-                        receipt.status != ExecutionStatus.REJECTED),
+                    "mayHaveCompleted" to (
+                        operation !in setOf(Operation.READ_DOM, Operation.SCREENSHOT) &&
+                            receipt.status != ExecutionStatus.REJECTED
+                    ),
                     "data" to payload,
                 ),
             )
@@ -227,8 +241,12 @@ class R5AgentCoordinator(
         expectedGeneration: String?,
         active: SessionConsentCore.State.Active?,
     ): Boolean =
-        !closed && client != null && expectedGeneration != null &&
-            active != null && !active.locked && active.principalId == client &&
+        !closed &&
+            client != null &&
+            expectedGeneration != null &&
+            active != null &&
+            !active.locked &&
+            active.principalId == client &&
             active.generation == expectedGeneration &&
             activity.getSystemService(PowerManager::class.java).isInteractive &&
             !activity.getSystemService(KeyguardManager::class.java).isDeviceLocked &&
