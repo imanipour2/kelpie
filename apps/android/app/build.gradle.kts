@@ -15,6 +15,9 @@ ktlint {
 val parallelP4Qa = providers.gradleProperty("kelpieParallelCaptureQaProfile").orNull == "true"
 val existingP4Qa = providers.gradleProperty("kelpiePrivateCaptureQaProfile").orNull == "true"
 val anyP4Qa = parallelP4Qa || existingP4Qa
+require(!(parallelP4Qa && existingP4Qa)) {
+    "The two isolated P4 QA profiles must never be enabled together"
+}
 
 android {
     namespace = "com.unlikeotherai.kelpie.app"
