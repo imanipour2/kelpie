@@ -168,6 +168,12 @@ class AgentSessionCoordinator(
 
     private fun syncLock() {
         AndroidAgentProcessSession.setDeviceLocked(deviceLocked())
+        // If notifications are disabled mid-session, there is no trustworthy
+        // always-visible remote-control indicator. Revoke instead of keeping a
+        // hidden grant alive until another browser operation attempts delivery.
+        if (AndroidAgentProcessSession.active.value != null && !AgentSessionNotification.canNotify(activity)) {
+            stopFromNativeUi()
+        }
     }
 
     private fun deviceLocked(): Boolean {

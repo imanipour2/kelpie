@@ -55,7 +55,7 @@ internal object AgentSessionNotification {
                     .Builder(context, CHANNEL)
                     .setSmallIcon(android.R.drawable.ic_lock_lock)
                     .setContentTitle("Kelpie agent session active (QA)")
-                    .setContentText("Paired browser control granted; STOP to revoke")
+                    .setContentText("Consent-only QA active; browser actions disabled. STOP to revoke")
                     .setOngoing(true)
                     .setOnlyAlertOnce(true)
                     .setPriority(NotificationCompat.PRIORITY_LOW)
