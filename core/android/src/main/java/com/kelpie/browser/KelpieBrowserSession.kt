@@ -14,6 +14,7 @@ import com.kelpie.browser.ai.AIHandler
 import com.kelpie.browser.browser.BookmarkStore
 import com.kelpie.browser.browser.HistoryStore
 import com.kelpie.browser.browser.HomeStore
+import com.kelpie.browser.capture.PrivateCaptureCoordinator
 import com.kelpie.browser.device.DeviceInfo
 import com.kelpie.browser.devtools.NetworkLogHandler
 import com.kelpie.browser.handlers.BookmarkHandler
@@ -62,6 +63,7 @@ class KelpieBrowserSession(
     private val localControlEnabled: Boolean = true,
     uoaSession: com.kelpie.browser.account.KelpieUOASession? = null,
     profileSubject: String? = uoaSession?.identity?.value?.subject,
+    privateCaptureQaEnabled: Boolean = false,
 ) {
     private val browserContext get() = KelpieEnvironment.context(activity)
     private val applicationContext get() = KelpieEnvironment.app
@@ -114,6 +116,8 @@ class KelpieBrowserSession(
 
     private val router = Router()
     private val handlerContext = HandlerContext()
+    private val captureCoordinator =
+        if (privateCaptureQaEnabled) PrivateCaptureCoordinator(activity, handlerContext, true) else null
     private val scriptPlaybackState = ScriptPlaybackState()
     private var httpServer: HTTPServer? = null
     private var mdnsAdvertiser: MDNSAdvertiser? = null
@@ -157,6 +161,7 @@ class KelpieBrowserSession(
                             isServerRunning = httpServer?.isRunning == true,
                             isMDNSAdvertising = mdnsAdvertiser?.isRegistered == true,
                             pairingCoordinator = pairingCoordinator,
+                            captureCoordinator = captureCoordinator,
                         )
                     }
                 }
@@ -169,6 +174,7 @@ class KelpieBrowserSession(
     }
 
     private fun onResume() {
+        captureCoordinator?.onResume()
         com.kelpie.browser.browser.BookmarkStore
             .refreshAccountBookmarks()
         com.kelpie.browser.connect.NessieConnection
@@ -176,6 +182,7 @@ class KelpieBrowserSession(
     }
 
     private fun onPause() {
+        captureCoordinator?.onPause()
         com.kelpie.browser.connect.NessieConnection
             .setForeground(false)
     }
@@ -254,6 +261,7 @@ class KelpieBrowserSession(
             )
         }
 
+        captureCoordinator?.register(router)
         router.registerFallbacks()
         com.kelpie.browser.network
             .BrowserGatewayBinding(router, handlerContext)
@@ -306,6 +314,7 @@ class KelpieBrowserSession(
         com.kelpie.browser.account.UOAAccount
             .detach(activity)
         handlerContext.dialogState.dismissPending()
+        captureCoordinator?.close()
         val tabs = handlerContext.tabStore
         browserView.disposeComposition()
         (browserView.parent as? ViewGroup)?.removeView(browserView)
