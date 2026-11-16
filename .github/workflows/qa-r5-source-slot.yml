@@ -1,0 +1,103 @@
+name: QA R5 Source-only Android (No Install)
+
+on:
+  pull_request:
+    paths:
+      - 'apps/android/**'
+      - 'core/android/**'
+      - '.github/workflows/qa-r5-source-slot.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r5-source-slot-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  source-slot-build:
+    name: Verify R5 source-only QA package and actual ports
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6.0.3
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: ./.github/actions/browser-contract
+      - uses: actions/setup-java@v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4.0.3
+      - name: Install SDK tools
+        run: sdkmanager "platforms;android-34" "build-tools;35.0.0"
+      - uses: actions/cache@v5.0.5
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            apps/android/.gradle
+          key: gradle-${{ runner.os }}-${{ hashFiles('core/android/**/*.gradle*', 'apps/android/**/*.gradle*', 'apps/android/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+      - name: KtLint, agent JVM tests and isolated R5 source QA APK
+        working-directory: apps/android
+        run: |
+          ./gradlew --no-daemon \
+            -PkelpieR5SourceQaProfile=true \
+            :kelpie-browser:ktlintCheck \
+            :kelpie-browser:testDebugUnitTest \
+            :app:assembleDebug
+      - name: Verify both BuildConfig ports, unique identity, signature and native binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=apps/android/app/build/outputs/apk/debug/app-debug.apk
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          SIGN="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          CORE=core/android/build/generated/source/buildConfig/debug/com/kelpie/browser/BuildConfig.java
+          APP=apps/android/app/build/generated/source/buildConfig/debug/com/unlikeotherai/kelpie/app/BuildConfig.java
+          test -s "$CORE" && test -s "$APP" && test -s "$APK"
+          grep -Eq 'LOCAL_HTTP_PORT[[:space:]]*=[[:space:]]*18457;' "$CORE"
+          grep -Eq 'LOCAL_HTTP_PORT[[:space:]]*=[[:space:]]*18457;' "$APP"
+          grep -Eq 'PRIVATE_CAPTURE_QA_ENABLED[[:space:]]*=[[:space:]]*false;' "$APP"
+          "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.browser.r5sourceverify'"
+          "$AAPT" dump badging "$APK" | grep -F "versionCode='31' versionName='0.2.11-r5-source-qa'"
+          "$SIGN" verify --verbose --print-certs "$APK"
+          ! "$AAPT" dump permissions "$APK" | grep -F 'android.permission.RECORD_AUDIO'
+          native_count=0
+          while IFS= read -r member; do
+            native_count=$((native_count + 1))
+            unzip -p "$APK" "$member" > /tmp/kelpie-r5-source-native.so
+            while IFS= read -r alignment; do
+              if (( alignment < 16384 )); then
+                echo "::error::Unaligned native segment in $member ($alignment)"
+                exit 1
+              fi
+            done < <(readelf -lW /tmp/kelpie-r5-source-native.so | awk '$1 == "LOAD" {print $NF}')
+          done < <(unzip -Z1 "$APK" | grep -E '^lib/(arm64-v8a|x86_64)/.*[.]so$')
+          test "$native_count" -gt 0
+          # This QA build remains explicitly source-only: no live agent dispatcher.
+          ! grep -q 'AgentOperationRuntime' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
+          sha256sum "$APK" > apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
+          {
+            echo "source_commit=$(git rev-parse HEAD)"
+            echo "package=com.kelpie.browser.r5sourceverify"
+            echo "version=0.2.11-r5-source-qa"
+            echo "versionCode=31"
+            echo "port=18457"
+            echo "agent_routes=NOT_IMPLEMENTED"
+            echo "signature=debug-only"
+            echo "install=NOT_AUTHORIZED"
+            echo "artifact_sha256=$(sha256sum "$APK" | awk '{print $1}')"
+          } > apps/android/app/build/outputs/apk/debug/provenance.txt
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: kelpie-r5-source-qa-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            apps/android/app/build/outputs/apk/debug/app-debug.apk
+            apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
+            apps/android/app/build/outputs/apk/debug/provenance.txt
+          if-no-files-found: error
+          retention-days: 14

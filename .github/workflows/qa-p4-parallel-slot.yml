@@ -52,6 +52,16 @@ jobs:
             :kelpie-browser:ktlintCheck \
             :kelpie-browser:testDebugUnitTest \
             :app:assembleDebug
+      - name: Assert actual Android core and app listener port agree
+        shell: bash
+        run: |
+          set -euo pipefail
+          CORE=core/android/build/generated/source/buildConfig/debug/com/kelpie/browser/BuildConfig.java
+          APP=apps/android/app/build/generated/source/buildConfig/debug/com/unlikeotherai/kelpie/app/BuildConfig.java
+          test -s "$CORE"
+          test -s "$APP"
+          grep -Eq 'LOCAL_HTTP_PORT[[:space:]]*=[[:space:]]*18447;' "$CORE"
+          grep -Eq 'LOCAL_HTTP_PORT[[:space:]]*=[[:space:]]*18447;' "$APP"
       - name: Prove the APK is an isolated, debug-only package
         shell: bash
         run: |
