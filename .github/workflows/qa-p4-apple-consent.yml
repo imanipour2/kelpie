@@ -1,0 +1,30 @@
+name: QA P4 Apple Consent XCTest
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/qa-p4-apple-consent.yml'
+      - 'scripts/qa/test-p4-apple-consent.sh'
+      - 'core/apple/shared/Browser/ConsentedCaptureLease.swift'
+      - 'core/apple/shared/Browser/ConsentedCaptureRequestRegistry.swift'
+      - 'apps/macos/Tests/ConsentedCaptureLeaseTests.swift'
+      - 'apps/macos/Tests/ConsentedCaptureRequestRegistryTests.swift'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa-p4-apple-consent-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  consent-xctest:
+    name: Compile and execute P4 consent XCTest
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact PR commit
+        uses: actions/checkout@v6.0.3
+      - name: Run real repository Swift sources and XCTest tests
+        run: bash scripts/qa/test-p4-apple-consent.sh
