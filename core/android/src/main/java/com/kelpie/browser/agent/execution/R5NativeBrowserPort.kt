@@ -43,21 +43,29 @@ internal class R5NativeBrowserPort(
 
     private var proof: Pair<String, Proof>? = null
 
-    override suspend fun actualTarget(tabId: String): VerifiedNativeBrowserAdapter.NativeTarget? =
+    /** Native controller can resolve a renderer before Compose transfers ownership. */
+    suspend fun nativeTargetForBinding(tabId: String): VerifiedNativeBrowserAdapter.NativeTarget? =
         withContext(Dispatchers.Main.immediate) {
             val tab = ctx.tabStore?.activeTab ?: return@withContext null
-            if (tab.id != tabId || tab.documentVersion.isBlank()) return@withContext null
+            if (tab.id != tabId || tab.documentVersion.isBlank() || !safeScreen()) return@withContext null
             val view = tab.webView
-            if (!view.isAttachedToWindow || !safeScreen()) return@withContext null
-            val foreground =
-                activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
-                    activity.window.decorView.isShown && view.isShown
-            if (!foreground && !privateRenderer.canDeliverFrame()) return@withContext null
+            if (!view.isAttachedToWindow) return@withContext null
             VerifiedNativeBrowserAdapter.NativeTarget(
                 tab.id,
                 tab.documentVersion,
                 rendererIds.getOrPut(view) { UUID.randomUUID().toString() },
             )
+        }
+
+    override suspend fun actualTarget(tabId: String): VerifiedNativeBrowserAdapter.NativeTarget? =
+        withContext(Dispatchers.Main.immediate) {
+            val target = nativeTargetForBinding(tabId) ?: return@withContext null
+            val view = ctx.tabStore?.activeTab?.webView ?: return@withContext null
+            val foreground =
+                activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+                    activity.window.decorView.isShown && view.isShown
+            if (!foreground && !privateRenderer.canDeliverFrame()) return@withContext null
+            target
         }
 
     override suspend fun execute(
