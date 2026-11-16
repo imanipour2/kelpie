@@ -1,6 +1,6 @@
 # R5 native process-session consent — isolated Android QA candidate
 
-Status: **DRAFT / CONSENT-ONLY / NO WEBVIEW ACTIONS / NO DEVICE INSTALL / NO RELEASE / PARITY_OPEN**  
+Status: **DRAFT / CONSENT-ONLY / NO WEBVIEW ACTIONS / OWNER-AUTHORIZED S24 QA INSTALLED / NO PUBLIC RELEASE / PARITY_OPEN**  
 Date: 2026-11-16. Tracking: https://github.com/imanipour2/enerfoam-website/issues/98
 
 ## Product decision and separation of concerns
@@ -34,10 +34,18 @@ This branch does not connect `AgentOperationRuntime` or `VerifiedNativeBrowserAd
 - Apple UIKit suspension baseline: https://developer.apple.com/documentation/uikit/about-the-background-execution-sequence
 - Repository `AGENTS.md` parity, code, QA and release gates, plus `EF-OPS-KELPIE-RELEASE-POLICY-001`.
 
-**NO INSTALL / NO MAIN MERGE / NO WORDPRESS / SOURCE+CONSENT_QA_ONLY / RELEASE_NO_GO.**
+**QA-ONLY DEVICE INSTALL VERIFIED / NO MAIN MERGE / NO WORDPRESS / SOURCE+CONSENT_QA_ONLY / RELEASE_NO_GO.**
 
 ## Legacy route isolation (mandatory fail-closed QA invariant)
 
 Review exposed a second control path: baseline Kelpie's authenticated `/v1/*` browser handlers and outbound Nessie connectivity predate R5 consent. Merely disabling `AgentOperationRuntime` would **not** disable those old paths; labeling the candidate consent-only while leaving them active would be misleading and could bypass its STOP policy. In the isolated R5 QA profile, the Router therefore denies all legacy browser methods (including `browser-control`, `mcp`, screenshot, navigation, click and nested bypass flags), allowing only `agent-session-request/status/stop` and non-sensitive `get-device-info`; the Nessie outbound agent is not started. The Android native manual WebView UI is not a substitute for this remote gate. A dedicated JVM negative test checks denial while preserving baseline behavior when the QA flag is off.
 
 This is an intentional **consent-only** QA isolation measure, not the future complete one-consent agent runtime. Before enabling browser methods, the single AgentOperationRuntime gateway must enforce authenticated principal, session generation, STOP and lock at all native/MCP/Nessie boundaries, including after-await revalidation.
+
+## 2026-11-16 S24 hardware readback and pending-dialog UX patch
+
+Owner-authorized clean APK on Samsung SM-S928B (Android 17) remains v`0.2.11-r5-consent-qa`, package `com.kelpie.browser.r5sourceverify`, port `18457`, exact installed source SHA `7a900a7303b3d9f8f2fafcd12a458cc5c52b4bf6`. Verified physical Android POST_NOTIFICATIONS permission, G2 native approval/in-app STOP/notification action STOP, G3 lock→SUSPENDED_LOCKED→physical unlock→ACTIVE_CONSENT_ONLY with safetyEpoch 0→2, and force-stop while Active→fresh PID→OFF. Notification action proof: SystemUI `EID_QPNE_NOTI_ACTION_BUTTON` at 17:44:29.021 and native broadcast `R5_AGENT_SESSION_STOP` to unexported `AgentSessionStopReceiver` at 17:44:29.025. Exact evidence: https://github.com/imanipour2/enerfoam-website/issues/98#issuecomment-6918903136 and https://github.com/imanipour2/enerfoam-website/issues/98#issuecomment-6918958001 .
+
+**Post-install QA source-only improvement:** original pending consent `LOCAL_PROMPT_TTL_MS=300_000` was enforced at approval/readback but could remain visibly stale without a new event. The draft branch adds monotonic `SystemClock.elapsedRealtime()` deadline timing through key-scoped Compose `LaunchedEffect`, prompt-ID-checked `expirePendingIfDue`, StateFlow publication, and a precise expiration notice. Unit tests cover old-timer/new-prompt races; full CI and fresh hardware acceptance required. Official docs used: https://developer.android.com/develop/ui/compose/side-effects (effect lifecycle and cancellation by keys) and https://developer.android.com/reference/android/os/SystemClock (elapsedRealtime includes Doze). Neither source patch nor PR merge is proof of the currently installed APK's behavior.
+
+**Remaining blockers:** 50 actual owner-granted cycles, two verified principals, longer Doze/network handover, notification permission/channel disabled negative on isolated QA profile, iOS parity or separately approved exception, and actual AgentOperationRuntime/owned-WebView DOM/PNG. NO MAIN MERGE / RELEASE_NO_GO / SYNC_BLOCKED_MAIN.
