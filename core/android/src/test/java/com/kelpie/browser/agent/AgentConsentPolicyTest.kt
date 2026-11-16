@@ -128,6 +128,7 @@ class AgentConsentPolicyTest {
         assertEquals(active, session.snapshot())
         assertTrue(active.generation.isNotBlank())
     }
+
     @Test
     fun fiftyApprovedCoreCyclesRequireUniqueGenerationAndExplicitStop() {
         val session = SessionConsentCore({ 100L })
@@ -152,5 +153,4 @@ class AgentConsentPolicyTest {
         }
         assertEquals(50, generations.size)
     }
-
 }
