@@ -28,7 +28,8 @@ function Get-AuthorizedDeviceIds {
             }
         }
     )
-    return ,$ids
+    # Emit individual entries so an empty device set stays an empty array.
+    return $ids
 }
 
 function Invoke-ReadOnly {
