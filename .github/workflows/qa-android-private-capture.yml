@@ -1,0 +1,58 @@
+name: Android S24 private capture consent QA
+
+on:
+  pull_request:
+    paths:
+      - 'apps/android/**'
+      - 'core/android/**'
+      - '.github/workflows/qa-android-private-capture.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Private capture opt-in package build and guard audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6.0.3
+      - uses: ./.github/actions/browser-contract
+      - uses: actions/setup-java@v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4.0.3
+      - name: Install Android SDK for QA
+        run: sdkmanager "platforms;android-34" "build-tools;35.0.0"
+      - name: Lint, unit tests and isolated QA build
+        working-directory: apps/android
+        run: |
+          ./gradlew --no-daemon -PkelpiePrivateCaptureQaProfile=true             :kelpie-browser:ktlintCheck :kelpie-browser:testDebugUnitTest             :app:assembleDebug
+      - name: Verify isolated package, explicit feature flag, signature and SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=apps/android/app/build/outputs/apk/debug/app-debug.apk
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          SIGN="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          test -s "$APK"
+          "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.browser.pcverify'"
+          "$AAPT" dump badging "$APK" | grep -F "versionCode='29' versionName='0.2.9-qa'"
+          "$SIGN" verify --verbose --print-certs "$APK"
+          "$AAPT" dump permissions "$APK" > /tmp/pc-qa-permissions.txt
+          if grep -F 'android.permission.RECORD_AUDIO' /tmp/pc-qa-permissions.txt; then
+            echo "::error::Microphone permission must not be in capture QA APK"
+            exit 1
+          fi
+          # The base browser remains unchanged; production release requires API36/16K tests.
+          sha256sum "$APK" > apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: kelpie-pc-qa-${{ github.sha }}
+          path: |
+            apps/android/app/build/outputs/apk/debug/app-debug.apk
+            apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 14
