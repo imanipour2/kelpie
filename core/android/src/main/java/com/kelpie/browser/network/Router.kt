@@ -12,6 +12,8 @@ class Router {
     var handlerContext: HandlerContext? = null
     var scriptPlaybackState: com.kelpie.browser.handlers.ScriptPlaybackState? = null
     var browserGateway: BrowserGatewayBinding? = null
+    /** Isolated R5 consent QA never accepts legacy remote browser operations. */
+    var consentOnlyQa = false
 
     /** Snapshot of currently-registered method names. */
     val registeredMethods: Set<String>
@@ -40,6 +42,11 @@ class Router {
         bypassRecordingGate: Boolean = false,
         fromGateway: Boolean = false,
     ): Pair<Int, Map<String, Any?>> {
+        // This QA build has no real agent browser-action authorization adapter.
+        // Reject legacy routes, including nested MCP and any gateway bypass.
+        if (consentOnlyQa && method !in CONSENT_QA_METHODS) {
+            return 403 to errorResponse("PERMISSION_REQUIRED", "R5 QA permits consent/status/STOP only")
+        }
         val privateOwnerAtAdmission = handlerContext?.privateCaptureRestricted?.invoke() == true
         if (!PrivateCaptureOperationPolicy.permits(
                 method,
@@ -98,6 +105,11 @@ class Router {
         }
 
         return status to result
+    }
+
+    companion object {
+        private val CONSENT_QA_METHODS =
+            setOf("agent-session-request", "agent-session-status", "agent-session-stop", "get-device-info")
     }
 
     fun registerFallbacks() {

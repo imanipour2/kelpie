@@ -171,8 +171,12 @@ class KelpieBrowserSession(
                 }
             }
         registerHandlers(deviceInfo)
-        com.kelpie.browser.connect.NessieConnection
-            .start(browserContext, handlerContext)
+        // Do not start the outbound Nessie control plane in consent-only QA:
+        // no command must bypass the R5 principal/STOP policy under review.
+        if (!agentConsentQaEnabled) {
+            com.kelpie.browser.connect.NessieConnection
+                .start(browserContext, handlerContext)
+        }
         if (localControlEnabled) startServer(deviceInfo)
         activity.lifecycle.addObserver(lifecycleObserver)
     }
@@ -182,17 +186,22 @@ class KelpieBrowserSession(
         agentSessionCoordinator?.onResume()
         com.kelpie.browser.browser.BookmarkStore
             .refreshAccountBookmarks()
-        com.kelpie.browser.connect.NessieConnection
-            .setForeground(true)
+        if (!agentConsentQaEnabled) {
+            com.kelpie.browser.connect.NessieConnection
+                .setForeground(true)
+        }
     }
 
     private fun onPause() {
         captureCoordinator?.onPause()
-        com.kelpie.browser.connect.NessieConnection
-            .setForeground(false)
+        if (!agentConsentQaEnabled) {
+            com.kelpie.browser.connect.NessieConnection
+                .setForeground(false)
+        }
     }
 
     private fun registerHandlers(deviceInfo: DeviceInfo) {
+        router.consentOnlyQa = agentConsentQaEnabled
         router.handlerContext = handlerContext
         router.scriptPlaybackState = scriptPlaybackState
         handlerContext.scriptPlaybackState = scriptPlaybackState
@@ -315,8 +324,10 @@ class KelpieBrowserSession(
         closed = true
         activity.lifecycle.removeObserver(lifecycleObserver)
         accountLogin.unregister()
-        com.kelpie.browser.connect.NessieConnection
-            .detach(handlerContext)
+        if (!agentConsentQaEnabled) {
+            com.kelpie.browser.connect.NessieConnection
+                .detach(handlerContext)
+        }
         com.kelpie.browser.account.UOAAccount
             .detach(activity)
         handlerContext.dialogState.dismissPending()

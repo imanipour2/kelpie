@@ -35,3 +35,9 @@ This branch does not connect `AgentOperationRuntime` or `VerifiedNativeBrowserAd
 - Repository `AGENTS.md` parity, code, QA and release gates, plus `EF-OPS-KELPIE-RELEASE-POLICY-001`.
 
 **NO INSTALL / NO MAIN MERGE / NO WORDPRESS / SOURCE+CONSENT_QA_ONLY / RELEASE_NO_GO.**
+
+## Legacy route isolation (mandatory fail-closed QA invariant)
+
+Review exposed a second control path: baseline Kelpie's authenticated `/v1/*` browser handlers and outbound Nessie connectivity predate R5 consent. Merely disabling `AgentOperationRuntime` would **not** disable those old paths; labeling the candidate consent-only while leaving them active would be misleading and could bypass its STOP policy. In the isolated R5 QA profile, the Router therefore denies all legacy browser methods (including `browser-control`, `mcp`, screenshot, navigation, click and nested bypass flags), allowing only `agent-session-request/status/stop` and non-sensitive `get-device-info`; the Nessie outbound agent is not started. The Android native manual WebView UI is not a substitute for this remote gate. A dedicated JVM negative test checks denial while preserving baseline behavior when the QA flag is off.
+
+This is an intentional **consent-only** QA isolation measure, not the future complete one-consent agent runtime. Before enabling browser methods, the single AgentOperationRuntime gateway must enforce authenticated principal, session generation, STOP and lock at all native/MCP/Nessie boundaries, including after-await revalidation.
