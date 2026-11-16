@@ -1,0 +1,34 @@
+name: QA R5 Source Reconciliation (Windows, No Import)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/qa/r5-local-source-reconcile.ps1'
+      - '.github/workflows/qa-r5-source-reconciliation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa-r5-reconcile-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify-source-inspector:
+    name: PowerShell source-only audit self-test
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6.0.3
+      - name: Parse and self-test PowerShell script (no ADB or R5 worktree)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $source = 'scripts/qa/r5-local-source-reconcile.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $source), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { throw ($errors | Out-String) }
+          & $source -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "R5 local-source script self-test failed" }
