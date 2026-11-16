@@ -36,8 +36,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.kelpie.browser.FeatureFlags
-import com.kelpie.browser.agent.session.AgentSessionConsentUi
-import com.kelpie.browser.agent.session.AgentSessionCoordinator
 import com.kelpie.browser.browser.BrowserState
 import com.kelpie.browser.browser.KeyboardObserver
 import com.kelpie.browser.browser.SessionStore
@@ -65,7 +63,7 @@ fun BrowserScreen(
     isMDNSAdvertising: Boolean,
     pairingCoordinator: PairApprovalCoordinator,
     captureCoordinator: PrivateCaptureCoordinator? = null,
-    agentSessionCoordinator: AgentSessionCoordinator? = null,
+    agentSessionCoordinator: com.kelpie.browser.agent.session.AgentSessionCoordinator? = null,
 ) {
     var showPairedClients by remember { mutableStateOf(false) }
     val browserState = remember { BrowserState() }
@@ -419,7 +417,7 @@ fun BrowserScreen(
 
     PairingDialog(coordinator = pairingCoordinator)
     captureCoordinator?.let { PrivateCaptureConsentDialog(it, tabStore) }
-    agentSessionCoordinator?.let { AgentSessionConsentUi(it) }
+    agentSessionCoordinator?.let { com.kelpie.browser.agent.session.AgentSessionConsentUi(it) }
 
     LaunchedEffect(showSettings, pendingWelcomeFromHelp) {
         if (!showSettings && pendingWelcomeFromHelp) {
