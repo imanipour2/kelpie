@@ -59,12 +59,12 @@ jobs:
           CORE=core/android/build/generated/source/buildConfig/debug/com/kelpie/browser/BuildConfig.java
           APP=apps/android/app/build/generated/source/buildConfig/debug/com/unlikeotherai/kelpie/app/BuildConfig.java
           test -s "$CORE" && test -s "$APP" && test -s "$APK"
-          grep -Eq 'LOCAL_HTTP_PORT[[:space:]]*=[[:space:]]*18457;' "$CORE"
-          grep -Eq 'LOCAL_HTTP_PORT[[:space:]]*=[[:space:]]*18457;' "$APP"
+          grep -Eq 'LOCAL_HTTP_PORT[[:space:]]*=[[:space:]]*18458;' "$CORE"
+          grep -Eq 'LOCAL_HTTP_PORT[[:space:]]*=[[:space:]]*18458;' "$APP"
           grep -Eq 'PRIVATE_CAPTURE_QA_ENABLED[[:space:]]*=[[:space:]]*false;' "$APP"
           grep -Eq 'R5_NATIVE_CONSENT_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
-          "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.browser.r5sourceverify'"
-          "$AAPT" dump badging "$APK" | grep -F "versionCode='31' versionName='0.2.11-r5-consent-qa'"
+          "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.browser.r5fixedverify'"
+          "$AAPT" dump badging "$APK" | grep -F "versionCode='32' versionName='0.2.12-r5-consent-qa'"
           "$SIGN" verify --verbose --print-certs "$APK"
           ! "$AAPT" dump permissions "$APK" | grep -F 'android.permission.RECORD_AUDIO'
           native_count=0
@@ -84,10 +84,10 @@ jobs:
           sha256sum "$APK" > apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
           {
             echo "source_commit=$(git rev-parse HEAD)"
-            echo "package=com.kelpie.browser.r5sourceverify"
-            echo "version=0.2.11-r5-consent-qa"
-            echo "versionCode=31"
-            echo "port=18457"
+            echo "package=com.kelpie.browser.r5fixedverify"
+            echo "version=0.2.12-r5-consent-qa"
+            echo "versionCode=32"
+            echo "port=18458"
             echo "agent_routes=CONSENT_ONLY_NO_BROWSER_OPERATIONS"
             echo "signature=debug-only"
             echo "install=NOT_AUTHORIZED"
