@@ -17,6 +17,7 @@ data class AgentCommand(
     val inputText: String? = null,
     val scrollDeltaX: Double = 0.0,
     val scrollDeltaY: Double = 0.0,
+    val captureRequest: R5VisionCaptureRequest = R5VisionCaptureRequest.LEGACY,
 )
 
 enum class Operation {

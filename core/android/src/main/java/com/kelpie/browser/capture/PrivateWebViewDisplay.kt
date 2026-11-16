@@ -15,6 +15,7 @@ import android.os.Looper
 import android.os.PowerManager
 import android.view.ViewGroup
 import android.webkit.WebView
+import com.kelpie.browser.agent.contract.R5VisionCaptureRequest
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -22,7 +23,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.util.Base64
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
@@ -174,7 +174,7 @@ class PrivateWebViewDisplay(
      * No last-frame cache fallback: timeout, keyguard, foreground or STOP fails.
      * Caller owns an authenticated, valid and already-consumed frame lease.
      */
-    suspend fun captureFreshPng(): Map<String, Any>? {
+    suspend fun captureFreshPng(capture: R5VisionCaptureRequest = R5VisionCaptureRequest.LEGACY): Map<String, Any>? {
         val request =
             withContext(Dispatchers.Main.immediate) {
                 if (!active || activityVisible || isLocked() || stateFlow.value != State.PRIVATE_DISPLAY) {
@@ -242,22 +242,7 @@ class PrivateWebViewDisplay(
             } else {
                 val encoded =
                     withContext(Dispatchers.Default) {
-                        // Bound compressed bytes before Base64/JSON copies are created.
-                        // An oversized or failed encode must not reach the agent.
-                        runCatching {
-                            val bytes = R5BoundedImageOutputStream()
-                            if (!frame.compress(Bitmap.CompressFormat.PNG, 100, bytes)) {
-                                null
-                            } else {
-                                mapOf(
-                                    "image" to Base64.getEncoder().encodeToString(bytes.toByteArray()),
-                                    "width" to frame.width,
-                                    "height" to frame.height,
-                                    "format" to "png",
-                                    "coordinateSpace" to "viewport-css-pixels",
-                                )
-                            }
-                        }.getOrNull()
+                        R5VerifiedFrameEncoder(activity).encode(frame, capture)
                     }
                 if (active &&
                     !activityVisible &&

@@ -8,10 +8,11 @@ import org.junit.Test
 class R5AdaptiveCapturePolicyTest {
     private val policy = R5AdaptiveCapturePolicy
     private val capable = policy.DeviceSignals(256, false, false, false, false)
-    private val mapped = policy.ConsumerCapabilities(
-        webpLossless = true,
-        coordinateScaleMetadata = true,
-    )
+    private val mapped =
+        policy.ConsumerCapabilities(
+            webpLossless = true,
+            coordinateScaleMetadata = true,
+        )
 
     private fun request(
         intent: R5AdaptiveCapturePolicy.Intent,

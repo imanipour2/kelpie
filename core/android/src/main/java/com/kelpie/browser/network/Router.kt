@@ -120,7 +120,8 @@ class Router {
 
         // The authenticated MCP envelope is a transport only. Its inner method
         // is re-checked by Router with the same hard allowlist.
-        private val R5_AGENT_METHODS = setOf("agent-command", "agent-tabs", "agent-runtime-status", "mcp")
+        private val R5_AGENT_METHODS =
+            setOf("agent-command", "agent-tabs", "agent-runtime-status", "agent-capture-capabilities", "mcp")
     }
 
     fun registerFallbacks() {

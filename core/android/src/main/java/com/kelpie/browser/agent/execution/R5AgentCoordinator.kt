@@ -11,6 +11,7 @@ import androidx.core.content.ContextCompat
 import com.kelpie.browser.agent.contract.AgentCommand
 import com.kelpie.browser.agent.contract.ExecutionStatus
 import com.kelpie.browser.agent.contract.Operation
+import com.kelpie.browser.agent.contract.R5VisionCaptureRequest
 import com.kelpie.browser.agent.render.WebViewOwnershipState
 import com.kelpie.browser.agent.session.AgentSessionNotification
 import com.kelpie.browser.agent.session.AndroidAgentProcessSession
@@ -135,8 +136,18 @@ class R5AgentCoordinator(
                         "owner" to ownership.status().name,
                         "privateRenderer" to renderer.state.value.name,
                         "supported" to listOf("NAVIGATE", "READ_DOM", "CLICK", "FILL", "TYPE", "SCROLL", "SCREENSHOT"),
+                        "captureCapabilities" to R5VisionCaptureRequest.capabilities(),
                     ),
                 )
+            }
+        }
+        router.register("agent-capture-capabilities") { body ->
+            val client = verifiedClientId()
+            val active = consent.snapshot() as? SessionConsentCore.State.Active
+            if (!canUse(client, body["consentGeneration"] as? String, active) || !ready) {
+                errorResponse("PERMISSION_REQUIRED", "No active authorized R5 capture session")
+            } else {
+                successResponse(R5VisionCaptureRequest.capabilities())
             }
         }
         router.register("agent-tabs") { body ->
@@ -178,6 +189,19 @@ class R5AgentCoordinator(
             val operation =
                 (body["operation"] as? String)?.let { runCatching { Operation.valueOf(it.uppercase()) }.getOrNull() }
                     ?: return@register errorResponse("INVALID_PARAMS", "Unknown agent operation")
+            val capture =
+                if (operation == Operation.SCREENSHOT) {
+                    when (val parsed = R5VisionCaptureRequest.parse(body["capture"])) {
+                        is R5VisionCaptureRequest.Parse.Valid -> parsed.request
+                        is R5VisionCaptureRequest.Parse.Invalid ->
+                            return@register errorResponse("INVALID_PARAMS", parsed.code)
+                    }
+                } else {
+                    if (body.containsKey("capture")) {
+                        return@register errorResponse("INVALID_PARAMS", "Capture parameters require SCREENSHOT")
+                    }
+                    R5VisionCaptureRequest.LEGACY
+                }
             val tabId =
                 body["tabId"] as? String
                     ?: return@register errorResponse("INVALID_PARAMS", "An observed tabId is required")
@@ -198,6 +222,7 @@ class R5AgentCoordinator(
                     scrollDeltaX = (body["scrollX"] as? Number)?.toDouble() ?: 0.0,
                     scrollDeltaY = (body["scrollY"] as? Number)?.toDouble() ?: 0.0,
                     clientSequence = (body["clientSequence"] as? Number)?.toLong() ?: 0L,
+                    captureRequest = capture,
                 )
             // Capture a stable runtime reference: STOP may replace the active
             // generation while this suspended action is in flight.
