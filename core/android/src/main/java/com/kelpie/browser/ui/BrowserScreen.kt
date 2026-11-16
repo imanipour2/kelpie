@@ -69,8 +69,7 @@ fun BrowserScreen(
 ) {
     var showPairedClients by remember { mutableStateOf(false) }
     val browserState = remember { BrowserState() }
-    val captureMoved = captureCoordinator?.relinquished?.collectAsState()?.value == true
-    val agentMoved = r5AgentCoordinator?.relinquished?.collectAsState()?.value == true
+    val captureMoved = browserWebViewRelinquished(captureCoordinator, r5AgentCoordinator)
     val context = LocalContext.current
     val tabStore = remember { TabStore(context, handlerContext, browserState) }
     val tabs by tabStore.tabs.collectAsState()
@@ -216,7 +215,7 @@ fun BrowserScreen(
 
             com.kelpie.browser.connect
                 .ConnectControls(compact = true)
-            if (!captureMoved && !agentMoved) {
+            if (!captureMoved) {
                 BrowserViewport(
                     tabStore,
                     browserState,
