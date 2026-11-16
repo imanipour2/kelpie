@@ -59,11 +59,11 @@ class R5AgentCoordinator(
     private val consent = AndroidAgentProcessSession.runtimeConsent()
     private val nativePort = R5NativeBrowserPort(activity, ctx, renderer)
     private var ownership = WebViewOwnershipState()
-    private var runtime = newRuntime()
+    @Volatile private var runtime = newRuntime()
     private var currentGeneration: String? = null
     private var currentTabId: String? = null
-    private var ready = false
-    private var closed = false
+    @Volatile private var ready = false
+    @Volatile private var closed = false
 
     private fun newRuntime(): AgentOperationRuntime =
         AgentOperationRuntime(consent, VerifiedNativeBrowserAdapter(consent, ownership, nativePort))
@@ -195,13 +195,21 @@ class R5AgentCoordinator(
                 if (receipt.status == ExecutionStatus.EXECUTED && stillOwner) {
                     nativePort.takePayload(receipt.evidenceId)
                 } else {
-                    nativePort.clearPendingEvidence()
+                    withContext(Dispatchers.Main.immediate) { nativePort.clearPendingEvidence() }
                     null
                 }
+            // STOP or a replacement generation can occur while payload bytes
+            // are being read from Main. Never expose those bytes afterwards.
+            val deliverable =
+                canUse(client, generation, consent.snapshot() as? SessionConsentCore.State.Active) &&
+                    ready && selectedRuntime === runtime
+            if (!deliverable) {
+                return@register errorResponse("SESSION_REVOKED", "Agent result was invalidated before delivery")
+            }
             successResponse(
                 mapOf(
                     "commandId" to receipt.commandId,
-                    "status" to if (stillOwner) receipt.status.name else "UNCERTAIN",
+                    "status" to receipt.status.name,
                     "code" to receipt.code?.name,
                     "admission" to receipt.admission?.name,
                     "mayHaveCompleted" to (operation !in setOf(Operation.READ_DOM, Operation.SCREENSHOT) &&
