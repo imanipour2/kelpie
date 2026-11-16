@@ -6,11 +6,19 @@ import android.content.Intent
 import android.content.IntentFilter
 import androidx.activity.ComponentActivity
 import androidx.core.content.ContextCompat
+import com.kelpie.browser.agent.contract.AgentCommand
+import com.kelpie.browser.agent.contract.ExecutionStatus
+import com.kelpie.browser.agent.contract.Operation
 import com.kelpie.browser.agent.render.WebViewOwnershipState
+import com.kelpie.browser.agent.session.AgentSessionNotification
 import com.kelpie.browser.agent.session.AndroidAgentProcessSession
 import com.kelpie.browser.agent.session.SessionConsentCore
 import com.kelpie.browser.capture.PrivateWebViewDisplay
 import com.kelpie.browser.handlers.HandlerContext
+import com.kelpie.browser.network.Router
+import com.kelpie.browser.network.errorResponse
+import com.kelpie.browser.network.successResponse
+import com.kelpie.browser.network.verifiedClientId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -24,6 +32,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.util.UUID
 
 /**
  * Lifecycle bridge from the REAL native process consent to one Kelpie-owned
@@ -101,6 +110,114 @@ internal class R5AgentCoordinator(
             }
         }
     }
+
+    /** A single authenticated command ingress for HTTP and validated MCP envelopes. */
+    fun register(router: Router) {
+        router.register("agent-runtime-status") { body ->
+            val client = verifiedClientId()
+            val expected = body["consentGeneration"] as? String
+            val active = consent.snapshot() as? SessionConsentCore.State.Active
+            if (!canUse(client, expected, active)) {
+                errorResponse("PERMISSION_REQUIRED", "No owner-authorized R5 agent session")
+            } else {
+                successResponse(
+                    mapOf(
+                        "status" to if (ready) "READY" else "SUSPENDED_OR_TRANSFER",
+                        "owner" to ownership.status().name,
+                        "privateRenderer" to renderer.state.value.name,
+                        "supported" to listOf("NAVIGATE", "READ_DOM", "CLICK", "FILL", "TYPE", "SCROLL", "SCREENSHOT"),
+                    ),
+                )
+            }
+        }
+        router.register("agent-tabs") { body ->
+            val client = verifiedClientId()
+            val active = consent.snapshot() as? SessionConsentCore.State.Active
+            if (!canUse(client, body["consentGeneration"] as? String, active) || !ready) {
+                return@register errorResponse("PERMISSION_REQUIRED", "R5 session/renderer unavailable")
+            }
+            withContext(Dispatchers.Main.immediate) {
+                val store = ctx.tabStore ?: return@withContext errorResponse("NO_WEBVIEW", "No owned tab store")
+                val tabs = store.tabs.value.take(40).map { tab ->
+                    mapOf(
+                        "tabId" to tab.id,
+                        "documentEpoch" to tab.documentVersion,
+                        "active" to (tab.id == store.activeTabId.value),
+                        "title" to tab.pageTitle.take(256),
+                        "urlWithoutQuery" to tab.currentUrl.substringBefore("?").substringBefore("#").take(2048),
+                    )
+                }
+                if (!canUse(client, body["consentGeneration"] as? String, consent.snapshot() as? SessionConsentCore.State.Active)) {
+                    errorResponse("SESSION_REVOKED", "Consent ended during tab observation")
+                } else {
+                    successResponse(mapOf("tabs" to tabs))
+                }
+            }
+        }
+        router.register("agent-command") { body ->
+            val client = verifiedClientId()
+            val active = consent.snapshot() as? SessionConsentCore.State.Active
+            val generation = body["consentGeneration"] as? String
+            if (!canUse(client, generation, active) || !ready) {
+                return@register errorResponse("PERMISSION_REQUIRED", "R5 session/renderer unavailable")
+            }
+            val operation =
+                (body["operation"] as? String)?.let { runCatching { Operation.valueOf(it.uppercase()) }.getOrNull() }
+                    ?: return@register errorResponse("INVALID_PARAMS", "Unknown agent operation")
+            val tabId = body["tabId"] as? String
+                ?: return@register errorResponse("INVALID_PARAMS", "An observed tabId is required")
+            val epoch = body["documentEpoch"] as? String
+                ?: return@register errorResponse("INVALID_PARAMS", "A fresh documentEpoch is required")
+            val command =
+                AgentCommand(
+                    commandId = body["commandId"] as? String ?: UUID.randomUUID().toString(),
+                    principalId = client!!,
+                    consentGeneration = generation!!,
+                    tabId = tabId,
+                    observedDocumentEpoch = epoch,
+                    operation = operation,
+                    targetUrl = body["url"] as? String,
+                    selector = body["selector"] as? String,
+                    inputText = body["text"] as? String,
+                    scrollDeltaX = (body["scrollX"] as? Number)?.toDouble() ?: 0.0,
+                    scrollDeltaY = (body["scrollY"] as? Number)?.toDouble() ?: 0.0,
+                    clientSequence = (body["clientSequence"] as? Number)?.toLong() ?: 0L,
+                )
+            // Capture a stable runtime reference: STOP may replace the active
+            // generation while this suspended action is in flight.
+            val selectedRuntime = runtime
+            val receipt = selectedRuntime.dispatch(command, client)
+            val stillOwner = canUse(client, generation, consent.snapshot() as? SessionConsentCore.State.Active) && ready
+            val payload =
+                if (receipt.status == ExecutionStatus.EXECUTED && stillOwner) {
+                    nativePort.takePayload(receipt.evidenceId)
+                } else {
+                    nativePort.clearPendingEvidence()
+                    null
+                }
+            successResponse(
+                mapOf(
+                    "commandId" to receipt.commandId,
+                    "status" to if (stillOwner) receipt.status.name else "UNCERTAIN",
+                    "code" to receipt.code?.name,
+                    "admission" to receipt.admission?.name,
+                    "mayHaveCompleted" to (operation !in setOf(Operation.READ_DOM, Operation.SCREENSHOT) &&
+                        receipt.status != ExecutionStatus.REJECTED),
+                    "data" to payload,
+                ),
+            )
+        }
+    }
+
+    private fun canUse(
+        client: String?,
+        expectedGeneration: String?,
+        active: SessionConsentCore.State.Active?,
+    ): Boolean =
+        !closed && client != null && expectedGeneration != null &&
+            active != null && !active.locked && active.principalId == client &&
+            active.generation == expectedGeneration &&
+            AgentSessionNotification.canNotify(activity)
 
     /** Called from Activity lifecycle, not from a remote JSON argument. */
     fun onPause() {
