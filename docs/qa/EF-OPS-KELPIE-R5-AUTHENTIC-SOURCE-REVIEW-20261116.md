@@ -1,6 +1,6 @@
 # Kelpie R5 authentic Windows source — review and guarded engineering import
 
-Status: **DRAFT / SOURCE-ONLY / NOT WIRED / NO INSTALL / NO MERGE / RELEASE_NO_GO**  
+Status: **DRAFT / SOURCE-ONLY / NOT WIRED / NO INSTALL / NO MERGE / RELEASE_NO_GO**
 2026-11-16. Tracking: https://github.com/imanipour2/enerfoam-website/issues/98
 
 ## Authority and source provenance
