@@ -27,8 +27,13 @@ internal object AgentSessionNotification {
             Build.VERSION.SDK_INT < 33 ||
                 ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
                 PackageManager.PERMISSION_GRANTED
-        val enabled = context.getSystemService(NotificationManager::class.java)?.areNotificationsEnabled() == true
-        return permission && enabled
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return false
+        val channel = manager.getNotificationChannel(CHANNEL)
+        val groupBlocked =
+            channel?.group?.let { manager.getNotificationChannelGroup(it)?.isBlocked == true } ?: false
+        return permission &&
+            manager.areNotificationsEnabled() &&
+            stopChannelVisible(channel?.importance, groupBlocked)
     }
 
     fun show(context: Context): Boolean {
@@ -38,6 +43,9 @@ internal object AgentSessionNotification {
             manager.createNotificationChannel(
                 NotificationChannel(CHANNEL, context.getString(R.string.r5_agent_notification_channel), NotificationManager.IMPORTANCE_LOW),
             )
+            // A user-blocked channel survives createNotificationChannel. Never activate
+            // consent when STOP would be invisible despite app-wide permission.
+            if (!canNotify(context)) return@runCatching false
             val stopIntent =
                 Intent(context, AgentSessionStopReceiver::class.java).apply {
                     action = ACTION_STOP
@@ -63,7 +71,8 @@ internal object AgentSessionNotification {
                     .addAction(android.R.drawable.ic_media_pause, context.getString(R.string.r5_agent_notification_stop), pending)
                     .build()
             manager.notify(NOTIFICATION_ID, notification)
-        }.isSuccess
+            true
+        }.getOrDefault(false)
     }
 
     fun hide(context: Context) {
@@ -82,3 +91,7 @@ class AgentSessionStopReceiver : BroadcastReceiver() {
         AgentSessionNotification.hide(context)
     }
 }
+
+/** Pure policy seam for a channel disabled independently of app-level permission. */
+internal fun stopChannelVisible(importance: Int?, groupBlocked: Boolean): Boolean =
+    (importance == null || importance > NotificationManager.IMPORTANCE_NONE) && !groupBlocked
