@@ -56,7 +56,9 @@ class AgentSessionCoordinator(
                     ?: return@register errorResponse("PERMISSION_REQUIRED", "Authenticated paired client required")
             withContext(Dispatchers.Main.immediate) {
                 syncLock()
-                if (closed || deviceLocked() || !activity.hasWindowFocus() ||
+                if (closed ||
+                    deviceLocked() ||
+                    !activity.hasWindowFocus() ||
                     !activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
                 ) {
                     return@withContext errorResponse("USER_TAP_REQUIRED", "Open the native Kelpie QA window to consent")

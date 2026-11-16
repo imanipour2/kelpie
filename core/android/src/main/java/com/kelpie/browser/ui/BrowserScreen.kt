@@ -416,8 +416,7 @@ fun BrowserScreen(
     }
 
     PairingDialog(coordinator = pairingCoordinator)
-    captureCoordinator?.let { PrivateCaptureConsentDialog(it, tabStore) }
-    agentSessionCoordinator?.let { com.kelpie.browser.agent.session.AgentSessionConsentUi(it) }
+    BrowserConsentOverlays(captureCoordinator, tabStore, agentSessionCoordinator)
 
     LaunchedEffect(showSettings, pendingWelcomeFromHelp) {
         if (!showSettings && pendingWelcomeFromHelp) {
