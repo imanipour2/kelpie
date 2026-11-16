@@ -17,6 +17,9 @@ internal object AndroidAgentProcessSession {
     private val pendingState = MutableStateFlow<SessionConsentCore.State.Pending?>(null)
     private val activeState = MutableStateFlow<SessionConsentCore.State.Active?>(null)
 
+    /** Same process-only authority used by the native UI and authenticated R5 runtime. */
+    fun runtimeConsent(): SessionConsentCore = core
+
     val pending: StateFlow<SessionConsentCore.State.Pending?> = pendingState.asStateFlow()
     val active: StateFlow<SessionConsentCore.State.Active?> = activeState.asStateFlow()
 
