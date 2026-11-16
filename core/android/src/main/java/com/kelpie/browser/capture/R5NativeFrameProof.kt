@@ -50,8 +50,7 @@ internal class R5NativeFrameProof(
     }
 
     fun expectedRgb(sequence: Int): Int {
-        require(sequence in 1..MAX_FRAMES)
-        return (seed + sequence * COLOR_STEP) and 0xFFFFFF
+        return R5FrameNonce.color(seed, sequence)
     }
 
     fun repaint(expectedRgb: Int) {
@@ -68,9 +67,8 @@ internal class R5NativeFrameProof(
     }
 
     companion object {
-        const val MAX_FRAMES = 512
+        const val MAX_FRAMES = R5FrameNonce.MAX_FRAMES
         const val SAMPLE_PX = 12
         private const val MARKER_PX = 24
-        private const val COLOR_STEP = 0x010307
     }
 }
