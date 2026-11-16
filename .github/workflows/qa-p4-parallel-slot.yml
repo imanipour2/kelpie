@@ -1,0 +1,99 @@
+name: QA P4 Parallel Slot Android (No Install)
+
+on:
+  pull_request:
+    paths:
+      - 'apps/android/**'
+      - 'core/android/**'
+      - '.github/workflows/qa-p4-parallel-slot.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p4-parallel-slot-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  parallel-slot-build:
+    name: Verify parallel QA package, security, native alignment
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact pull request commit
+        uses: actions/checkout@v6.0.3
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: ./.github/actions/browser-contract
+      - name: Set up Java 17
+        uses: actions/setup-java@v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4.0.3
+      - name: Install SDK tools
+        run: sdkmanager "platforms;android-34" "build-tools;35.0.0"
+      - name: Cache Gradle
+        uses: actions/cache@v5.0.5
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            apps/android/.gradle
+          key: gradle-${{ runner.os }}-${{ hashFiles('core/android/**/*.gradle*', 'apps/android/**/*.gradle*', 'apps/android/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+      - name: KtLint, JVM tests and parallel-only QA APK
+        working-directory: apps/android
+        run: |
+          ./gradlew --no-daemon \
+            -PkelpieParallelCaptureQaProfile=true \
+            :kelpie-browser:ktlintCheck \
+            :kelpie-browser:testDebugUnitTest \
+            :app:assembleDebug
+      - name: Prove the APK is an isolated, debug-only package
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=apps/android/app/build/outputs/apk/debug/app-debug.apk
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          SIGN="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          test -s "$APK"
+          "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.browser.pcparallelverify'"
+          "$AAPT" dump badging "$APK" | grep -F "versionCode='30' versionName='0.2.10-parallel-qa'"
+          "$SIGN" verify --verbose --print-certs "$APK"
+          ! "$AAPT" dump permissions "$APK" | grep -F 'android.permission.RECORD_AUDIO'
+          native_count=0
+          while IFS= read -r member; do
+            native_count=$((native_count + 1))
+            unzip -p "$APK" "$member" > /tmp/kelpie-parallel-native.so
+            while IFS= read -r alignment; do
+              if (( alignment < 16384 )); then
+                echo "::error::Unaligned native segment in $member ($alignment)"
+                exit 1
+              fi
+            done < <(readelf -lW /tmp/kelpie-parallel-native.so | awk '$1 == "LOAD" {print $NF}')
+          done < <(unzip -Z1 "$APK" | grep -E '^lib/(arm64-v8a|x86_64)/.*[.]so$')
+          test "$native_count" -gt 0
+          sha256sum "$APK" > apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
+          {
+            echo "source_commit=$(git rev-parse HEAD)"
+            echo "package=com.kelpie.browser.pcparallelverify"
+            echo "version=0.2.10-parallel-qa"
+            echo "versionCode=30"
+            echo "port=18447"
+            echo "signature=debug-only"
+            echo "install=NOT_AUTHORIZED"
+            echo "artifact_sha256=$(sha256sum "$APK" | awk '{print $1}')"
+          } > apps/android/app/build/outputs/apk/debug/provenance.txt
+      - name: Upload non-released QA artifact
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: kelpie-p4-parallel-qa-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            apps/android/app/build/outputs/apk/debug/app-debug.apk
+            apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
+            apps/android/app/build/outputs/apk/debug/provenance.txt
+          if-no-files-found: error
+          retention-days: 14
