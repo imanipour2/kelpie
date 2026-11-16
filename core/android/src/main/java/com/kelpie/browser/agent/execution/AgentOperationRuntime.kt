@@ -63,6 +63,11 @@ class AgentOperationRuntime(
         require(maxTrackedCommands > 0) { "Command history capacity must be positive" }
     }
 
+    /** STOP/lock may cancel operations while the session reducer independently revokes. */
+    fun cancelInFlight() {
+        synchronized(jobsLock) { running.toList() }.forEach { it.cancel(CancellationException("R5_SESSION_REVOKED")) }
+    }
+
     /** Cancels work immediately; effects already sent to a website are not reversible. */
     fun stopFromTrustedNativeUi() {
         consent.stop()
