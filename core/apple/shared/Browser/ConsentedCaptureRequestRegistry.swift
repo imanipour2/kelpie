@@ -80,8 +80,11 @@ final class ConsentedCaptureRequestRegistry {
         currentView: AnyObject,
         unlocked: Bool
     ) -> Bool {
-        guard let next = pending, next.prompt.requestId == requestId,
-              nowMs() < next.prompt.expiresAtMs, unlocked,
+        // A stale dialog callback cannot cancel an unrelated, newer prompt.
+        guard let next = pending, next.prompt.requestId == requestId else {
+            return false
+        }
+        guard nowMs() < next.prompt.expiresAtMs, unlocked,
               next.prompt.tabId == currentTabId,
               next.prompt.documentVersion == currentDocumentVersion,
               next.view === currentView else {
@@ -116,10 +119,11 @@ final class ConsentedCaptureRequestRegistry {
         unlocked: Bool,
         userStopped: Bool
     ) -> Bool {
+        // Unknown, unauthenticated, or foreign callers must not revoke the
+        // legitimate owner's lease. Only a verified owner reaches claimFrame.
         guard let current = approved, current.requestId == requestId,
               let client = verifiedClientId, client == current.binding.clientId,
               attemptId == current.binding.agentAttemptId else {
-            revoke()
             return false
         }
         let scope = ConsentedCaptureLease.Binding(
