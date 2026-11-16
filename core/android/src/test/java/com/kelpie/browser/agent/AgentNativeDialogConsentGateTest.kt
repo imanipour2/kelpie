@@ -26,6 +26,7 @@ class AgentNativeDialogConsentGateTest {
         assertFalse(nativeConsentTapAllowed(true, true, false, true))
         assertFalse(nativeConsentTapAllowed(true, true, true, false))
     }
+
     @Test
     fun allSixteenForegroundSafetyCombinationsAreChecked() {
         for (bits in 0 until 16) {
@@ -41,5 +42,4 @@ class AgentNativeDialogConsentGateTest {
             }
         }
     }
-
 }
