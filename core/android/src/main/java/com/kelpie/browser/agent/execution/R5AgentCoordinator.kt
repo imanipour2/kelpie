@@ -4,6 +4,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.app.KeyguardManager
+import android.os.PowerManager
 import androidx.activity.ComponentActivity
 import androidx.core.content.ContextCompat
 import com.kelpie.browser.agent.contract.AgentCommand
@@ -228,6 +230,8 @@ class R5AgentCoordinator(
         !closed && client != null && expectedGeneration != null &&
             active != null && !active.locked && active.principalId == client &&
             active.generation == expectedGeneration &&
+            activity.getSystemService(PowerManager::class.java).isInteractive &&
+            !activity.getSystemService(KeyguardManager::class.java).isDeviceLocked &&
             AgentSessionNotification.canNotify(activity)
 
     /** Called from Activity lifecycle, not from a remote JSON argument. */
