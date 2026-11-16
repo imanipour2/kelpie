@@ -132,7 +132,17 @@ class AgentSessionCoordinator(
 
     /** Only the affirmative native dialog callback invokes this, never HTTP. */
     fun approveFromNativeUi(promptId: String): Boolean {
-        if (closed || !activity.hasWindowFocus() || deviceLocked() || !AgentSessionNotification.canNotify(activity)) {
+        // Compose AlertDialog is a separate focused window. Requiring the
+        // Activity's *main* window focus here rejects a genuine dialog tap.
+        // This method is callable only by native onClick, never over HTTP.
+        if (closed ||
+            !nativeConsentTapAllowed(
+                lifecycleResumed = activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED),
+                activityVisible = activity.window.decorView.isShown,
+                deviceUnlocked = !deviceLocked(),
+                stopNotificationEnabled = AgentSessionNotification.canNotify(activity),
+            )
+        ) {
             return false
         }
         val granted =
@@ -182,3 +192,11 @@ class AgentSessionCoordinator(
         return keyguard?.isDeviceLocked != false || power?.isInteractive != true
     }
 }
+
+/** A genuine native dialog tap may focus the dialog, not the Activity main window. */
+internal fun nativeConsentTapAllowed(
+    lifecycleResumed: Boolean,
+    activityVisible: Boolean,
+    deviceUnlocked: Boolean,
+    stopNotificationEnabled: Boolean,
+): Boolean = lifecycleResumed && activityVisible && deviceUnlocked && stopNotificationEnabled
