@@ -41,8 +41,8 @@ Native outbound Nessie connectivity follows [the connection contract](docs/nessi
 
 ## Release Policy
 
-- Every pushed fix requires a full release/publish cycle, even if it is only a small patch.
-- The release cycle is not complete until the affected version is bumped, the affected artifact is published, the GitHub release is created, and the published artifact is installed locally and verified from that installed release.
+- **Fork-scoped policy:** follow [Development and release policy](docs/policies/development-and-release.md) and the matching `AGENTS.md` rules (decision `EF-OPS-KELPIE-RELEASE-POLICY-001`). Development/QA/docs/policy branch pushes and PRs in `imanipour2/kelpie` do not trigger version bumps, publication or installation. Merges to `main` require review/CI and still are not software releases.
+- **Public release requires separate approval:** only explicit `RELEASE_APPROVAL` for a specified commit/components/QA/signing/rollback authorizes version bumps, a published GitHub Release, affected artifact/npm publication and installation/verification of that released artifact. Android/iOS parity remains required unless separately and formally excepted; this release-policy change is not such an exception.
 - **Install the latest app on this Mac after every release.** When the macOS app is part of a release, build it, replace `/Applications/Kelpie.app` with the freshly built bundle (kill any running instance first, then `ditto` the build product into `/Applications`), and relaunch from `/Applications` so the running app always matches the release. A GitHub release alone does not update the installed app.
 
 ## Using Codex as an External Agent
