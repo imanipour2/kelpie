@@ -1,4 +1,4 @@
-name: QA R5 Source-only Android (No Install)
+name: QA R5 Native Consent-only Android (No Install)
 
 on:
   pull_request:
@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   source-slot-build:
-    name: Verify R5 source-only QA package and actual ports
+    name: Verify R5 native-consent QA package, isolation and actual ports
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -41,7 +41,7 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('core/android/**/*.gradle*', 'apps/android/**/*.gradle*', 'apps/android/**/gradle-wrapper.properties') }}
           restore-keys: |
             gradle-${{ runner.os }}-
-      - name: KtLint, agent JVM tests and isolated R5 source QA APK
+      - name: KtLint, agent JVM tests and isolated R5 native-consent QA APK
         working-directory: apps/android
         run: |
           ./gradlew --no-daemon \
@@ -62,8 +62,9 @@ jobs:
           grep -Eq 'LOCAL_HTTP_PORT[[:space:]]*=[[:space:]]*18457;' "$CORE"
           grep -Eq 'LOCAL_HTTP_PORT[[:space:]]*=[[:space:]]*18457;' "$APP"
           grep -Eq 'PRIVATE_CAPTURE_QA_ENABLED[[:space:]]*=[[:space:]]*false;' "$APP"
+          grep -Eq 'R5_NATIVE_CONSENT_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
           "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.browser.r5sourceverify'"
-          "$AAPT" dump badging "$APK" | grep -F "versionCode='31' versionName='0.2.11-r5-source-qa'"
+          "$AAPT" dump badging "$APK" | grep -F "versionCode='31' versionName='0.2.11-r5-consent-qa'"
           "$SIGN" verify --verbose --print-certs "$APK"
           ! "$AAPT" dump permissions "$APK" | grep -F 'android.permission.RECORD_AUDIO'
           native_count=0
@@ -78,23 +79,23 @@ jobs:
             done < <(readelf -lW /tmp/kelpie-r5-source-native.so | awk '$1 == "LOAD" {print $NF}')
           done < <(unzip -Z1 "$APK" | grep -E '^lib/(arm64-v8a|x86_64)/.*[.]so$')
           test "$native_count" -gt 0
-          # This QA build remains explicitly source-only: no live agent dispatcher.
+          # Consent-only QA: native prompt and STOP, but no browser-operation dispatcher.
           ! grep -q 'AgentOperationRuntime' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
           sha256sum "$APK" > apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
           {
             echo "source_commit=$(git rev-parse HEAD)"
             echo "package=com.kelpie.browser.r5sourceverify"
-            echo "version=0.2.11-r5-source-qa"
+            echo "version=0.2.11-r5-consent-qa"
             echo "versionCode=31"
             echo "port=18457"
-            echo "agent_routes=NOT_IMPLEMENTED"
+            echo "agent_routes=CONSENT_ONLY_NO_BROWSER_OPERATIONS"
             echo "signature=debug-only"
             echo "install=NOT_AUTHORIZED"
             echo "artifact_sha256=$(sha256sum "$APK" | awk '{print $1}')"
           } > apps/android/app/build/outputs/apk/debug/provenance.txt
       - uses: actions/upload-artifact@v4.6.2
         with:
-          name: kelpie-r5-source-qa-${{ github.event.pull_request.head.sha || github.sha }}
+          name: kelpie-r5-consent-qa-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             apps/android/app/build/outputs/apk/debug/app-debug.apk
             apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256

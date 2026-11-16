@@ -4,4 +4,10 @@
 
     <!-- R5 source-only QA must never acquire microphone permission. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" tools:node="remove" />
+
+    <application>
+        <receiver
+            android:name="com.kelpie.browser.agent.session.AgentSessionStopReceiver"
+            android:exported="false" />
+    </application>
 </manifest>
