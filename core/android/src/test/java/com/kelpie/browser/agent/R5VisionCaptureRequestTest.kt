@@ -92,6 +92,20 @@ class R5VisionCaptureRequestTest {
     }
 
     @Test
+    fun originalCannotPromiseReceiverSmallerResolution() {
+        assertEquals(
+            R5VisionCaptureRequest.Parse.Invalid("ORIGINAL_DISALLOWS_SIZE_LIMIT"),
+            parse.parse(
+                mapOf(
+                    "quality" to "original",
+                    "receiverSupportsScaleMetadata" to true,
+                    "maxLongEdge" to 1280,
+                ),
+            ),
+        )
+    }
+
+    @Test
     fun malformedPayloadIsRejected() {
         assertEquals(
             R5VisionCaptureRequest.Parse.Invalid("INVALID_CAPTURE_OPTIONS"),

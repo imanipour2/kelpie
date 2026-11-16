@@ -58,6 +58,9 @@ data class R5VisionCaptureRequest(
             if (rawLimit != null && (rawLimit !is Int || rawLimit !in 1024..4096)) {
                 return Parse.Invalid("INVALID_CAPTURE_LONG_EDGE")
             }
+            if (rawLimit != null && quality == Quality.ORIGINAL) {
+                return Parse.Invalid("ORIGINAL_DISALLOWS_SIZE_LIMIT")
+            }
             if (rawLimit != null && scaled != true) {
                 return Parse.Invalid("SCALE_METADATA_REQUIRED")
             }
