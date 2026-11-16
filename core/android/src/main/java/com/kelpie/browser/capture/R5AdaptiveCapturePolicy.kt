@@ -91,6 +91,12 @@ internal object R5AdaptiveCapturePolicy {
         if (request.maxLongEdge != null && request.maxLongEdge < minimum) {
             return Decision.Deferred("RECEIVER_LIMIT_BELOW_LEGIBILITY_FLOOR")
         }
+        if (request.maxLongEdge != null &&
+            request.maxLongEdge < nativeLongEdge &&
+            !request.consumer.coordinateScaleMetadata
+        ) {
+            return Decision.Deferred("RECEIVER_CANNOT_MAP_SCALED_OUTPUT")
+        }
         val longEdge = minOf(nativeLongEdge, desired, request.maxLongEdge ?: nativeLongEdge)
         // Without explicit support for scale metadata, preserve pixel coordinates.
         val outputLongEdge = if (request.consumer.coordinateScaleMetadata) longEdge else nativeLongEdge
