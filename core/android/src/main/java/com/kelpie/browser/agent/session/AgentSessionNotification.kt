@@ -12,6 +12,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.kelpie.browser.R
 
 /**
  * Independent local STOP affordance, including while the Activity is backgrounded.
@@ -36,7 +37,7 @@ internal object AgentSessionNotification {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return false
         return runCatching {
             manager.createNotificationChannel(
-                NotificationChannel(CHANNEL, "Kelpie agent QA", NotificationManager.IMPORTANCE_LOW),
+                NotificationChannel(CHANNEL, context.getString(R.string.r5_agent_notification_channel), NotificationManager.IMPORTANCE_LOW),
             )
             val stopIntent =
                 Intent(context, AgentSessionStopReceiver::class.java).apply {
@@ -54,13 +55,13 @@ internal object AgentSessionNotification {
                 NotificationCompat
                     .Builder(context, CHANNEL)
                     .setSmallIcon(android.R.drawable.ic_lock_lock)
-                    .setContentTitle("Kelpie agent session active (QA)")
-                    .setContentText("Consent-only QA active; browser actions disabled. STOP to revoke")
+                    .setContentTitle(context.getString(R.string.r5_agent_notification_title))
+                    .setContentText(context.getString(R.string.r5_agent_notification_desc))
                     .setOngoing(true)
                     .setOnlyAlertOnce(true)
                     .setPriority(NotificationCompat.PRIORITY_LOW)
                     .setVisibility(Notification.VISIBILITY_PRIVATE)
-                    .addAction(android.R.drawable.ic_media_pause, "STOP", pending)
+                    .addAction(android.R.drawable.ic_media_pause, context.getString(R.string.r5_agent_notification_stop), pending)
                     .build()
             manager.notify(NOTIFICATION_ID, notification)
         }.isSuccess

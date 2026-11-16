@@ -15,4 +15,19 @@
     <string name="p4_capture_notification_title">تصویربرداری کلپی فعال است</string>
     <string name="p4_capture_notification_description">برای ابطال فوری نشست محدود، «توقف» را انتخاب کنید.</string>
     <string name="p4_capture_notification_stop">توقف</string>
+
+    <!-- رضایت محلی R5 صرفاً برای آزمون؛ دستورات مرورگر فعال نیستند. -->
+    <string name="r5_agent_title">مجوز نشست عامل کلپی (آزمایشی)</string>
+    <string name="r5_agent_disclosure">کلاینت جفت‌شده: %1$s\n\nبا یک تأیید واقعی روی همین گوشی، رضایت فقط برای نشست فعلی فرایند کلپی ثبت می‌شود. این نسخه آزمایشی فقط رضایت و توقف را می‌سنجد؛ کنترل صفحات و تصویربرداری از راه دور هنوز فعال نیست. هیچ اجازه‌ای برای دیدن برنامه‌های دیگر، صفحه قفل یا محتوای محافظت‌شده صادر نمی‌شود. پرداخت، انتشار، حذف برگشت‌ناپذیر و افشای گذرواژه یا اعتبارنامه به تأیید مستقل نیاز دارد. دکمه توقف در برنامه و اعلان قابل استفاده است.</string>
+    <string name="r5_agent_approve">تأیید این نشست</string>
+    <string name="r5_agent_deny">رد درخواست</string>
+    <string name="r5_agent_stop">توقف فوری نشست آزمایشی</string>
+    <string name="r5_agent_error_title">مجوز نشست صادر نشد</string>
+    <string name="r5_agent_error_notification">برای نمایش کنترل توقف، اعلان اندروید لازم است؛ مجوزی صادر نشد.</string>
+    <string name="r5_agent_error_locked">گوشی قفل است یا اعلان در دسترس نیست؛ مجوز صادر نشد.</string>
+    <string name="r5_agent_close">بستن</string>
+    <string name="r5_agent_notification_channel">نشست آزمایشی عامل کلپی</string>
+    <string name="r5_agent_notification_title">رضایت آزمایشی عامل کلپی فعال است</string>
+    <string name="r5_agent_notification_desc">فقط آزمایش رضایت؛ فرمان‌های مرورگر غیرفعال‌اند. برای لغو «توقف» را بزنید.</string>
+    <string name="r5_agent_notification_stop">توقف</string>
 </resources>

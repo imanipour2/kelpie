@@ -21,8 +21,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.text.BidiFormatter
+import com.kelpie.browser.R
 
 /** Explicit local tap, never remotely synthesized. Independent of a website URL. */
 @Composable
@@ -37,7 +40,7 @@ fun AgentSessionConsentUi(coordinator: AgentSessionCoordinator) {
             val prompt = pendingPermissionPrompt
             pendingPermissionPrompt = null
             if (!approved || prompt == null || !coordinator.approveFromNativeUi(prompt)) {
-                error = "Permission unavailable; agent consent was not granted."
+                error = context.getString(R.string.r5_agent_error_notification)
             }
         }
 
@@ -45,16 +48,13 @@ fun AgentSessionConsentUi(coordinator: AgentSessionCoordinator) {
     if (request != null) {
         AlertDialog(
             onDismissRequest = coordinator::denyFromNativeUi,
-            title = { Text("Kelpie agent session (QA)") },
+            title = { Text(stringResource(R.string.r5_agent_title)) },
             text = {
                 Text(
-                    "Paired client: " + request.principalId +
-                        "\nOne local approval for this running Kelpie process. " +
-                        "Normal browser navigation would be allowed only after separate QA integration. " +
-                        "No other apps, lock screen or protected content. " +
-                        "Payments, publishing, deletion and credential export need separate approval. " +
-                        "STOP is always available in Kelpie and notifications. " +
-                        "This build DOES NOT enable remote browser actions or screenshots.",
+                    stringResource(
+                        R.string.r5_agent_disclosure,
+                        BidiFormatter.getInstance().unicodeWrap(request.principalId),
+                    ),
                 )
             },
             confirmButton = {
@@ -70,13 +70,13 @@ fun AgentSessionConsentUi(coordinator: AgentSessionCoordinator) {
                             pendingPermissionPrompt = promptId
                             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                         } else if (!coordinator.approveFromNativeUi(promptId)) {
-                            error = "Device is locked or notification is unavailable. Consent denied."
+                            error = context.getString(R.string.r5_agent_error_locked)
                         }
                     },
-                ) { Text("Approve this session") }
+                ) { Text(stringResource(R.string.r5_agent_approve)) }
             },
             dismissButton = {
-                TextButton(onClick = coordinator::denyFromNativeUi) { Text("Deny") }
+                TextButton(onClick = coordinator::denyFromNativeUi) { Text(stringResource(R.string.r5_agent_deny)) }
             },
         )
     }
@@ -86,7 +86,7 @@ fun AgentSessionConsentUi(coordinator: AgentSessionCoordinator) {
             Button(
                 onClick = coordinator::stopFromNativeUi,
                 modifier = Modifier.padding(12.dp),
-            ) { Text("STOP agent session (QA)") }
+            ) { Text(stringResource(R.string.r5_agent_stop)) }
         }
     }
 
@@ -94,10 +94,10 @@ fun AgentSessionConsentUi(coordinator: AgentSessionCoordinator) {
     if (message != null) {
         AlertDialog(
             onDismissRequest = { error = null },
-            title = { Text("Agent session not authorized") },
+            title = { Text(stringResource(R.string.r5_agent_error_title)) },
             text = { Text(message) },
             confirmButton = {
-                TextButton(onClick = { error = null }) { Text("Close") }
+                TextButton(onClick = { error = null }) { Text(stringResource(R.string.r5_agent_close)) }
             },
         )
     }
