@@ -11,6 +11,11 @@ ktlint {
     outputToConsole.set(true)
 }
 
+// A second, isolated P4-only QA identity; never replace pcverify or unifiedverify.
+val parallelP4Qa = providers.gradleProperty("kelpieParallelCaptureQaProfile").orNull == "true"
+val existingP4Qa = providers.gradleProperty("kelpiePrivateCaptureQaProfile").orNull == "true"
+val anyP4Qa = parallelP4Qa || existingP4Qa
+
 android {
     namespace = "com.unlikeotherai.kelpie.app"
     compileSdk = 34
@@ -22,9 +27,12 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionCode = 25
         versionName = "0.2.5"
-        if (providers.gradleProperty("kelpiePrivateCaptureQaProfile").orNull == "true") {
+        if (existingP4Qa) {
             versionCode = 29
             versionName = "0.2.9-qa"
+        } else if (parallelP4Qa) {
+            versionCode = 30
+            versionName = "0.2.10-parallel-qa"
         }
         buildConfigField("int", "LOCAL_HTTP_PORT", "8420")
         buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")
@@ -33,7 +41,7 @@ android {
 
     sourceSets {
         getByName("debug") {
-            if (providers.gradleProperty("kelpiePrivateCaptureQaProfile").orNull == "true") {
+            if (anyP4Qa) {
                 manifest.srcFile("src/privateCaptureQa/AndroidManifest.xml")
             }
         }
@@ -47,7 +55,11 @@ android {
             } else if (providers.gradleProperty("kelpieVerificationProfile").orNull == "true") {
                 applicationIdSuffix = ".nessieverify"
                 buildConfigField("int", "LOCAL_HTTP_PORT", "18420")
-            } else if (providers.gradleProperty("kelpiePrivateCaptureQaProfile").orNull == "true") {
+            } else if (parallelP4Qa) {
+                applicationIdSuffix = ".pcparallelverify"
+                buildConfigField("int", "LOCAL_HTTP_PORT", "18447")
+                buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "true")
+            } else if (existingP4Qa) {
                 applicationIdSuffix = ".pcverify"
                 buildConfigField("int", "LOCAL_HTTP_PORT", "18437")
                 buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "true")
@@ -81,7 +93,7 @@ android {
             // AGP 8.3 does not reliably emit 16 KiB-aligned uncompressed
             // JNI entries. Extract compressed libs in the isolated QA APK
             // until a separately reviewed toolchain upgrade.
-            if (providers.gradleProperty("kelpiePrivateCaptureQaProfile").orNull == "true") {
+            if (anyP4Qa) {
                 useLegacyPackaging = true
             }
         }
