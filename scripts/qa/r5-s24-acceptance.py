@@ -7,6 +7,7 @@ No tokens, page DOM, screenshots, or private notification contents are logged.
 """
 import argparse
 import json
+import re
 import subprocess
 import sys
 import time
@@ -100,7 +101,8 @@ def preflight():
         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15,
     )
     if devices.returncode != 0 or len([
-        line for line in devices.stdout.splitlines() if "\tdevice" in line
+        line for line in devices.stdout.splitlines()
+        if re.search(r"^\S+\s+device(?:\s|$)", line)
     ]) != 1:
         raise CheckFailure("Exactly one authorized ADB device required")
     if CONFIG.serial not in devices.stdout:
@@ -216,7 +218,7 @@ def owner_approved():
     output = adb(["shell", "dumpsys", "notification"])
     # Do not print notification content (other apps contain sensitive data).
     has_channel = "kelpie_r5_agent_qa" in output
-    has_record = any("com.kelpie.browser.r5sourceverify" in x and
+    has_record = any(CONFIG.package in x and
                      "NotificationRecord(" in x for x in output.splitlines())
     expect("stop-notification-channel", has_channel, "STOP channel exists", "STOP channel missing")
     expect("stop-notification-present", has_record, "R5 notification present", "No R5 record")
