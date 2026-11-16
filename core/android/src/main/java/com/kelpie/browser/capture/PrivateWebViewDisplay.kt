@@ -22,7 +22,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.io.ByteArrayOutputStream
 import java.util.Base64
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
@@ -243,18 +242,22 @@ class PrivateWebViewDisplay(
             } else {
                 val encoded =
                     withContext(Dispatchers.Default) {
-                        val bytes = ByteArrayOutputStream()
-                        if (!frame.compress(Bitmap.CompressFormat.PNG, 100, bytes)) {
-                            null
-                        } else {
-                            mapOf(
-                                "image" to Base64.getEncoder().encodeToString(bytes.toByteArray()),
-                                "width" to frame.width,
-                                "height" to frame.height,
-                                "format" to "png",
-                                "coordinateSpace" to "viewport-css-pixels",
-                            )
-                        }
+                        // Bound compressed bytes before Base64/JSON copies are created.
+                        // An oversized or failed encode must not reach the agent.
+                        runCatching {
+                            val bytes = R5BoundedImageOutputStream()
+                            if (!frame.compress(Bitmap.CompressFormat.PNG, 100, bytes)) {
+                                null
+                            } else {
+                                mapOf(
+                                    "image" to Base64.getEncoder().encodeToString(bytes.toByteArray()),
+                                    "width" to frame.width,
+                                    "height" to frame.height,
+                                    "format" to "png",
+                                    "coordinateSpace" to "viewport-css-pixels",
+                                )
+                            }
+                        }.getOrNull()
                     }
                 if (active &&
                     !activityVisible &&
