@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.kelpie.browser.FeatureFlags
+import com.kelpie.browser.agent.execution.R5AgentCoordinator
 import com.kelpie.browser.browser.BrowserState
 import com.kelpie.browser.browser.KeyboardObserver
 import com.kelpie.browser.browser.SessionStore
@@ -64,10 +65,12 @@ fun BrowserScreen(
     pairingCoordinator: PairApprovalCoordinator,
     captureCoordinator: PrivateCaptureCoordinator? = null,
     agentSessionCoordinator: com.kelpie.browser.agent.session.AgentSessionCoordinator? = null,
+    r5AgentCoordinator: R5AgentCoordinator? = null,
 ) {
     var showPairedClients by remember { mutableStateOf(false) }
     val browserState = remember { BrowserState() }
     val captureMoved = captureCoordinator?.relinquished?.collectAsState()?.value == true
+    val agentMoved = r5AgentCoordinator?.relinquished?.collectAsState()?.value == true
     val context = LocalContext.current
     val tabStore = remember { TabStore(context, handlerContext, browserState) }
     val tabs by tabStore.tabs.collectAsState()
@@ -213,7 +216,7 @@ fun BrowserScreen(
 
             com.kelpie.browser.connect
                 .ConnectControls(compact = true)
-            if (!captureMoved) {
+            if (!captureMoved && !agentMoved) {
                 BrowserViewport(
                     tabStore,
                     browserState,
@@ -416,7 +419,7 @@ fun BrowserScreen(
     }
 
     PairingDialog(coordinator = pairingCoordinator)
-    BrowserConsentOverlays(captureCoordinator, tabStore, agentSessionCoordinator)
+    BrowserConsentOverlays(captureCoordinator, tabStore, agentSessionCoordinator, r5AgentCoordinator != null)
 
     LaunchedEffect(showSettings, pendingWelcomeFromHelp) {
         if (!showSettings && pendingWelcomeFromHelp) {
