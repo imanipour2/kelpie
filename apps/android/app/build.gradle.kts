@@ -39,8 +39,8 @@ android {
             versionCode = 30
             versionName = "0.2.10-parallel-qa"
         } else if (r5SourceQa) {
-            versionCode = 31
-            versionName = "0.2.11-r5-consent-qa"
+            versionCode = 32
+            versionName = "0.2.12-r5-consent-qa"
         }
         buildConfigField("int", "LOCAL_HTTP_PORT", "8420")
         buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")
@@ -75,8 +75,8 @@ android {
                 buildConfigField("int", "LOCAL_HTTP_PORT", "18437")
                 buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "true")
             } else if (r5SourceQa) {
-                applicationIdSuffix = ".r5sourceverify"
-                buildConfigField("int", "LOCAL_HTTP_PORT", "18457")
+                applicationIdSuffix = ".r5fixedverify"
+                buildConfigField("int", "LOCAL_HTTP_PORT", "18458")
                 buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")
                 buildConfigField("boolean", "R5_NATIVE_CONSENT_QA_ENABLED", "true")
             }
