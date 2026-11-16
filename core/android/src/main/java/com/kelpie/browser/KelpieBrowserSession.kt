@@ -122,7 +122,8 @@ class KelpieBrowserSession(
     private val handlerContext = HandlerContext()
     private val captureCoordinator =
         if (privateCaptureQaEnabled) PrivateCaptureCoordinator(activity, handlerContext, true) else null
-    private val agentSessionCoordinator = if (agentConsentQaEnabled) AgentSessionCoordinator(activity) else null
+    private val agentSessionCoordinator =
+        if (agentConsentQaEnabled) AgentSessionCoordinator(activity, agentBackgroundQaEnabled) else null
     private val r5AgentCoordinator = if (agentBackgroundQaEnabled) R5AgentCoordinator(activity, handlerContext) else null
     private val scriptPlaybackState = ScriptPlaybackState()
     private var httpServer: HTTPServer? = null
@@ -132,6 +133,7 @@ class KelpieBrowserSession(
     private val pairingCoordinator: PairApprovalCoordinator
 
     init {
+        agentSessionCoordinator?.runtimeReady = { r5AgentCoordinator?.isReady() == true }
         require(!agentBackgroundQaEnabled || agentConsentQaEnabled) {
             "R5 remote control requires native device consent"
         }
