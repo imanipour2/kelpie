@@ -81,7 +81,17 @@ class AgentConsentPolicyTest {
         ) = AgentAdmissionPolicy
             .check(
                 session.snapshot(),
-                AgentCommand("id", principal, generation, "t1", epoch, op, url),
+                AgentCommand(
+                    "id",
+                    principal,
+                    generation,
+                    "t1",
+                    epoch,
+                    op,
+                    url,
+                    selector = if (op in setOf(Operation.CLICK, Operation.FILL, Operation.TYPE)) "#fixture" else null,
+                    inputText = if (op in setOf(Operation.FILL, Operation.TYPE)) "test" else null,
+                ),
                 "t1",
                 "e1",
             ).code

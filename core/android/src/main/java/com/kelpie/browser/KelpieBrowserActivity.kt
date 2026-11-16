@@ -12,6 +12,8 @@ open class KelpieBrowserActivity : ComponentActivity() {
 
     protected open fun enableAgentConsentQa(): Boolean = false
 
+    protected open fun enableR5BackgroundAgentQa(): Boolean = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -20,6 +22,7 @@ open class KelpieBrowserActivity : ComponentActivity() {
                 this,
                 privateCaptureQaEnabled = enablePrivateCaptureQa(),
                 agentConsentQaEnabled = enableAgentConsentQa(),
+                agentBackgroundQaEnabled = enableR5BackgroundAgentQa(),
             )
         setContentView(browser.view())
     }

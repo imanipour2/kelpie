@@ -36,7 +36,10 @@ internal object AgentSessionNotification {
             stopChannelVisible(channel?.importance, groupBlocked)
     }
 
-    fun show(context: Context): Boolean {
+    fun show(
+        context: Context,
+        fullAgentQa: Boolean = false,
+    ): Boolean {
         if (!canNotify(context)) return false
         val manager = context.getSystemService(NotificationManager::class.java) ?: return false
         return runCatching {
@@ -63,8 +66,11 @@ internal object AgentSessionNotification {
                     .Builder(context, CHANNEL)
                     .setSmallIcon(android.R.drawable.ic_lock_lock)
                     .setContentTitle(context.getString(R.string.r5_agent_notification_title))
-                    .setContentText(context.getString(R.string.r5_agent_notification_desc))
-                    .setOngoing(true)
+                    .setContentText(
+                        context.getString(
+                            if (fullAgentQa) R.string.r5_agent_full_notification_desc else R.string.r5_agent_notification_desc,
+                        ),
+                    ).setOngoing(true)
                     .setOnlyAlertOnce(true)
                     .setPriority(NotificationCompat.PRIORITY_LOW)
                     .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)

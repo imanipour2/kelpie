@@ -54,6 +54,29 @@ object AgentAdmissionPolicy {
         if (command.operation == Operation.NAVIGATE || command.operation == Operation.OPEN_TAB) {
             if (!safeWebDestination(command.targetUrl)) return AdmissionResult(AdmissionCode.UNSAFE_URL)
         }
+        if (command.operation in setOf(Operation.CLICK, Operation.TYPE, Operation.FILL, Operation.SELECT)) {
+            if (command.selector.isNullOrBlank() ||
+                command.selector.length > 500 ||
+                command.selector.any(Char::isISOControl)
+            ) {
+                return AdmissionResult(AdmissionCode.INVALID_TARGET)
+            }
+        }
+        if (command.operation in setOf(Operation.TYPE, Operation.FILL)) {
+            if (command.inputText == null || command.inputText.length > 4_096) {
+                return AdmissionResult(AdmissionCode.INVALID_TARGET)
+            }
+        }
+        if (command.operation == Operation.SCROLL &&
+            (
+                !command.scrollDeltaX.isFinite() ||
+                    !command.scrollDeltaY.isFinite() ||
+                    kotlin.math.abs(command.scrollDeltaX) > 3_000.0 ||
+                    kotlin.math.abs(command.scrollDeltaY) > 3_000.0
+            )
+        ) {
+            return AdmissionResult(AdmissionCode.INVALID_TARGET)
+        }
         if (command.operation in sensitive) {
             return AdmissionResult(AdmissionCode.SENSITIVE_ACTION_REQUIRES_APPROVAL)
         }

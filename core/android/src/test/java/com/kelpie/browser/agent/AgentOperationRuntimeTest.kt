@@ -73,7 +73,18 @@ class AgentOperationRuntimeTest {
             op: Operation,
             epoch: String = "v1",
             url: String? = null,
-        ) = AgentCommand(id, "paired", active.generation, "t1", epoch, op, url, ++nextSequence)
+        ) = AgentCommand(
+            id,
+            "paired",
+            active.generation,
+            "t1",
+            epoch,
+            op,
+            url,
+            ++nextSequence,
+            selector = if (op in setOf(Operation.CLICK, Operation.FILL, Operation.TYPE)) "#fixture" else null,
+            inputText = if (op in setOf(Operation.FILL, Operation.TYPE)) "safe-test" else null,
+        )
     }
 
     private fun fixture(): Fixture {

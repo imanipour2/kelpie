@@ -5,6 +5,8 @@ class MainActivity : KelpieBrowserActivity() {
 
     override fun enableAgentConsentQa(): Boolean = com.unlikeotherai.kelpie.app.BuildConfig.R5_NATIVE_CONSENT_QA_ENABLED
 
+    override fun enableR5BackgroundAgentQa(): Boolean = com.unlikeotherai.kelpie.app.BuildConfig.R5_BACKGROUND_AGENT_QA_ENABLED
+
     private val updates get() = (application as KelpieApp).updates
 
     override fun onResume() {
