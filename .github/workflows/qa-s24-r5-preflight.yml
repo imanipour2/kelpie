@@ -1,0 +1,35 @@
+name: QA S24 R5 Windows Preflight Self-Test
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/qa/p4-s24-r5-preflight.ps1'
+      - '.github/workflows/qa-s24-r5-preflight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa-s24-r5-preflight-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  safe-parser-and-hash-self-test:
+    name: Read-only PowerShell preflight unit checks
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v6.0.3
+      - name: PowerShell syntax and parser/hash safety checks
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $path = 'scripts/qa/p4-s24-r5-preflight.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path), [ref] $tokens, [ref] $errors) | Out-Null
+          if ($errors.Count -gt 0) { throw ($errors | Out-String) }
+          & $path -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'PowerShell self-test failed' }
