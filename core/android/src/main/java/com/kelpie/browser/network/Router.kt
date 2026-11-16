@@ -12,6 +12,7 @@ class Router {
     var handlerContext: HandlerContext? = null
     var scriptPlaybackState: com.kelpie.browser.handlers.ScriptPlaybackState? = null
     var browserGateway: BrowserGatewayBinding? = null
+
     /** Isolated R5 consent QA never accepts legacy remote browser operations. */
     var consentOnlyQa = false
 
