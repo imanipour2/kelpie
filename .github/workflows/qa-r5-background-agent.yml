@@ -45,6 +45,8 @@ jobs:
       - name: Validate S24 owner-safe acceptance harness without ADB
         run: |
           python3 -m py_compile scripts/qa/r5-s24-acceptance.py
+          python3 -m py_compile scripts/qa/r5-s24-background-acceptance.py
+          python3 scripts/qa/r5-s24-background-acceptance.py --help > /dev/null
           python3 scripts/qa/r5-s24-acceptance.py --help > /dev/null
       - name: KtLint, agent JVM tests and private-display R5 background QA APK
         working-directory: apps/android
