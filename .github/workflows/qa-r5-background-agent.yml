@@ -7,6 +7,7 @@ on:
       - 'core/android/**'
       - '.github/workflows/qa-r5-background-agent.yml'
       - 'scripts/qa/r5-s24-acceptance.py'
+      - 'scripts/qa/r5-s24-background-acceptance.py'
   workflow_dispatch:
 
 permissions:
@@ -45,6 +46,8 @@ jobs:
       - name: Validate S24 owner-safe acceptance harness without ADB
         run: |
           python3 -m py_compile scripts/qa/r5-s24-acceptance.py
+          python3 -m py_compile scripts/qa/r5-s24-background-acceptance.py
+          python3 scripts/qa/r5-s24-background-acceptance.py --help > /dev/null
           python3 scripts/qa/r5-s24-acceptance.py --help > /dev/null
       - name: KtLint, agent JVM tests and private-display R5 background QA APK
         working-directory: apps/android
@@ -54,6 +57,13 @@ jobs:
             :kelpie-browser:ktlintCheck \
             :kelpie-browser:testDebugUnitTest \
             :app:assembleDebug
+      - name: Android Lint for R5 browser and isolated app
+        working-directory: apps/android
+        run: |
+          ./gradlew --no-daemon \
+            -PkelpieR5BackgroundAgentQaProfile=true \
+            :kelpie-browser:lintDebug \
+            :app:lintDebug
       - name: Verify both BuildConfig ports, unique identity, signature and native binaries
         shell: bash
         run: |

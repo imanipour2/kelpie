@@ -39,3 +39,50 @@
 - Internal P4 ADR, P4 RCA, R5 source review, PR22 stale owner result hardening, PR27 native consent, project CDG and EF-DOC-CYCLE.
 
 **Authoritative status:** `G2_CONSENT_PASS_PREVIOUS_APK / R5_INTEGRATION_SOURCE_ONLY / CI_IN_PROGRESS / DEVICE_NOT_INSTALLED / MULTITAB_OPEN / TUNNEL_OPEN / IOS_PARITY_OPEN / RELEASE_NO_GO / SYNC_BLOCKED_MAIN`.
+
+
+## 2026-11-16 laptop-only artifact preflight and QA harness
+
+**Scope:** development/QA only; no Android install, site change, release,
+main merge or iOS parity claim. Original exact-head PR29 source was
+b51ffc6f53d2f02b5b6201c74374f1b68be3c845. Consent-only APK data
+remain unaffected.
+
+- Windows Gradle profile kelpieR5BackgroundAgentQaProfile=true with
+  ktlintCheck and assembleDebug completed BUILD SUCCESSFUL (13m52s,
+  74 tasks). Candidate APK SHA-256:
+  7ef3c66f8930df2fd805735c9f7bf66dffbefda2f75afddbcfc5baf6039e7c92
+  (82,486,084 bytes), package com.kelpie.browser.r5fullverify,
+  version 0.2.13-r5-agent-qa, code33 and port18460.
+- AAPT and apksigner verified identity, APK v2 DEBUG signature, no
+  RECORD_AUDIO, and POST_NOTIFICATIONS declaration. LLVM readelf
+  verified 16KB segment alignment for arm64-v8a and x86_64.
+  Debug signing is not a release approval.
+- Scoped pure-agent Kotlin JVM tests: 41/41 PASS across 8 JUnit test
+  classes. Windows host JNI build tasks were intentionally excluded
+  only from this focused suite because MSVC/nmake is not present.
+  Full native JNI tests remain NOT VERIFIED, not waived.
+- Dedicated script: scripts/qa/r5-s24-background-acceptance.py.
+  The package phase is truly offline and does not require ADB.
+  Supply --apk, --aapt, --apksigner, --readelf, optional --java-home
+  and independently pinned --sha256. The exact candidate passed.
+- When the owner reconnects the authorized USB device, use explicit
+  --adb and --serial for preflight, negative (OFF only),
+  owner-readonly, read-dom and owner-stopped. The harness never
+  starts/installs/unlocks an app, taps native approval, grants Android
+  permissions, stops a live session, or logs DOM, URLs or tokens.
+  The read-dom phase requires a real owner grant, consumes an explicit
+  monotonic client sequence and logs only a content digest and length.
+  Never automatically replay uncertain mutating commands.
+- The original scripts/qa/r5-s24-acceptance.py is for consent-only
+  r5sourceverify code31/version 0.2.11-r5-consent-qa; it is NOT
+  valid proof for full R5 agent runtime.
+- GitHub Actions PR29 exact-head conclusion was action_required in
+  latest connector readback. Device tests for fresh private frames,
+  click/fill/scroll, STOP/Doze, 2 real principals, 50 owner-approved
+  cycles, multi-tab, phone-only MCP tunnel, parity and release
+  signing remain OPEN.
+
+**Gate:** LOCAL_APK_BUILT / AGENT_41_PASS / PACKAGE_QA_PASS /
+FULL_JNI_OPEN / ANDROID_LINT_OPEN / PHONE_DISCONNECTED_BY_OWNER /
+R5_HARDWARE_NOT_TESTED / RELEASE_NO_GO / SYNC_BLOCKED_MAIN.
