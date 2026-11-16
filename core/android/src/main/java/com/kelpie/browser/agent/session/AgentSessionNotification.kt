@@ -96,6 +96,4 @@ class AgentSessionStopReceiver : BroadcastReceiver() {
 internal fun stopChannelVisible(
     importance: Int?,
     groupBlocked: Boolean,
-): Boolean {
-    return (importance == null || importance > NotificationManager.IMPORTANCE_NONE) && !groupBlocked
-}
+): Boolean = (importance == null || importance > NotificationManager.IMPORTANCE_NONE) && !groupBlocked
