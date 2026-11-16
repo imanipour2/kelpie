@@ -1,0 +1,52 @@
+name: QA Kelpie S24 Migration Preflight
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/qa/p4-phone-migration-inspect.sh'
+      - '.github/workflows/qa-p4-migration-preflight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa-p4-migration-preflight-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  safe-termux-preflight:
+    name: Shell syntax, read-only inventory and secret-safe output
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6.0.3
+      - name: Shell syntax and side-effect-free parser checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh -n scripts/qa/p4-phone-migration-inspect.sh
+          sh scripts/qa/p4-phone-migration-inspect.sh --self-test | grep -Fx SELF_TEST_PASS
+      - name: Simulate a stale migration with an isolated fake Termux home
+        shell: bash
+        run: |
+          set -euo pipefail
+          sandbox="$(mktemp -d)"
+          trap 'rm -rf "$sandbox"' EXIT
+          export HOME="$sandbox/home"
+          export PREFIX="$sandbox/prefix"
+          mkdir -p "$HOME/.termux/boot" "$HOME/.local/bin" "$PREFIX/var/service/enerfoam-s24-tunnel" "$PREFIX/var/log/sv/enerfoam-s24-tunnel"
+          printf '%s\n' '#!/bin/sh' 'echo waiting for 18440 # no token or key' > "$PREFIX/var/service/enerfoam-s24-tunnel/run"
+          printf '%s\n' '#!/bin/sh' 'am start -n com.kelpie.browser.unifiedverify/com.kelpie.browser.MainActivity' > "$HOME/.termux/boot/10-kelpie"
+          chmod +x "$HOME/.termux/boot/10-kelpie"
+          printf '%s\n' 'SECRET_DO_NOT_ECHO_ME' > "$PREFIX/var/log/sv/enerfoam-s24-tunnel/current"
+          output="$(sh scripts/qa/p4-phone-migration-inspect.sh)"
+          printf '%s\n' "$output" | grep -Fx SOURCE_RUNIT_RUN_OLD_UNIFIED=YES
+          printf '%s\n' "$output" | grep -Fx SOURCE_RUNIT_RUN_PARALLEL_P4=NO
+          printf '%s\n' "$output" | grep -Fx SOURCE_BOOT_10_APP_UNIFIED=YES
+          printf '%s\n' "$output" | grep -Fx BOOT_FILES_COUNT=1
+          if printf '%s\n' "$output" | grep -Eq 'SECRET_DO_NOT_ECHO_ME|Authorization:|mcp\.extra-headers'; then
+            echo "::error::Sensitive information leaked to diagnostics"
+            exit 1
+          fi
+          printf 'READ_ONLY_FIXTURE_PASS\n'
