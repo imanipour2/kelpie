@@ -10,6 +10,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.kelpie.browser.agent.execution.R5ObservationRoutes
 import com.kelpie.browser.agent.session.AgentSessionCoordinator
 import com.kelpie.browser.ai.AIHandler
 import com.kelpie.browser.browser.BookmarkStore
@@ -66,6 +67,7 @@ class KelpieBrowserSession(
     profileSubject: String? = uoaSession?.identity?.value?.subject,
     privateCaptureQaEnabled: Boolean = false,
     private val agentConsentQaEnabled: Boolean = false,
+    private val agentObserveQaEnabled: Boolean = false,
 ) {
     private val browserContext get() = KelpieEnvironment.context(activity)
     private val applicationContext get() = KelpieEnvironment.app
@@ -120,7 +122,8 @@ class KelpieBrowserSession(
     private val handlerContext = HandlerContext()
     private val captureCoordinator =
         if (privateCaptureQaEnabled) PrivateCaptureCoordinator(activity, handlerContext, true) else null
-    private val agentSessionCoordinator = if (agentConsentQaEnabled) AgentSessionCoordinator(activity) else null
+    private val agentSessionCoordinator =
+        if (agentConsentQaEnabled) AgentSessionCoordinator(activity, agentObserveQaEnabled) else null
     private val scriptPlaybackState = ScriptPlaybackState()
     private var httpServer: HTTPServer? = null
     private var mdnsAdvertiser: MDNSAdvertiser? = null
@@ -129,6 +132,9 @@ class KelpieBrowserSession(
     private val pairingCoordinator: PairApprovalCoordinator
 
     init {
+        require(!agentObserveQaEnabled || agentConsentQaEnabled) {
+            "R5 observation must never run without the native consent surface"
+        }
         if (uoaSession != null) {
             KelpieEnvironment.requireProfile(profileSubject)
             require(uoaSession.identity.value.subject == null || uoaSession.identity.value.subject == profileSubject)
@@ -166,6 +172,7 @@ class KelpieBrowserSession(
                             pairingCoordinator = pairingCoordinator,
                             captureCoordinator = captureCoordinator,
                             agentSessionCoordinator = agentSessionCoordinator,
+                            agentObserveQaEnabled = agentObserveQaEnabled,
                         )
                     }
                 }
@@ -202,6 +209,7 @@ class KelpieBrowserSession(
 
     private fun registerHandlers(deviceInfo: DeviceInfo) {
         router.consentOnlyQa = agentConsentQaEnabled
+        router.agentObservationQa = agentObserveQaEnabled
         router.handlerContext = handlerContext
         router.scriptPlaybackState = scriptPlaybackState
         handlerContext.scriptPlaybackState = scriptPlaybackState
@@ -277,6 +285,7 @@ class KelpieBrowserSession(
 
         captureCoordinator?.register(router)
         agentSessionCoordinator?.register(router)
+        if (agentObserveQaEnabled) R5ObservationRoutes(activity, handlerContext).register(router)
         router.registerFallbacks()
         com.kelpie.browser.network
             .BrowserGatewayBinding(router, handlerContext)
