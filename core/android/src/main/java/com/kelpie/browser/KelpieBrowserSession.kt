@@ -65,7 +65,7 @@ class KelpieBrowserSession(
     uoaSession: com.kelpie.browser.account.KelpieUOASession? = null,
     profileSubject: String? = uoaSession?.identity?.value?.subject,
     privateCaptureQaEnabled: Boolean = false,
-    agentConsentQaEnabled: Boolean = false,
+    private val agentConsentQaEnabled: Boolean = false,
 ) {
     private val browserContext get() = KelpieEnvironment.context(activity)
     private val applicationContext get() = KelpieEnvironment.app
