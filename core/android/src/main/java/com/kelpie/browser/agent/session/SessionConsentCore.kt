@@ -69,6 +69,15 @@ class SessionConsentCore(
         }
     }
 
+    /** A delayed UI timeout must never cancel a different, newer native prompt. */
+    @Synchronized
+    fun expirePendingIfDue(promptId: String): Boolean {
+        val pending = current as? State.Pending ?: return false
+        if (pending.promptId != promptId || elapsedRealtimeMs() < pending.deadlineMs) return false
+        current = State.Off
+        return true
+    }
+
     /** Local STOP, unpair, process-loss adapter and explicit end all converge here. */
     @Synchronized
     fun stop() {
