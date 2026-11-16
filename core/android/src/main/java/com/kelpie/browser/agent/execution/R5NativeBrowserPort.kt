@@ -1,6 +1,10 @@
 package com.kelpie.browser.agent.execution
 
+import android.app.KeyguardManager
+import android.os.PowerManager
 import android.webkit.WebView
+import androidx.activity.ComponentActivity
+import androidx.lifecycle.Lifecycle
 import com.kelpie.browser.agent.contract.AdapterOutcome
 import com.kelpie.browser.agent.contract.AgentCommand
 import com.kelpie.browser.agent.contract.Operation
@@ -22,6 +26,7 @@ import kotlin.coroutines.resume
  * Execution remains serialized by AgentOperationRuntime.
  */
 internal class R5NativeBrowserPort(
+    private val activity: ComponentActivity,
     private val ctx: HandlerContext,
     private val privateRenderer: PrivateWebViewDisplay,
 ) : VerifiedNativeBrowserAdapter.NativePort {
@@ -43,7 +48,11 @@ internal class R5NativeBrowserPort(
             val tab = ctx.tabStore?.activeTab ?: return@withContext null
             if (tab.id != tabId || tab.documentVersion.isBlank()) return@withContext null
             val view = tab.webView
-            if (!view.isAttachedToWindow) return@withContext null
+            if (!view.isAttachedToWindow || !safeScreen()) return@withContext null
+            val foreground =
+                activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+                    activity.window.decorView.isShown && view.isShown
+            if (!foreground && !privateRenderer.canDeliverFrame()) return@withContext null
             VerifiedNativeBrowserAdapter.NativeTarget(
                 tab.id,
                 tab.documentVersion,
@@ -155,6 +164,10 @@ internal class R5NativeBrowserPort(
                 else -> false
             }
         }
+
+    private fun safeScreen(): Boolean =
+        activity.getSystemService(PowerManager::class.java).isInteractive &&
+            !activity.getSystemService(KeyguardManager::class.java).isDeviceLocked
 
     /** Called only after a VERIFIED_EFFECT receipt and final grant recheck. */
     suspend fun takePayload(evidenceId: String?): Map<String, Any?>? =
