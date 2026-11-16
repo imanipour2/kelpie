@@ -38,6 +38,14 @@ internal object AndroidAgentProcessSession {
         return result
     }
 
+    /** Expire only the overdue prompt observed by a native UI timer. */
+    @Synchronized
+    fun expirePendingIfDue(promptId: String): Boolean {
+        val expired = core.expirePendingIfDue(promptId)
+        if (expired) publish()
+        return expired
+    }
+
     /** Local STOP and verified owner-stop converge here, including notification STOP. */
     @Synchronized
     fun stop() {
