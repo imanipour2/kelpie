@@ -64,6 +64,7 @@ fun BrowserScreen(
     pairingCoordinator: PairApprovalCoordinator,
     captureCoordinator: PrivateCaptureCoordinator? = null,
     agentSessionCoordinator: com.kelpie.browser.agent.session.AgentSessionCoordinator? = null,
+    agentObserveQaEnabled: Boolean = false,
 ) {
     var showPairedClients by remember { mutableStateOf(false) }
     val browserState = remember { BrowserState() }
@@ -416,7 +417,7 @@ fun BrowserScreen(
     }
 
     PairingDialog(coordinator = pairingCoordinator)
-    BrowserConsentOverlays(captureCoordinator, tabStore, agentSessionCoordinator)
+    BrowserConsentOverlays(captureCoordinator, tabStore, agentSessionCoordinator, agentObserveQaEnabled)
 
     LaunchedEffect(showSettings, pendingWelcomeFromHelp) {
         if (!showSettings && pendingWelcomeFromHelp) {
