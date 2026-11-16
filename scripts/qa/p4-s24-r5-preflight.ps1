@@ -129,7 +129,9 @@ try {
     if ($report.model -ne $expected.Model) { throw 'MODEL_MISMATCH: not the approved Samsung SM-S928B' }
     foreach ($package in @('com.kelpie.browser.unifiedverify', 'com.kelpie.browser.pcverify')) {
         $apkPath = Invoke-ReadOnly -Executable $adb -Arguments @('-s', $serial, 'shell', 'pm', 'path', $package)
-        $report.packages[$package] = ($apkPath -match '^package:')
+        $present = ($apkPath -match '^package:')
+        $report.packages[$package] = $present
+        if (-not $present) { $report.issues += "MISSING_EXPECTED_QA_PACKAGE:$package" }
     }
 
     $gitCmd = Get-Command git -ErrorAction SilentlyContinue
