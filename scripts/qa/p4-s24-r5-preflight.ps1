@@ -97,10 +97,19 @@ $report = [ordered]@{
 try {
     $adbCmd = Get-Command adb -ErrorAction SilentlyContinue
     if ($null -eq $adbCmd) {
-        foreach ($candidate in @(
+        $sdkCandidates = @(
             'C:\Enerfoam-Kelpie-QA\platform-tools\adb.exe',
             'C:\platform-tools\adb.exe'
-        )) {
+        )
+        foreach ($sdkRoot in @($env:ANDROID_HOME, $env:ANDROID_SDK_ROOT)) {
+            if (-not [string]::IsNullOrWhiteSpace($sdkRoot)) {
+                $sdkCandidates += Join-Path $sdkRoot 'platform-tools\adb.exe'
+            }
+        }
+        if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+            $sdkCandidates += Join-Path $env:LOCALAPPDATA 'Android\Sdk\platform-tools\adb.exe'
+        }
+        foreach ($candidate in $sdkCandidates) {
             if (Test-Path -LiteralPath $candidate -PathType Leaf) {
                 $adbCmd = @{ Source = $candidate }
                 break
