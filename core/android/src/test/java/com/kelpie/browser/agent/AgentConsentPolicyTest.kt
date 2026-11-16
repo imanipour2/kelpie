@@ -5,8 +5,8 @@ import com.kelpie.browser.agent.contract.AdmissionCode
 import com.kelpie.browser.agent.contract.AgentCommand
 import com.kelpie.browser.agent.contract.Operation
 import com.kelpie.browser.agent.session.SessionConsentCore
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
