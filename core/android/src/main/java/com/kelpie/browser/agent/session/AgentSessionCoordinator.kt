@@ -155,6 +155,9 @@ class AgentSessionCoordinator(
         return granted.generation.isNotBlank()
     }
 
+    /** Only the UI timer calls this; an old prompt ID cannot revoke a new request. */
+    fun expireNativePromptIfDue(promptId: String): Boolean = AndroidAgentProcessSession.expirePendingIfDue(promptId)
+
     fun denyFromNativeUi() {
         AndroidAgentProcessSession.stop()
         AgentSessionNotification.hide(activity)
