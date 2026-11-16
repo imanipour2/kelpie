@@ -63,4 +63,20 @@ class PrivateCaptureOperationPolicyTest {
         assertTrue(PrivateCaptureOperationPolicy.permitsDelivery("mcp", false, false))
         assertTrue(PrivateCaptureOperationPolicy.permitsDelivery("screenshot", false, false))
     }
+
+    @Test fun inFlightNessieActionsAreDeniedOnPrivateTransfer() {
+        listOf("open", "navigate", "back", "forward", "reload", "snapshot", "extract", "click", "type", "scroll", "tabs", "control").forEach {
+            assertTrue(PrivateCaptureOperationPolicy.permits(it, false))
+            assertFalse(PrivateCaptureOperationPolicy.permitsDelivery(it, false, true))
+            assertFalse(PrivateCaptureOperationPolicy.permitsDelivery(it, true, true))
+        }
+    }
+
+    @Test fun ownerOnlyCaptureRemainsAvailableWithoutNessieUpgrade() {
+        listOf("capture-session-frame", "capture-session-status", "capture-session-stop").forEach {
+            assertTrue(PrivateCaptureOperationPolicy.permitsDelivery(it, true, true))
+        }
+        assertFalse(PrivateCaptureOperationPolicy.permitsDelivery("open", true, true))
+        assertFalse(PrivateCaptureOperationPolicy.permitsDelivery("snapshot", true, true))
+    }
 }
