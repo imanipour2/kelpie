@@ -25,6 +25,7 @@
     <string name="r5_agent_error_title">مجوز نشست صادر نشد</string>
     <string name="r5_agent_error_notification">برای نمایش کنترل توقف، اعلان اندروید لازم است؛ مجوزی صادر نشد.</string>
     <string name="r5_agent_error_locked">گوشی قفل است یا اعلان در دسترس نیست؛ مجوز صادر نشد.</string>
+    <string name="r5_agent_error_expired">مهلت پنج‌دقیقه‌ای تأیید این نشست پایان یافته است. هیچ مجوزی صادر نشد؛ لطفاً درخواست تازه‌ای ارسال کنید.</string>
     <string name="r5_agent_close">بستن</string>
     <string name="r5_agent_notification_channel">نشست آزمایشی عامل کلپی</string>
     <string name="r5_agent_notification_title">رضایت آزمایشی عامل کلپی فعال است</string>
