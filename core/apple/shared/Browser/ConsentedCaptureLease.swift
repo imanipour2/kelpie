@@ -27,9 +27,10 @@ final class ConsentedCaptureLease {
         var used: Int = 0
     }
 
-    static let maxLeaseMs: Int64 = 90_000
-    static let defaultFrameLimit = 20
-    static let maxFrameLimit = 240
+    // Immutable Sendable limits are safe to read from nonisolated default arguments.
+    nonisolated static let maxLeaseMs: Int64 = 90_000
+    nonisolated static let defaultFrameLimit = 20
+    nonisolated static let maxFrameLimit = 240
 
     private let uptimeMs: () -> Int64
     private var grant: Grant?
