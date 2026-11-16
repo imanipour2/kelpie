@@ -10,6 +10,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.kelpie.browser.agent.session.AgentSessionCoordinator
 import com.kelpie.browser.ai.AIHandler
 import com.kelpie.browser.browser.BookmarkStore
 import com.kelpie.browser.browser.HistoryStore
@@ -64,6 +65,7 @@ class KelpieBrowserSession(
     uoaSession: com.kelpie.browser.account.KelpieUOASession? = null,
     profileSubject: String? = uoaSession?.identity?.value?.subject,
     privateCaptureQaEnabled: Boolean = false,
+    private val agentConsentQaEnabled: Boolean = false,
 ) {
     private val browserContext get() = KelpieEnvironment.context(activity)
     private val applicationContext get() = KelpieEnvironment.app
@@ -118,6 +120,7 @@ class KelpieBrowserSession(
     private val handlerContext = HandlerContext()
     private val captureCoordinator =
         if (privateCaptureQaEnabled) PrivateCaptureCoordinator(activity, handlerContext, true) else null
+    private val agentSessionCoordinator = if (agentConsentQaEnabled) AgentSessionCoordinator(activity) else null
     private val scriptPlaybackState = ScriptPlaybackState()
     private var httpServer: HTTPServer? = null
     private var mdnsAdvertiser: MDNSAdvertiser? = null
@@ -162,32 +165,43 @@ class KelpieBrowserSession(
                             isMDNSAdvertising = mdnsAdvertiser?.isRegistered == true,
                             pairingCoordinator = pairingCoordinator,
                             captureCoordinator = captureCoordinator,
+                            agentSessionCoordinator = agentSessionCoordinator,
                         )
                     }
                 }
             }
         registerHandlers(deviceInfo)
-        com.kelpie.browser.connect.NessieConnection
-            .start(browserContext, handlerContext)
+        // Do not start the outbound Nessie control plane in consent-only QA:
+        // no command must bypass the R5 principal/STOP policy under review.
+        if (!agentConsentQaEnabled) {
+            com.kelpie.browser.connect.NessieConnection
+                .start(browserContext, handlerContext)
+        }
         if (localControlEnabled) startServer(deviceInfo)
         activity.lifecycle.addObserver(lifecycleObserver)
     }
 
     private fun onResume() {
         captureCoordinator?.onResume()
+        agentSessionCoordinator?.onResume()
         com.kelpie.browser.browser.BookmarkStore
             .refreshAccountBookmarks()
-        com.kelpie.browser.connect.NessieConnection
-            .setForeground(true)
+        if (!agentConsentQaEnabled) {
+            com.kelpie.browser.connect.NessieConnection
+                .setForeground(true)
+        }
     }
 
     private fun onPause() {
         captureCoordinator?.onPause()
-        com.kelpie.browser.connect.NessieConnection
-            .setForeground(false)
+        if (!agentConsentQaEnabled) {
+            com.kelpie.browser.connect.NessieConnection
+                .setForeground(false)
+        }
     }
 
     private fun registerHandlers(deviceInfo: DeviceInfo) {
+        router.consentOnlyQa = agentConsentQaEnabled
         router.handlerContext = handlerContext
         router.scriptPlaybackState = scriptPlaybackState
         handlerContext.scriptPlaybackState = scriptPlaybackState
@@ -262,6 +276,7 @@ class KelpieBrowserSession(
         }
 
         captureCoordinator?.register(router)
+        agentSessionCoordinator?.register(router)
         router.registerFallbacks()
         com.kelpie.browser.network
             .BrowserGatewayBinding(router, handlerContext)
@@ -309,12 +324,15 @@ class KelpieBrowserSession(
         closed = true
         activity.lifecycle.removeObserver(lifecycleObserver)
         accountLogin.unregister()
-        com.kelpie.browser.connect.NessieConnection
-            .detach(handlerContext)
+        if (!agentConsentQaEnabled) {
+            com.kelpie.browser.connect.NessieConnection
+                .detach(handlerContext)
+        }
         com.kelpie.browser.account.UOAAccount
             .detach(activity)
         handlerContext.dialogState.dismissPending()
         captureCoordinator?.close()
+        agentSessionCoordinator?.close(revokeSession = !activity.isChangingConfigurations)
         val tabs = handlerContext.tabStore
         browserView.disposeComposition()
         (browserView.parent as? ViewGroup)?.removeView(browserView)

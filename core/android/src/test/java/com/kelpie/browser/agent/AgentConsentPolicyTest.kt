@@ -6,6 +6,7 @@ import com.kelpie.browser.agent.contract.AgentCommand
 import com.kelpie.browser.agent.contract.Operation
 import com.kelpie.browser.agent.session.SessionConsentCore
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -127,5 +128,54 @@ class AgentConsentPolicyTest {
         assertNull(session.requestNativeConsent("paired"))
         assertEquals(active, session.snapshot())
         assertTrue(active.generation.isNotBlank())
+    }
+
+    @Test
+    fun expiredNativePromptIsRemovedWithoutRevokingANewerRequest() {
+        var clock = 200L
+        val session = SessionConsentCore({ clock })
+        val first = session.requestNativeConsent("owner")!!
+        assertFalse(session.expirePendingIfDue(first.promptId))
+        assertEquals(first, session.snapshot())
+
+        clock += SessionConsentCore.LOCAL_PROMPT_TTL_MS
+        assertTrue(session.expirePendingIfDue(first.promptId))
+        assertEquals(SessionConsentCore.State.Off, session.snapshot())
+        assertFalse(session.expirePendingIfDue(first.promptId))
+
+        val second = session.requestNativeConsent("owner")!!
+        assertNotEquals(first.promptId, second.promptId)
+        clock += 1_000L
+        assertFalse(session.expirePendingIfDue(first.promptId))
+        assertFalse(session.expirePendingIfDue(second.promptId))
+        assertEquals(second, session.snapshot())
+        assertNotNull(session.approveFromNativeUi(second.promptId, true))
+        assertFalse(session.expirePendingIfDue(second.promptId))
+        assertTrue(session.snapshot() is SessionConsentCore.State.Active)
+    }
+
+    @Test
+    fun fiftyApprovedCoreCyclesRequireUniqueGenerationAndExplicitStop() {
+        val session = SessionConsentCore({ 100L })
+        val generations = mutableSetOf<String>()
+        repeat(50) {
+            assertEquals(SessionConsentCore.State.Off, session.snapshot())
+            val pending = session.requestNativeConsent("paired")!!
+            assertNull(session.requestNativeConsent("other-client"))
+            assertNull(session.approveFromNativeUi("forged-prompt", true))
+            val active = session.approveFromNativeUi(pending.promptId, true)!!
+            assertTrue(generations.add(active.generation))
+            assertEquals("paired", active.principalId)
+            session.setDeviceLocked(true)
+            assertTrue((session.snapshot() as SessionConsentCore.State.Active).locked)
+            session.setDeviceLocked(false)
+            val resumed = session.snapshot() as SessionConsentCore.State.Active
+            assertEquals(active.generation, resumed.generation)
+            assertEquals(2L, resumed.safetyEpoch)
+            session.stop()
+            assertEquals(SessionConsentCore.State.Off, session.snapshot())
+            assertNull(session.approveFromNativeUi(pending.promptId, true))
+        }
+        assertEquals(50, generations.size)
     }
 }

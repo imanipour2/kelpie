@@ -5,9 +5,9 @@
 ## Root cause and repair
 In Draft P4 parallel QA, the app module declared `LOCAL_HTTP_PORT=18447` but `DeviceInfo.collect()` in the core library uses **`com.kelpie.browser.BuildConfig.LOCAL_HTTP_PORT`**. The core library had no parallel-QA branch and thus defaulted to `8420`. APK package and provenance checks alone would falsely imply a runtime listener on 18447. This was discovered through source-level readback, not through a live 18447 listener test. Repair adds the matching 18447 branch to the core and a CI assertion against **both generated BuildConfig sources**.
 
-## R5 source-only QA slot
-- Gradle `-PkelpieR5SourceQaProfile=true`, debug only; package `com.kelpie.browser.r5sourceverify`, version `0.2.11-r5-source-qa`, code 31, port `18457`.
-- `PRIVATE_CAPTURE_QA_ENABLED=false`: this source artifact deliberately **does not** expose an R5 command gateway, native consent UI, background screenshot service or P4 private capture.
+## R5 native-consent-only QA slot
+- Gradle `-PkelpieR5SourceQaProfile=true`, debug only; package `com.kelpie.browser.r5sourceverify`, version `0.2.11-r5-consent-qa`, code 31, port `18457`.
+- `PRIVATE_CAPTURE_QA_ENABLED=false`; `R5_NATIVE_CONSENT_QA_ENABLED=true`: this QA artifact exposes authenticated request/status/STOP and a genuine native consent prompt. It **does not** expose a browser-operation dispatcher, private WebView capture, background screenshot or P4 private capture. There is no remote approval method.
 - It cannot overwrite the installed `unifiedverify` (port18440) or `pcverify` (port18437) packages.
 - QA profile flags must be mutually exclusive. No `RECORD_AUDIO`; debug signature, per-APK SHA, provenance, 16-KiB native alignment, and both BuildConfig port values are mandatory in CI.
 - No APK is installed and no device process is started by creating this package. This artifact is a compile/safety baseline for future R5 wiring, **not** a functionality acceptance build.

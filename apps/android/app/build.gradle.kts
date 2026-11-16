@@ -40,10 +40,11 @@ android {
             versionName = "0.2.10-parallel-qa"
         } else if (r5SourceQa) {
             versionCode = 31
-            versionName = "0.2.11-r5-source-qa"
+            versionName = "0.2.11-r5-consent-qa"
         }
         buildConfigField("int", "LOCAL_HTTP_PORT", "8420")
         buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")
+        buildConfigField("boolean", "R5_NATIVE_CONSENT_QA_ENABLED", "false")
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
@@ -77,6 +78,7 @@ android {
                 applicationIdSuffix = ".r5sourceverify"
                 buildConfigField("int", "LOCAL_HTTP_PORT", "18457")
                 buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")
+                buildConfigField("boolean", "R5_NATIVE_CONSENT_QA_ENABLED", "true")
             }
         }
         release {

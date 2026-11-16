@@ -10,10 +10,17 @@ open class KelpieBrowserActivity : ComponentActivity() {
 
     protected open fun enablePrivateCaptureQa(): Boolean = false
 
+    protected open fun enableAgentConsentQa(): Boolean = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        browser = KelpieBrowserSession(this, privateCaptureQaEnabled = enablePrivateCaptureQa())
+        browser =
+            KelpieBrowserSession(
+                this,
+                privateCaptureQaEnabled = enablePrivateCaptureQa(),
+                agentConsentQaEnabled = enableAgentConsentQa(),
+            )
         setContentView(browser.view())
     }
 

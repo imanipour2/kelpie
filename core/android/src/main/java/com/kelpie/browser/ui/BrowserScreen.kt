@@ -63,6 +63,7 @@ fun BrowserScreen(
     isMDNSAdvertising: Boolean,
     pairingCoordinator: PairApprovalCoordinator,
     captureCoordinator: PrivateCaptureCoordinator? = null,
+    agentSessionCoordinator: com.kelpie.browser.agent.session.AgentSessionCoordinator? = null,
 ) {
     var showPairedClients by remember { mutableStateOf(false) }
     val browserState = remember { BrowserState() }
@@ -415,7 +416,7 @@ fun BrowserScreen(
     }
 
     PairingDialog(coordinator = pairingCoordinator)
-    captureCoordinator?.let { PrivateCaptureConsentDialog(it, tabStore) }
+    BrowserConsentOverlays(captureCoordinator, tabStore, agentSessionCoordinator)
 
     LaunchedEffect(showSettings, pendingWelcomeFromHelp) {
         if (!showSettings && pendingWelcomeFromHelp) {
