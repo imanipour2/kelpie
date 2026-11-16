@@ -1,7 +1,6 @@
 package com.kelpie.browser.agent.session
 
 import android.Manifest
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -60,7 +59,7 @@ internal object AgentSessionNotification {
                     .setOngoing(true)
                     .setOnlyAlertOnce(true)
                     .setPriority(NotificationCompat.PRIORITY_LOW)
-                    .setVisibility(Notification.VISIBILITY_PRIVATE)
+                    .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                     .addAction(android.R.drawable.ic_media_pause, context.getString(R.string.r5_agent_notification_stop), pending)
                     .build()
             manager.notify(NOTIFICATION_ID, notification)
