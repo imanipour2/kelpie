@@ -93,5 +93,8 @@ class AgentSessionStopReceiver : BroadcastReceiver() {
 }
 
 /** Pure policy seam for a channel disabled independently of app-level permission. */
-internal fun stopChannelVisible(importance: Int?, groupBlocked: Boolean): Boolean =
+internal fun stopChannelVisible(
+    importance: Int?,
+    groupBlocked: Boolean,
+): Boolean =
     (importance == null || importance > NotificationManager.IMPORTANCE_NONE) && !groupBlocked
