@@ -76,14 +76,15 @@ internal class R5VerifiedFrameEncoder(
                 if (frame.width == decision.outputWidth && frame.height == decision.outputHeight) {
                     frame
                 } else {
-                    transformed =
+                    val scaled =
                         Bitmap.createScaledBitmap(
                             frame,
                             decision.outputWidth,
                             decision.outputHeight,
                             true,
                         )
-                    transformed ?: return null
+                    transformed = scaled
+                    scaled
                 }
             val maxBytes =
                 if (info.lowMemory || manager.isLowRamDevice || manager.memoryClass < 192) {
