@@ -52,6 +52,7 @@ class AgentOperationRuntime(
     private val commandMutex = Mutex()
     private val jobsLock = Any()
     private val running = mutableSetOf<Job>()
+
     // Bounded recent-ID cache plus a monotonic sequence: replays fail without
     // retaining all command IDs for a long-running process session.
     private val usedIds = LinkedHashSet<String>()
