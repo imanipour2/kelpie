@@ -9,6 +9,12 @@ data class AgentCommand(
     val observedDocumentEpoch: String,
     val operation: Operation,
     val targetUrl: String? = null,
+    /** CSS selector is data, never interpolated as executable JavaScript. */
+    val selector: String? = null,
+    /** User-provided input payload is never logged or echoed in receipts. */
+    val inputText: String? = null,
+    val scrollDeltaX: Double = 0.0,
+    val scrollDeltaY: Double = 0.0,
     /** Positive, strictly increasing for a long-lived paired client stream; 0 is rejected. */
     val clientSequence: Long = 0,
 )
