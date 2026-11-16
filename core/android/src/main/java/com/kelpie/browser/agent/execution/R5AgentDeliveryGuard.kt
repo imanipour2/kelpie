@@ -12,7 +12,7 @@ internal object R5AgentDeliveryGuard {
         method: String,
         body: Map<String, Any?>,
     ): Boolean =
-        method in setOf("agent-command", "agent-tabs", "agent-runtime-status") ||
+        method in setOf("agent-command", "agent-tabs", "agent-runtime-status", "agent-capture-capabilities") ||
             (method == "mcp" && (body["method"] as? String) == "tools/call")
 
     fun expectedGeneration(

@@ -148,7 +148,7 @@ internal class R5NativeBrowserPort(
                     Operation.SCREENSHOT -> {
                         // Only the app's private virtual display supplies hidden frames.
                         // Foreground/system or other-app capture is never a fallback.
-                        val png = privateRenderer.captureFreshPng() ?: return@withContext AdapterOutcome.Failed
+                        val png = privateRenderer.captureFreshPng(command.captureRequest) ?: return@withContext AdapterOutcome.Failed
                         Pair(null, png + mapOf("kind" to "screenshot"))
                     }
                     else -> return@withContext AdapterOutcome.Failed

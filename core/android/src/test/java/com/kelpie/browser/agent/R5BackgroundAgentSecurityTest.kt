@@ -83,10 +83,17 @@ class R5BackgroundAgentSecurityTest {
                 reached += "agent-runtime-status"
                 successResponse()
             }
+            router.register("agent-capture-capabilities") {
+                reached += "agent-capture-capabilities"
+                successResponse()
+            }
             val (status, body) = router.handle("agent-runtime-status", emptyMap())
             assertEquals(200, status)
             assertTrue(body["success"] == true)
-            assertEquals(setOf("agent-runtime-status"), reached)
+            val (capsStatus, capsBody) = router.handle("agent-capture-capabilities", emptyMap())
+            assertEquals(200, capsStatus)
+            assertTrue(capsBody["success"] == true)
+            assertEquals(setOf("agent-runtime-status", "agent-capture-capabilities"), reached)
         }
 
     @Test
@@ -96,6 +103,7 @@ class R5BackgroundAgentSecurityTest {
         assertTrue(R5AgentDeliveryGuard.permits("owner", first.generation, consent.snapshot()))
         assertFalse(R5AgentDeliveryGuard.permits("other", first.generation, consent.snapshot()))
         assertTrue(R5AgentDeliveryGuard.requiresGrant("agent-command", emptyMap()))
+        assertTrue(R5AgentDeliveryGuard.requiresGrant("agent-capture-capabilities", emptyMap()))
         val mcp =
             mapOf<String, Any?>(
                 "method" to "tools/call",
