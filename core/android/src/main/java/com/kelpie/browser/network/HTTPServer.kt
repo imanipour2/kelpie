@@ -2,6 +2,8 @@ package com.kelpie.browser.network
 
 import android.content.Context
 import android.util.Log
+import com.kelpie.browser.agent.execution.R5AgentDeliveryGuard
+import com.kelpie.browser.agent.session.AndroidAgentProcessSession
 import com.kelpie.browser.device.DeviceInfo
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -330,6 +332,21 @@ class HTTPServer(
             kotlinx.coroutines.withContext(AuthenticatedClientContext.fromVerifiedDecision(principal)) {
                 router.handle(method, body)
             }
+        // Late STOP/lock/re-approval can happen after an await but before
+        // Ktor begins writing the response. The exact request generation must
+        // still belong to this middleware-verified principal at delivery.
+        if (router.backgroundAgentQa && R5AgentDeliveryGuard.requiresGrant(method, body)) {
+            val generation = R5AgentDeliveryGuard.expectedGeneration(method, body)
+            if (!R5AgentDeliveryGuard.permits(principal.clientId, generation, AndroidAgentProcessSession.snapshot())) {
+                respondError(
+                    call,
+                    HttpStatusCode.Forbidden,
+                    "SESSION_REVOKED",
+                    "R5 session ended before result delivery",
+                )
+                return
+            }
+        }
         if (method == "mcp" && status == 200 && result.isEmpty()) {
             call.respondText("", status = HttpStatusCode.Accepted)
             return
