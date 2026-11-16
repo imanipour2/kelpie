@@ -50,6 +50,7 @@ function New-Report {
         sourceChangedFileCount = $null
         evidenceStatus = 'INCOMPLETE'
         issues = @()
+        advisories = @()
         importAuthorized = $false
         mergeAuthorized = $false
         installAuthorized = $false
@@ -106,7 +107,7 @@ try {
     if (-not $report.headMatches) { $report.issues += 'EXPECTED_R5_HEAD_MISMATCH' }
     if (-not $report.worktreeClean) { $report.issues += 'R5_WORKTREE_HAS_UNCOMMITTED_CHANGES' }
     if ($report.commitsSinceBase -ne 3) { $report.issues += 'EXPECTED_THREE_LOCAL_COMMITS_MISMATCH' }
-    if (-not $report.localStackedHeadPresent) { $report.issues += 'REMOTE_STACK_NOT_IN_LOCAL_GRAPH_DO_NOT_CHERRY_PICK_BLINDLY' }
+    if (-not $report.localStackedHeadPresent) { $report.advisories += 'NEWER_REMOTE_STACK_NOT_IN_ORIGINAL_R5_GRAPH_EXPECTED_USE_SEPARATE_CLONE_FOR_RECONCILIATION' }
 
     $report.evidenceStatus = if ($report.issues.Count -eq 0) {'SOURCE_GRAPH_INSPECTED'} else {'REVIEW_REQUIRED'}
 } catch {
@@ -124,6 +125,7 @@ finally {
     Write-Output ("Commits since P4: " + $report.commitsSinceBase)
     Write-Output ("Local remote-stack commit present: " + $report.localStackedHeadPresent)
     Write-Output ("Issues: " + ($report.issues -join ';'))
+    Write-Output ("Advisories: " + ($report.advisories -join ';'))
     Write-Output 'NO_NETWORK / NO_EXPORT / NO_INSTALL / NO_MERGE / RELEASE_NO_GO'
 }
 if ($report.evidenceStatus -ne 'SOURCE_GRAPH_INSPECTED') { exit 2 }
