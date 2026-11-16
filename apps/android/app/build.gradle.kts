@@ -15,8 +15,10 @@ ktlint {
 val parallelP4Qa = providers.gradleProperty("kelpieParallelCaptureQaProfile").orNull == "true"
 val existingP4Qa = providers.gradleProperty("kelpiePrivateCaptureQaProfile").orNull == "true"
 val anyP4Qa = parallelP4Qa || existingP4Qa
-require(!(parallelP4Qa && existingP4Qa)) {
-    "The two isolated P4 QA profiles must never be enabled together"
+val r5SourceQa = providers.gradleProperty("kelpieR5SourceQaProfile").orNull == "true"
+val anyIsolatedQa = anyP4Qa || r5SourceQa
+require(listOf(parallelP4Qa, existingP4Qa, r5SourceQa).count { it } <= 1) {
+    "Isolated Android QA profiles are mutually exclusive"
 }
 
 android {
@@ -36,6 +38,9 @@ android {
         } else if (parallelP4Qa) {
             versionCode = 30
             versionName = "0.2.10-parallel-qa"
+        } else if (r5SourceQa) {
+            versionCode = 31
+            versionName = "0.2.11-r5-source-qa"
         }
         buildConfigField("int", "LOCAL_HTTP_PORT", "8420")
         buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")
@@ -46,6 +51,8 @@ android {
         getByName("debug") {
             if (anyP4Qa) {
                 manifest.srcFile("src/privateCaptureQa/AndroidManifest.xml")
+            } else if (r5SourceQa) {
+                manifest.srcFile("src/r5SourceQa/AndroidManifest.xml")
             }
         }
     }
@@ -66,6 +73,10 @@ android {
                 applicationIdSuffix = ".pcverify"
                 buildConfigField("int", "LOCAL_HTTP_PORT", "18437")
                 buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "true")
+            } else if (r5SourceQa) {
+                applicationIdSuffix = ".r5sourceverify"
+                buildConfigField("int", "LOCAL_HTTP_PORT", "18457")
+                buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")
             }
         }
         release {
@@ -96,7 +107,7 @@ android {
             // AGP 8.3 does not reliably emit 16 KiB-aligned uncompressed
             // JNI entries. Extract compressed libs in the isolated QA APK
             // until a separately reviewed toolchain upgrade.
-            if (anyP4Qa) {
+            if (anyIsolatedQa) {
                 useLegacyPackaging = true
             }
         }
