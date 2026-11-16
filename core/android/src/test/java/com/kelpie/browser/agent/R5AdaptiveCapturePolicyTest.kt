@@ -100,6 +100,15 @@ class R5AdaptiveCapturePolicyTest {
     }
 
     @Test
+    fun incompatibleReceiverCapFailsInsteadOfReturningOversizePng() {
+        val noScaleMetadata = policy.ConsumerCapabilities()
+        assertEquals(
+            policy.Decision.Deferred("RECEIVER_CANNOT_MAP_SCALED_OUTPUT"),
+            policy.choose(request(policy.Intent.OVERVIEW, noScaleMetadata, maxLongEdge = 1280), capable),
+        )
+    }
+
+    @Test
     fun lossyEncodingIsOnlySelectedForPhotoIntent() {
         val caps = mapped.copy(webpLossy = true)
         val photo = ready(policy.choose(request(policy.Intent.PHOTO_SCENE, caps), capable))
