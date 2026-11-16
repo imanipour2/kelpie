@@ -1,6 +1,7 @@
 package com.kelpie.browser.agent
 
 import com.kelpie.browser.agent.admission.AgentAdmissionPolicy
+import com.kelpie.browser.agent.execution.R5AgentDeliveryGuard
 import com.kelpie.browser.agent.contract.AdmissionCode
 import com.kelpie.browser.agent.contract.AgentCommand
 import com.kelpie.browser.agent.contract.Operation
@@ -74,5 +75,27 @@ class R5BackgroundAgentSecurityTest {
         assertEquals(200, status)
         assertTrue(body["success"] == true)
         assertEquals(setOf("agent-runtime-status"), reached)
+    }
+    @Test
+    fun inFlightMcpOrHttpResultCannotOutliveItsNativeGrantGeneration() {
+        val consent = SessionConsentCore({ 1L })
+        val first = consent.approveFromNativeUi(consent.requestNativeConsent("owner")!!.promptId, true)!!
+        assertTrue(R5AgentDeliveryGuard.permits("owner", first.generation, consent.snapshot()))
+        assertFalse(R5AgentDeliveryGuard.permits("other", first.generation, consent.snapshot()))
+        assertTrue(R5AgentDeliveryGuard.requiresGrant("agent-command", emptyMap()))
+        val mcp =
+            mapOf<String, Any?>(
+                "method" to "tools/call",
+                "params" to mapOf("arguments" to mapOf("consentGeneration" to first.generation)),
+            )
+        assertTrue(R5AgentDeliveryGuard.requiresGrant("mcp", mcp))
+        assertEquals(first.generation, R5AgentDeliveryGuard.expectedGeneration("mcp", mcp))
+        consent.setDeviceLocked(true)
+        assertFalse(R5AgentDeliveryGuard.permits("owner", first.generation, consent.snapshot()))
+        consent.stop()
+        assertFalse(R5AgentDeliveryGuard.permits("owner", first.generation, consent.snapshot()))
+        val next = consent.approveFromNativeUi(consent.requestNativeConsent("owner")!!.promptId, true)!!
+        assertFalse(R5AgentDeliveryGuard.permits("owner", first.generation, consent.snapshot()))
+        assertTrue(R5AgentDeliveryGuard.permits("owner", next.generation, consent.snapshot()))
     }
 }
