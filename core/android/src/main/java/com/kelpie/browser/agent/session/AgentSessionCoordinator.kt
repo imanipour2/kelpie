@@ -23,6 +23,7 @@ import kotlinx.coroutines.withContext
  */
 class AgentSessionCoordinator(
     private val activity: ComponentActivity,
+    private val readOnlyObservation: Boolean = false,
 ) {
     internal val pending = AndroidAgentProcessSession.pending
     internal val active = AndroidAgentProcessSession.active
@@ -100,6 +101,7 @@ class AgentSessionCoordinator(
                                     "generation" to state.generation,
                                     "safetyEpoch" to state.safetyEpoch,
                                     "browserOperationsEnabled" to false,
+                                    "readOnlyObservationEnabled" to readOnlyObservation,
                                 ),
                             )
                         }
@@ -148,7 +150,7 @@ class AgentSessionCoordinator(
         val granted =
             AndroidAgentProcessSession.approveFromNativeUi(promptId, deviceUnlocked = true)
                 ?: return false
-        if (!AgentSessionNotification.show(activity)) {
+        if (!AgentSessionNotification.show(activity, readOnlyObservation)) {
             AndroidAgentProcessSession.stop()
             return false
         }
