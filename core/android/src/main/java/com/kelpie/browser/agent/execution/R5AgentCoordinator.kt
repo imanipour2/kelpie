@@ -93,6 +93,7 @@ class R5AgentCoordinator(
                 if (closed) return@collect
                 if (state == null) {
                     ready = false
+                    ownership.stop()
                     runtime.cancelInFlight()
                     nativePort.clearPendingEvidence()
                     scope.launch { releaseRenderer() }
@@ -235,8 +236,33 @@ class R5AgentCoordinator(
     fun onResume() {
         renderer.setActivityVisible(true)
         scope.launch {
-            if (renderer.state.value == PrivateWebViewDisplay.State.PRIVATE_DISPLAY) {
-                restoreForeground()
+            when (renderer.state.value) {
+                PrivateWebViewDisplay.State.PRIVATE_DISPLAY -> restoreForeground()
+                PrivateWebViewDisplay.State.RESTORE_PENDING,
+                PrivateWebViewDisplay.State.FAILED,
+                -> {
+                    transferMutex.withLock {
+                        ready = false
+                        val restored = renderer.verifyRestored()
+                        val active = consent.snapshot() as? SessionConsentCore.State.Active
+                        if (!restored) {
+                            if (active != null) AndroidAgentProcessSession.stop()
+                            return@withLock
+                        }
+                        if (active != null && !active.locked) {
+                            if (ownership.status() == WebViewOwnershipState.Host.SUSPENDED) {
+                                ownership.unlockNeedsReattach(active.generation)
+                            }
+                            val tab = ctx.tabStore?.activeTab
+                            val target = tab?.let { nativePort.nativeTargetForBinding(it.id) }
+                            if (target != null && ownership.status() == WebViewOwnershipState.Host.ABSENT) {
+                                ownership.bindForeground(active.generation, target.rendererIdentity)
+                            }
+                            ready = ownership.status() == WebViewOwnershipState.Host.FOREGROUND
+                        }
+                    }
+                }
+                else -> Unit
             }
         }
     }
