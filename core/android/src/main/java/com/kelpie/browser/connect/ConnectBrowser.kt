@@ -37,10 +37,11 @@ class ConnectBrowser(
     }
 
     suspend fun execute(command: Map<String, Any?>): Map<String, Any?> {
-        fun admitted() = com.kelpie.browser.capture.PrivateCaptureOperationPolicy.permits(
-            command["operation"] as? String ?: "",
-            context.privateCaptureRestricted?.invoke() == true,
-        )
+        fun admitted() =
+            com.kelpie.browser.capture.PrivateCaptureOperationPolicy.permits(
+                command["operation"] as? String ?: "",
+                context.privateCaptureRestricted?.invoke() == true,
+            )
         if (!admitted()) {
             return com.kelpie.browser.network
                 .errorResponse("PERMISSION_REQUIRED", "Private WebView capture owns the browser")
@@ -73,10 +74,11 @@ class ConnectBrowser(
         if (operation == "open") {
             check(context.scriptPlaybackState?.recordingError("new-tab") == null) { "Recording is in progress" }
             val store = context.tabStore ?: error("Browser unavailable")
-            val tab = NessieConnection.changeTabRemotely {
-                check(context.privateCaptureRestricted?.invoke() != true) { "Private WebView capture owns the browser" }
-                store.addTab(webUrl(input["url"]))
-            }
+            val tab =
+                NessieConnection.changeTabRemotely {
+                    check(context.privateCaptureRestricted?.invoke() != true) { "Private WebView capture owns the browser" }
+                    store.addTab(webUrl(input["url"]))
+                }
             NessieConnection.claimTab(tab.id)
             settle(tab.id)
             return mapOf("tabId" to tab.id, "tabVersion" to version(tab.id), "tabs" to tabs())
