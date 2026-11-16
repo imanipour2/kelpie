@@ -40,6 +40,7 @@ class PrivateWebViewDisplay(
     private val activity: Activity,
     private val composeRelease: () -> Unit,
     private val composeRestore: () -> Unit,
+    private val useNativeFrameProof: Boolean = false,
 ) {
     enum class State { IDLE, RELEASING_COMPOSE, PRIVATE_DISPLAY, RESTORE_PENDING, FAILED }
 
@@ -69,6 +70,7 @@ class PrivateWebViewDisplay(
     private var view: WebView? = null
     private var display: VirtualDisplay? = null
     private var presentation: Presentation? = null
+    private var nativeFrameProof: R5NativeFrameProof? = null
 
     // Only detach a view during cleanup after it entered our private host.
     // Before that, Compose may still own the original view (P3 mount RCA).
@@ -156,7 +158,8 @@ class PrivateWebViewDisplay(
                 // Compose relinquished ownership. Cleanup must now restore it,
                 // even if setContentView/show throws before the host is visible.
                 attachedToPrivateHost = true
-                host.setContentView(original)
+                val proof = if (useNativeFrameProof) R5NativeFrameProof(activity).also { nativeFrameProof = it } else null
+                host.setContentView(proof?.host(original) ?: original)
                 host.show()
                 active = true
                 stateFlow.value = State.PRIVATE_DISPLAY
@@ -180,24 +183,47 @@ class PrivateWebViewDisplay(
                 }
                 val images = reader ?: return@withContext null
                 val current = view ?: return@withContext null
-                if (qaFrameSequence >= 20) return@withContext null
+                if (qaFrameSequence >= if (useNativeFrameProof) R5NativeFrameProof.MAX_FRAMES else 20) {
+                    return@withContext null
+                }
                 // Reader timestamps and SystemClock can have different timebases.
                 // A matching pixel nonce is proof of the NEW render, not a cached frame.
                 runCatching { images.acquireLatestImage()?.close() }
                 val next = qaFrameSequence + 1
-                val expectedRgb = PrivateCaptureQaPixelProof.rgb(next)
+                val expectedRgb =
+                    if (useNativeFrameProof) {
+                        nativeFrameProof?.expectedRgb(next) ?: return@withContext null
+                    } else {
+                        PrivateCaptureQaPixelProof.rgb(next)
+                    }
                 val wait = FrameWait(expectedRgb, OneShotFrameBuffer(Bitmap::recycle))
                 if (!pendingImage.compareAndSet(null, wait)) return@withContext null
                 // The QA nonce must advance only for a newly accepted single flight.
                 qaFrameSequence = next
                 lastFrameOutcome = "WAITING_FOR_FRESH_NONCE"
-                current.evaluateJavascript(PrivateCaptureQaPixelProof.repaintScript(expectedRgb)) { result ->
-                    if (result != "true" && pendingImage.compareAndSet(wait, null)) {
-                        lastFrameOutcome = "QA_SCRIPT_REFUSED"
-                        wait.result.fail()
+                if (useNativeFrameProof) {
+                    // The tiny nonce is painted by the app's Presentation, not
+                    // injected into the visited website or another Android app.
+                    nativeFrameProof?.repaint(expectedRgb)
+                    current.postVisualStateCallback(
+                        next.toLong(),
+                        object : WebView.VisualStateCallback() {
+                            override fun onComplete(requestId: Long) {
+                                if (pendingImage.get() === wait && wait.result.isOpen) {
+                                    current.postInvalidateOnAnimation()
+                                }
+                            }
+                        },
+                    )
+                } else {
+                    current.evaluateJavascript(PrivateCaptureQaPixelProof.repaintScript(expectedRgb)) { result ->
+                        if (result != "true" && pendingImage.compareAndSet(wait, null)) {
+                            lastFrameOutcome = "QA_SCRIPT_REFUSED"
+                            wait.result.fail()
+                        }
                     }
+                    current.postInvalidateOnAnimation()
                 }
-                current.postInvalidateOnAnimation()
                 wait
             } ?: return null
 
@@ -349,10 +375,15 @@ class PrivateWebViewDisplay(
         // Failure of Presentation.dismiss() must never skip releasing the
         // VirtualDisplay, ImageReader, worker or Compose ownership.
         if (attachedToPrivateHost) {
-            cleanup.release { original?.evaluateJavascript(PrivateCaptureQaPixelProof.REMOVE_SCRIPT, null) }
+            if (!useNativeFrameProof) {
+                cleanup.release { original?.evaluateJavascript(PrivateCaptureQaPixelProof.REMOVE_SCRIPT, null) }
+            }
             cleanup.release { (original?.parent as? ViewGroup)?.removeView(original) }
             attachedToPrivateHost = false
         }
+        val oldProof = nativeFrameProof
+        nativeFrameProof = null
+        cleanup.release { oldProof?.dispose() }
         val oldPresentation = presentation
         presentation = null
         cleanup.release { oldPresentation?.dismiss() }
@@ -409,7 +440,9 @@ class PrivateWebViewDisplay(
         require(image.width > 12 && image.height > 12)
         val plane = image.planes.single()
         require(plane.pixelStride == 4)
-        val offset = (image.height / 2) * plane.rowStride + (image.width / 2) * plane.pixelStride
+        val x = if (useNativeFrameProof) R5NativeFrameProof.SAMPLE_PX else image.width / 2
+        val y = if (useNativeFrameProof) R5NativeFrameProof.SAMPLE_PX else image.height / 2
+        val offset = y * plane.rowStride + x * plane.pixelStride
         val buffer = plane.buffer
         require(offset + 2 < buffer.limit())
         return ((buffer.get(offset).toInt() and 255) shl 16) or
