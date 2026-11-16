@@ -10,6 +10,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.kelpie.browser.agent.execution.R5AgentCoordinator
 import com.kelpie.browser.agent.session.AgentSessionCoordinator
 import com.kelpie.browser.ai.AIHandler
 import com.kelpie.browser.browser.BookmarkStore
@@ -66,6 +67,7 @@ class KelpieBrowserSession(
     profileSubject: String? = uoaSession?.identity?.value?.subject,
     privateCaptureQaEnabled: Boolean = false,
     private val agentConsentQaEnabled: Boolean = false,
+    private val agentBackgroundQaEnabled: Boolean = false,
 ) {
     private val browserContext get() = KelpieEnvironment.context(activity)
     private val applicationContext get() = KelpieEnvironment.app
@@ -121,6 +123,7 @@ class KelpieBrowserSession(
     private val captureCoordinator =
         if (privateCaptureQaEnabled) PrivateCaptureCoordinator(activity, handlerContext, true) else null
     private val agentSessionCoordinator = if (agentConsentQaEnabled) AgentSessionCoordinator(activity) else null
+    private val r5AgentCoordinator = if (agentBackgroundQaEnabled) R5AgentCoordinator(activity, handlerContext) else null
     private val scriptPlaybackState = ScriptPlaybackState()
     private var httpServer: HTTPServer? = null
     private var mdnsAdvertiser: MDNSAdvertiser? = null
@@ -129,6 +132,9 @@ class KelpieBrowserSession(
     private val pairingCoordinator: PairApprovalCoordinator
 
     init {
+        require(!agentBackgroundQaEnabled || agentConsentQaEnabled) {
+            "R5 remote control requires native device consent"
+        }
         if (uoaSession != null) {
             KelpieEnvironment.requireProfile(profileSubject)
             require(uoaSession.identity.value.subject == null || uoaSession.identity.value.subject == profileSubject)
@@ -166,6 +172,7 @@ class KelpieBrowserSession(
                             pairingCoordinator = pairingCoordinator,
                             captureCoordinator = captureCoordinator,
                             agentSessionCoordinator = agentSessionCoordinator,
+                            r5AgentCoordinator = r5AgentCoordinator,
                         )
                     }
                 }
@@ -184,6 +191,7 @@ class KelpieBrowserSession(
     private fun onResume() {
         captureCoordinator?.onResume()
         agentSessionCoordinator?.onResume()
+        r5AgentCoordinator?.onResume()
         com.kelpie.browser.browser.BookmarkStore
             .refreshAccountBookmarks()
         if (!agentConsentQaEnabled) {
@@ -194,6 +202,7 @@ class KelpieBrowserSession(
 
     private fun onPause() {
         captureCoordinator?.onPause()
+        r5AgentCoordinator?.onPause()
         if (!agentConsentQaEnabled) {
             com.kelpie.browser.connect.NessieConnection
                 .setForeground(false)
@@ -202,6 +211,7 @@ class KelpieBrowserSession(
 
     private fun registerHandlers(deviceInfo: DeviceInfo) {
         router.consentOnlyQa = agentConsentQaEnabled
+        router.backgroundAgentQa = agentBackgroundQaEnabled
         router.handlerContext = handlerContext
         router.scriptPlaybackState = scriptPlaybackState
         handlerContext.scriptPlaybackState = scriptPlaybackState
@@ -277,6 +287,7 @@ class KelpieBrowserSession(
 
         captureCoordinator?.register(router)
         agentSessionCoordinator?.register(router)
+        r5AgentCoordinator?.register(router)
         router.registerFallbacks()
         com.kelpie.browser.network
             .BrowserGatewayBinding(router, handlerContext)
@@ -333,6 +344,7 @@ class KelpieBrowserSession(
         handlerContext.dialogState.dismissPending()
         captureCoordinator?.close()
         agentSessionCoordinator?.close(revokeSession = !activity.isChangingConfigurations)
+        r5AgentCoordinator?.close()
         val tabs = handlerContext.tabStore
         browserView.disposeComposition()
         (browserView.parent as? ViewGroup)?.removeView(browserView)
