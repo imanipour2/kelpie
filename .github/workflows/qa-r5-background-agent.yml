@@ -1,0 +1,113 @@
+name: QA R5 Background Native Agent Android (No Install)
+
+on:
+  pull_request:
+    paths:
+      - 'apps/android/**'
+      - 'core/android/**'
+      - '.github/workflows/qa-r5-background-agent.yml'
+      - 'scripts/qa/r5-s24-acceptance.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r5-background-agent-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  background-agent-build:
+    name: Verify R5 background agent QA native package, principal/STOP gates and ports
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6.0.3
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: ./.github/actions/browser-contract
+      - uses: actions/setup-java@v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4.0.3
+      - name: Install SDK tools
+        run: sdkmanager "platforms;android-34" "build-tools;35.0.0"
+      - uses: actions/cache@v5.0.5
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            apps/android/.gradle
+          key: gradle-${{ runner.os }}-${{ hashFiles('core/android/**/*.gradle*', 'apps/android/**/*.gradle*', 'apps/android/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+      - name: Validate S24 owner-safe acceptance harness without ADB
+        run: |
+          python3 -m py_compile scripts/qa/r5-s24-acceptance.py
+          python3 scripts/qa/r5-s24-acceptance.py --help > /dev/null
+      - name: KtLint, agent JVM tests and private-display R5 background QA APK
+        working-directory: apps/android
+        run: |
+          ./gradlew --no-daemon \
+            -PkelpieR5BackgroundAgentQaProfile=true \
+            :kelpie-browser:ktlintCheck \
+            :kelpie-browser:testDebugUnitTest \
+            :app:assembleDebug
+      - name: Verify both BuildConfig ports, unique identity, signature and native binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=apps/android/app/build/outputs/apk/debug/app-debug.apk
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          SIGN="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          CORE=core/android/build/generated/source/buildConfig/debug/com/kelpie/browser/BuildConfig.java
+          APP=apps/android/app/build/generated/source/buildConfig/debug/com/unlikeotherai/kelpie/app/BuildConfig.java
+          test -s "$CORE" && test -s "$APP" && test -s "$APK"
+          grep -Eq 'LOCAL_HTTP_PORT[[:space:]]*=[[:space:]]*18460;' "$CORE"
+          grep -Eq 'LOCAL_HTTP_PORT[[:space:]]*=[[:space:]]*18460;' "$APP"
+          grep -Eq 'PRIVATE_CAPTURE_QA_ENABLED[[:space:]]*=[[:space:]]*false;' "$APP"
+          grep -Eq 'R5_NATIVE_CONSENT_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
+          "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.browser.r5fullverify'"
+          "$AAPT" dump badging "$APK" | grep -F "versionCode='33' versionName='0.2.13-r5-agent-qa'"
+          "$SIGN" verify --verbose --print-certs "$APK"
+          ! "$AAPT" dump permissions "$APK" | grep -F 'android.permission.RECORD_AUDIO'
+          native_count=0
+          while IFS= read -r member; do
+            native_count=$((native_count + 1))
+            unzip -p "$APK" "$member" > /tmp/kelpie-r5-source-native.so
+            while IFS= read -r alignment; do
+              if (( alignment < 16384 )); then
+                echo "::error::Unaligned native segment in $member ($alignment)"
+                exit 1
+              fi
+            done < <(readelf -lW /tmp/kelpie-r5-source-native.so | awk '$1 == "LOAD" {print $NF}')
+          done < <(unzip -Z1 "$APK" | grep -E '^lib/(arm64-v8a|x86_64)/.*[.]so$')
+          test "$native_count" -gt 0
+          # Native principal-bound runtime is present; old unsafe routes stay gated.
+          grep -F 'R5AgentCoordinator(activity, handlerContext)' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
+          grep -F 'backgroundAgentQa = agentBackgroundQaEnabled' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
+          grep -F 'useNativeFrameProof = true' core/android/src/main/java/com/kelpie/browser/agent/execution/R5AgentCoordinator.kt
+          grep -F 'AgentOperationRuntime(consent' core/android/src/main/java/com/kelpie/browser/agent/execution/R5AgentCoordinator.kt
+          grep -Eq 'R5_BACKGROUND_AGENT_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
+          sha256sum "$APK" > apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
+          {
+            echo "source_commit=$(git rev-parse HEAD)"
+            echo "package=com.kelpie.browser.r5fullverify"
+            echo "version=0.2.13-r5-agent-qa"
+            echo "versionCode=33"
+            echo "port=18460"
+            echo "agent_routes=NATIVE_BACKGROUND_AGENT_GATED_QA"
+            echo "signature=debug-only"
+            echo "install=OWNER_QA_ONLY_AFTER_CI"
+            echo "artifact_sha256=$(sha256sum "$APK" | awk '{print $1}')"
+          } > apps/android/app/build/outputs/apk/debug/provenance.txt
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: kelpie-r5-background-agent-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            apps/android/app/build/outputs/apk/debug/app-debug.apk
+            apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
+            apps/android/app/build/outputs/apk/debug/provenance.txt
+          if-no-files-found: error
+          retention-days: 14
