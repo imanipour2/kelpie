@@ -1,0 +1,60 @@
+name: Format isolated R5 Android Kotlin source
+
+on:
+  pull_request:
+    paths:
+      - 'apps/android/**'
+      - 'core/android/**'
+      - '.github/workflows/qa-r5-ktlint-autofix.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: r5-ktlint-autofix-${{ github.event.pull_request.head.ref }}
+  cancel-in-progress: true
+
+jobs:
+  format-owner-draft:
+    # Never run write-authorized Gradle on forks or other branches.
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/r5-background-agent-p4-runtime-20261116'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6.0.3
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          persist-credentials: true
+      - uses: actions/setup-java@v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4.0.3
+      - uses: actions/cache@v5.0.5
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            apps/android/.gradle
+          key: gradle-${{ runner.os }}-${{ hashFiles('core/android/**/*.gradle*', 'apps/android/**/*.gradle*', 'apps/android/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+      - name: Official Kotlin formatting for library and app
+        working-directory: apps/android
+        run: ./gradlew --no-daemon :kelpie-browser:ktlintFormat :app:ktlintFormat
+      - name: Verify formatted changes and commit only authored Android Kotlin sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git add -- 'core/android/**/*.kt' 'apps/android/**/*.kt'
+          if git diff --cached --quiet; then
+            echo 'No Kotlin formatting changes required.'
+            exit 0
+          fi
+          echo 'Formatted files:'
+          git diff --cached --stat
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'style(r5): apply official ktlint formatting on QA branch'
+          git push origin HEAD:refs/heads/feat/r5-background-agent-p4-runtime-20261116
