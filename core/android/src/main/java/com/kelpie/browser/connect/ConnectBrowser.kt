@@ -47,9 +47,10 @@ class ConnectBrowser(
         }
         // An operation can be admitted before a native P4 consent arrives.
         // Its response must be re-admitted after all suspensions, like Router.handle.
+        val gateway = context.browserGateway
         val result =
-            if (command["operation"] == "open" && context.browserGateway != null) {
-                context.browserGateway!!.legacy("new-tab") { executeBrowser(command) }
+            if (command["operation"] == "open" && gateway != null) {
+                gateway.legacy("new-tab") { executeBrowser(command) }
             } else {
                 executeBrowser(command)
             }
