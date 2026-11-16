@@ -26,4 +26,20 @@ class AgentNativeDialogConsentGateTest {
         assertFalse(nativeConsentTapAllowed(true, true, false, true))
         assertFalse(nativeConsentTapAllowed(true, true, true, false))
     }
+    @Test
+    fun allSixteenForegroundSafetyCombinationsAreChecked() {
+        for (bits in 0 until 16) {
+            val resumed = bits and 1 != 0
+            val visible = bits and 2 != 0
+            val unlocked = bits and 4 != 0
+            val stopVisible = bits and 8 != 0
+            val accepted = nativeConsentTapAllowed(resumed, visible, unlocked, stopVisible)
+            if (bits == 15) {
+                assertTrue("bits=$bits", accepted)
+            } else {
+                assertFalse("bits=$bits", accepted)
+            }
+        }
+    }
+
 }
