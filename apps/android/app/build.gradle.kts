@@ -16,8 +16,9 @@ val parallelP4Qa = providers.gradleProperty("kelpieParallelCaptureQaProfile").or
 val existingP4Qa = providers.gradleProperty("kelpiePrivateCaptureQaProfile").orNull == "true"
 val anyP4Qa = parallelP4Qa || existingP4Qa
 val r5SourceQa = providers.gradleProperty("kelpieR5SourceQaProfile").orNull == "true"
-val anyIsolatedQa = anyP4Qa || r5SourceQa
-require(listOf(parallelP4Qa, existingP4Qa, r5SourceQa).count { it } <= 1) {
+val r5MobileObserveQa = providers.gradleProperty("kelpieR5MobileObserveQaProfile").orNull == "true"
+val anyIsolatedQa = anyP4Qa || r5SourceQa || r5MobileObserveQa
+require(listOf(parallelP4Qa, existingP4Qa, r5SourceQa, r5MobileObserveQa).count { it } <= 1) {
     "Isolated Android QA profiles are mutually exclusive"
 }
 
@@ -41,10 +42,14 @@ android {
         } else if (r5SourceQa) {
             versionCode = 31
             versionName = "0.2.11-r5-consent-qa"
+        } else if (r5MobileObserveQa) {
+            versionCode = 32
+            versionName = "0.2.12-r5-mobile-observe-qa"
         }
         buildConfigField("int", "LOCAL_HTTP_PORT", "8420")
         buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")
         buildConfigField("boolean", "R5_NATIVE_CONSENT_QA_ENABLED", "false")
+        buildConfigField("boolean", "R5_OBSERVE_QA_ENABLED", "false")
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
@@ -52,7 +57,7 @@ android {
         getByName("debug") {
             if (anyP4Qa) {
                 manifest.srcFile("src/privateCaptureQa/AndroidManifest.xml")
-            } else if (r5SourceQa) {
+            } else if (r5SourceQa || r5MobileObserveQa) {
                 manifest.srcFile("src/r5SourceQa/AndroidManifest.xml")
             }
         }
@@ -79,6 +84,12 @@ android {
                 buildConfigField("int", "LOCAL_HTTP_PORT", "18457")
                 buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")
                 buildConfigField("boolean", "R5_NATIVE_CONSENT_QA_ENABLED", "true")
+            } else if (r5MobileObserveQa) {
+                applicationIdSuffix = ".r5mobileverify"
+                buildConfigField("int", "LOCAL_HTTP_PORT", "18459")
+                buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")
+                buildConfigField("boolean", "R5_NATIVE_CONSENT_QA_ENABLED", "true")
+                buildConfigField("boolean", "R5_OBSERVE_QA_ENABLED", "true")
             }
         }
         release {
