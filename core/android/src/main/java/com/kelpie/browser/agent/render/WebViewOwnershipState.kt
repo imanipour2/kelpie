@@ -38,9 +38,13 @@ class WebViewOwnershipState {
         // An absent renderer after lock or crash still belongs to the original
         // consent generation. Never permit a different generation to take over
         // that host state without creating a brand-new session owner.
-        if (host != Host.ABSENT || sessionGeneration.isBlank() || webViewIdentity.isBlank() ||
+        if (host != Host.ABSENT ||
+            sessionGeneration.isBlank() ||
+            webViewIdentity.isBlank() ||
             (generation != null && generation != sessionGeneration)
-        ) return false
+        ) {
+            return false
+        }
         generation = sessionGeneration
         identity = webViewIdentity
         host = Host.FOREGROUND
