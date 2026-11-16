@@ -32,7 +32,10 @@ import kotlinx.coroutines.delay
 
 /** Explicit local tap, never remotely synthesized. Independent of a website URL. */
 @Composable
-fun AgentSessionConsentUi(coordinator: AgentSessionCoordinator) {
+fun AgentSessionConsentUi(
+    coordinator: AgentSessionCoordinator,
+    readOnlyObservation: Boolean = false,
+) {
     val pending by coordinator.pending.collectAsState()
     val active by coordinator.active.collectAsState()
     val context = LocalContext.current
@@ -71,7 +74,7 @@ fun AgentSessionConsentUi(coordinator: AgentSessionCoordinator) {
             text = {
                 Text(
                     stringResource(
-                        R.string.r5_agent_disclosure,
+                        if (readOnlyObservation) R.string.r5_mobile_observation_disclosure else R.string.r5_agent_disclosure,
                         BidiFormatter.getInstance().unicodeWrap(request.principalId),
                     ),
                 )
