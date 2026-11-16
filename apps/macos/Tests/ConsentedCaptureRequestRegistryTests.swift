@@ -40,7 +40,13 @@ final class ConsentedCaptureRequestRegistryTests: XCTestCase {
                 userStopped: false
             )
         )
-        XCTAssertNil(inbox.prompt)
+        // A remote frame claim before approval must not dismiss the person's prompt.
+        XCTAssertEqual(inbox.prompt?.requestId, requestId)
+        XCTAssertTrue(inbox.approveOnDevice(
+            requestId: requestId,
+            currentTabId: "tab", currentDocumentVersion: "doc",
+            currentView: view, unlocked: true
+        ))
     }
 
     func testApprovalBindsExactWebViewAndClient() {
