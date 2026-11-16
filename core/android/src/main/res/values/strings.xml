@@ -30,5 +30,7 @@
     <string name="r5_agent_notification_channel">Kelpie agent session QA</string>
     <string name="r5_agent_notification_title">Kelpie agent consent active (QA)</string>
     <string name="r5_agent_notification_desc">Consent-only QA: browser actions disabled. Use STOP to revoke.</string>
+    <string name="r5_mobile_observation_disclosure">Paired client: %1$s\n\nThis experimental R5 build permits read-only page text and fresh viewport screenshots of the visible Kelpie browser tab, only after your approval and while Kelpie remains on screen. It cannot click, type, navigate, publish, make payments, or access other apps or the lock screen. Page text and images may contain private information. You can stop immediately from the app or the Android notification. The grant is lost when the app process stops.</string>
+    <string name="r5_mobile_observation_notification_desc">Read-only observation of a visible Kelpie tab is enabled. STOP immediately revokes access.</string>
     <string name="r5_agent_notification_stop">STOP</string>
 </resources>
