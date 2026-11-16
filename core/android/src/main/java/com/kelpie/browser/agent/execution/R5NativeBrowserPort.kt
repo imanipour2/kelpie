@@ -104,8 +104,28 @@ internal class R5NativeBrowserPort(
                     Operation.CLICK -> {
                         val selector = command.selector ?: return@withContext AdapterOutcome.Failed
                         val previousUrl = view.url.orEmpty()
+                        val previousEpoch = tab.documentVersion
                         val outcome = evaluate(view, R5WebViewActionScripts.click(selector))
                         if (outcome != "\"DISPATCHED\"") return@withContext AdapterOutcome.Failed
+                        // JavaScript dispatch is not navigation completion. Wait for
+                        // two stable native observations before claiming an effect.
+                        // Unchanged/SPA-only clicks remain UNCERTAIN, never retried.
+                        val proof = R5ClickNavigationProof(previousUrl, previousEpoch)
+                        val committed =
+                            withTimeoutOrNull(CLICK_SETTLEMENT_TIMEOUT_MS) {
+                                repeat(CLICK_SETTLEMENT_POLLS) {
+                                    val live = ctx.tabStore?.activeTab ?: return@withTimeoutOrNull false
+                                    if (live.id != tab.id || live.webView !== view) {
+                                        return@withTimeoutOrNull false
+                                    }
+                                    if (proof.observedStableChange(view.url.orEmpty(), live.documentVersion)) {
+                                        return@withTimeoutOrNull true
+                                    }
+                                    delay(CLICK_SETTLEMENT_POLL_MS)
+                                }
+                                false
+                            } ?: false
+                        if (!committed) return@withContext AdapterOutcome.Uncertain
                         Pair(previousUrl, mapOf("kind" to "click", "mayHaveCompleted" to true))
                     }
                     Operation.FILL, Operation.TYPE -> {
@@ -191,6 +211,12 @@ internal class R5NativeBrowserPort(
 
     fun clearPendingEvidence() {
         proof = null
+    }
+
+    private companion object {
+        const val CLICK_SETTLEMENT_TIMEOUT_MS = 7_500L
+        const val CLICK_SETTLEMENT_POLLS = 70
+        const val CLICK_SETTLEMENT_POLL_MS = 100L
     }
 
     private suspend fun evaluate(
