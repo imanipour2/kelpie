@@ -23,7 +23,9 @@ import kotlinx.coroutines.withContext
  */
 class AgentSessionCoordinator(
     private val activity: ComponentActivity,
+    private val fullAgentQa: Boolean = false,
 ) {
+    var runtimeReady: () -> Boolean = { false }
     internal val pending = AndroidAgentProcessSession.pending
     internal val active = AndroidAgentProcessSession.active
     private var closed = false
@@ -96,10 +98,10 @@ class AgentSessionCoordinator(
                         } else {
                             successResponse(
                                 mapOf(
-                                    "status" to "ACTIVE_CONSENT_ONLY",
+                                    "status" to if (fullAgentQa) "ACTIVE_AGENT_SESSION" else "ACTIVE_CONSENT_ONLY",
                                     "generation" to state.generation,
                                     "safetyEpoch" to state.safetyEpoch,
-                                    "browserOperationsEnabled" to false,
+                                    "browserOperationsEnabled" to (fullAgentQa && runtimeReady()),
                                 ),
                             )
                         }
@@ -148,7 +150,7 @@ class AgentSessionCoordinator(
         val granted =
             AndroidAgentProcessSession.approveFromNativeUi(promptId, deviceUnlocked = true)
                 ?: return false
-        if (!AgentSessionNotification.show(activity)) {
+        if (!AgentSessionNotification.show(activity, fullAgentQa)) {
             AndroidAgentProcessSession.stop()
             return false
         }
