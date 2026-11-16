@@ -3,6 +3,7 @@ package com.kelpie.browser.agent.session
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
@@ -13,6 +14,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.text.BidiFormatter
 import com.kelpie.browser.R
+import kotlinx.coroutines.delay
 
 /** Explicit local tap, never remotely synthesized. Independent of a website URL. */
 @Composable
@@ -39,12 +42,28 @@ fun AgentSessionConsentUi(coordinator: AgentSessionCoordinator) {
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { approved ->
             val prompt = pendingPermissionPrompt
             pendingPermissionPrompt = null
-            if (!approved || prompt == null || !coordinator.approveFromNativeUi(prompt)) {
-                error = context.getString(R.string.r5_agent_error_notification)
-            }
+            error =
+                when {
+                    !approved || prompt == null -> context.getString(R.string.r5_agent_error_notification)
+                    coordinator.expireNativePromptIfDue(prompt) -> context.getString(R.string.r5_agent_error_expired)
+                    !coordinator.approveFromNativeUi(prompt) -> context.getString(R.string.r5_agent_error_locked)
+                    else -> null
+                }
         }
 
     val request = pending
+    LaunchedEffect(request?.promptId, request?.deadlineMs) {
+        if (request != null) {
+            // elapsedRealtime includes Android Doze time; an old timer cannot
+            // dismiss a newer request, even if the device wakes up much later.
+            val remainingMs = (request.deadlineMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+            delay(remainingMs)
+            if (coordinator.expireNativePromptIfDue(request.promptId)) {
+                error = context.getString(R.string.r5_agent_error_expired)
+            }
+        }
+    }
+
     if (request != null) {
         AlertDialog(
             onDismissRequest = coordinator::denyFromNativeUi,
@@ -61,7 +80,9 @@ fun AgentSessionConsentUi(coordinator: AgentSessionCoordinator) {
                 TextButton(
                     onClick = {
                         val promptId = request.promptId
-                        if (Build.VERSION.SDK_INT >= 33 &&
+                        if (coordinator.expireNativePromptIfDue(promptId)) {
+                            error = context.getString(R.string.r5_agent_error_expired)
+                        } else if (Build.VERSION.SDK_INT >= 33 &&
                             ContextCompat.checkSelfPermission(
                                 context,
                                 Manifest.permission.POST_NOTIFICATIONS,
