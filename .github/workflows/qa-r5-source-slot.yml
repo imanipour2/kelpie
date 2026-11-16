@@ -6,6 +6,7 @@ on:
       - 'apps/android/**'
       - 'core/android/**'
       - '.github/workflows/qa-r5-source-slot.yml'
+      - 'scripts/qa/r5-s24-acceptance.py'
   workflow_dispatch:
 
 permissions:
@@ -41,6 +42,10 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('core/android/**/*.gradle*', 'apps/android/**/*.gradle*', 'apps/android/**/gradle-wrapper.properties') }}
           restore-keys: |
             gradle-${{ runner.os }}-
+      - name: Validate S24 owner-safe acceptance harness without ADB
+        run: |
+          python3 -m py_compile scripts/qa/r5-s24-acceptance.py
+          python3 scripts/qa/r5-s24-acceptance.py --help > /dev/null
       - name: KtLint, agent JVM tests and isolated R5 native-consent QA APK
         working-directory: apps/android
         run: |
