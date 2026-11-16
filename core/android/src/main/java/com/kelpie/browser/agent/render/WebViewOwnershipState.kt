@@ -35,7 +35,12 @@ class WebViewOwnershipState {
         sessionGeneration: String,
         webViewIdentity: String,
     ): Boolean {
-        if (host != Host.ABSENT || sessionGeneration.isBlank() || webViewIdentity.isBlank()) return false
+        // An absent renderer after lock or crash still belongs to the original
+        // consent generation. Never permit a different generation to take over
+        // that host state without creating a brand-new session owner.
+        if (host != Host.ABSENT || sessionGeneration.isBlank() || webViewIdentity.isBlank() ||
+            (generation != null && generation != sessionGeneration)
+        ) return false
         generation = sessionGeneration
         identity = webViewIdentity
         host = Host.FOREGROUND
@@ -76,7 +81,7 @@ class WebViewOwnershipState {
     /** A lock demands that the native adapter release its private Surface immediately. */
     @Synchronized
     fun lockDevice() {
-        if (host == Host.CLOSED) return
+        if (host == Host.CLOSED || (host == Host.ABSENT && generation == null)) return
         currentTicket = null
         nextSequence++
         host = Host.SUSPENDED

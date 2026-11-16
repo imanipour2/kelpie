@@ -16,6 +16,12 @@ Status: **DRAFT / SOURCE-ONLY / NOT WIRED / NO INSTALL / NO MERGE / RELEASE_NO_G
 - `AgentOperationRuntime`: serializes commands, requires gateway-verified principal, checks before and after asynchronous effects and returns UNCERTAIN when uncertain; STOP interrupts active jobs. Hardening here rejects zero/negative or reused sequence, duplicate command IDs even with newer sequences, retains bounded recent IDs and verifies lock/unlock safety epoch behavior.
 - `VerifiedNativeBrowserAdapter` and `WebViewOwnershipState`: verify actual renderer identity/host epoch. **NativePort currently returns failure for execution/effect proof**; TabStore snapshot is read-only and does not implement tabless enumeration. No actual agent HTTP/MCP/Nessie handler, STOP indicator, service or private display is registered by this source import.
 
+## Native ownership rebind remediation (reviewed after initial import)
+
+Root cause: the original `WebViewOwnershipState.bindForeground` checked only `Host.ABSENT`, not the already retained `sessionGeneration`. After `lockDevice()` → `unlockNeedsReattach()` or renderer failure → `detachAfterFailure()`, host became `ABSENT` while its earlier generation remained recorded; a caller could rebind the same state for a different generation. The independent `SessionConsentCore` remains a further guard, but renderer ownership must **fail closed independently** rather than allow a cross-session state transfer. Fix: refuse a different generation unless a brand-new owner is explicitly created; keep same-generation reattachment, make pre-bind lock a no-op to avoid stranding a fresh session. New JVM negative tests cover both recovery paths, pre-bind lock and STOP. This is a **source state invariant**, not proof of actual Android attach/lock behavior.
+
+The official Android 16+ foreground-service restrictions and documented WebView native-bridge risks were reviewed: https://developer.android.com/develop/background-work/services/fgs/changes and https://developer.android.com/privacy-and-security/risks/insecure-webview-native-bridges . No FGS or browser bridge has yet been registered here.
+
 ## High-priority fail-closed gaps before an executable build
 1. Real authenticated MCP/HTTP/Nessie principal from paired connection metadata (not command JSON); replay, two-principal and binding lifecycle tests.
 2. Native consent UI + persistent indicator + immediate STOP + app process session owner; revoke on process death, unpair and session end; screen lock denies capture until separately validated.
