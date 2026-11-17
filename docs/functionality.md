@@ -5,6 +5,28 @@ The embeddable browser extraction keeps the complete native UI, tabs and behavio
 
 Every user-facing feature is described here. When adding or changing a feature, update this file in the same commit.
 
+## Android K1 supported browser OAuth and owner handoff — draft QA only
+
+In [draft PR #50](https://github.com/imanipour2/kelpie/pull/50), app-owned UOA OAuth
+launches in an external Android browser via ACTION_VIEW, rather than loading
+Google sign-in inside the app's WebView. The existing S256 PKCE challenge, random
+state, exact callback and one-use authorization code exchange remain required.
+An unavailable external browser causes a visible error, not a WebView fallback.
+Normal tabs now report the real installed Android System WebView user agent.
+
+From the browser's More menu, **Open in supported browser** lets the owner
+explicitly hand the active HTTPS URL to another browser after a warning:
+the other browser's cookies and sign-in state do **not** automatically return
+to the original Kelpie tab. This manual handoff is not automated Google OAuth
+interception, nor is it a Chrome-cookie import. The owner must confirm; URLs
+with unsafe schemes, malformed syntax or embedded credentials are refused.
+
+This **does not** make an unrelated website's Google sign-in work inside the
+embedded Kelpie WebView. AndroidX Auth Tab / Custom Tabs, Google IdP automatic
+handoff UX, process-recreation handling and live device verification remain
+follow-on K1 tasks. Never copy Google account tokens, passwords, OTPs or
+other apps' cookies. Draft only: no installation, merge or public release.
+
 ## Android R5 private agent QA — not released
 
 The source-only draft PR #41 adds a separate, explicitly write-capable
@@ -173,7 +195,7 @@ MCP: `kelpie_pair`.
 
 Apple apps expose the shared versioned `POST /v1/browser-control` and authenticated `POST /mcp` surface. Common snapshots, references, append typing and navigation share one native coordinator; product tools are discovered separately. See [Apple binding](api/native-browser-gateway.md#apple-bindings).
 
-Full navigation control: go to any URL, go back/forward, reload, get the current page URL and title. The browser uses Safari's user agent on iOS, Chrome's on Android, Chromium on Linux, and on macOS can switch between Safari/WebKit and Chrome/Chromium behavior so sites behave normally — Google OAuth, banking sites, and similar services work without being blocked as a WebView.
+Full navigation control: go to any URL, go back/forward, reload, get the current page URL and title. The browser presents the user agent of its actual engine on each platform. Android tabs use the genuine installed Android System WebView user agent; some identity providers, including Google OAuth, reject sign-in from embedded WebViews. External browser authorization is separate from WebView tab cookies and cannot guarantee a third-party website session will return to Kelpie.
 
 On macOS, the desktop URL bar stays synced with both API/MCP-triggered navigation and user-driven page navigation, uses a pale top tab strip alongside the native close/minimize/maximize controls, an outlined navigation row and rounded address field, autocompletes previously visited URLs inline as you type, supports native fullscreen toggling for the active window from the Window menu or with `Cmd+F`, and maps `Cmd+R` to a hard refresh in both WebKit and Chromium so cached desktop state can be cleared without switching renderers. On Linux, the GTK shell matches the Windows title-strip tabs, outlined navigation controls, rounded address field, conditional favorites row and UOA account menu.
 
