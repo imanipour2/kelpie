@@ -39,8 +39,16 @@ for the process-local approval screen; an old stored pairing, a successful
 local HTTP health check or an approved local grant **does not prove** cloud MCP
 reachability. Advanced HTTPS /mcp input, other providers and copied setup
 instructions remain available for developers but are not required in the
-default flow. The existing native one-tap agent/background approval and STOP
-policy from PR56 remain authoritative.
+default flow. The installed ChatGPT connector may expose only `kelpie_browser_control`
+even when the private MCP server advertises a separate session tool. In this
+isolated QA branch, **only** `session.request`, `session.status` and
+`session.stop` are additionally routed through the authenticated browser
+tool. These methods can request an owner dialog, read session metadata, or
+revoke a matching principal's grant; they **cannot approve** it, unlock a
+phone, or access tab content without the existing process generation.
+Unit guards reject `session.approve` and spoofed tool names. The existing
+native one-tap agent/background approval and STOP policy from PR56 remain
+authoritative.
 
 This is a **UI and policy increment**, not an automatically deployed tunnel,
 QR pairing server, OAuth broker or published ChatGPT plugin. The provider-neutral
