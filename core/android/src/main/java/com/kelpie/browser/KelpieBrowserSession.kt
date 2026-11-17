@@ -112,7 +112,7 @@ class KelpieBrowserSession(
     ) {
         accountLogin.launch(
             android.content
-                .Intent(activity, com.kelpie.browser.account.AccountLoginActivity::class.java)
+                .Intent(activity, com.kelpie.browser.account.AccountAuthTabActivity::class.java)
                 .putExtra("url", url)
                 .putExtra("nonce", nonce),
         )
