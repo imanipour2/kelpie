@@ -128,6 +128,49 @@ class AccountPairingTests {
             }
         }
 
+
+    @Test
+    fun r5QaModernMcpHeadersWorkOnlyOnTheScopedPrivateEndpoint() =
+        runBlocking {
+            val store = store()
+            val issuer =
+                AccountPairingAuthorization(store, { "session" }, { _, _, _, _ ->
+                    System.currentTimeMillis() + 60_000
+                })
+            val (_, token) = connect(issuer)
+            val qa =
+                AccountPairingAuthorization(
+                    store,
+                    { "session" },
+                    { _, _, _, _ -> System.currentTimeMillis() + 60_000 },
+                    r5PrivateMcpQa = true,
+                )
+            fun mcp(version: String, path: String = "/mcp"): ParsedRequest =
+                request(token).copy(
+                    path = path,
+                    headers = request(token).headers + ("mcp-protocol-version" to listOf(version)),
+                )
+
+            // Standard product routes keep their original 2025 protocol allowlist.
+            assertEquals(400, (issuer.evaluate(mcp("2026-07-28")) as AuthDecision.Reject).status)
+            assertEquals(AuthDecision.Authenticated("client"), issuer.evaluate(mcp("2025-06-18")))
+            assertEquals(AuthDecision.Authenticated("client"), qa.evaluate(mcp("2026-07-28")))
+            assertEquals(AuthDecision.Authenticated("client"), qa.evaluate(mcp("2025-11-25")))
+            assertEquals(400, (qa.evaluate(mcp("2025-06-18")) as AuthDecision.Reject).status)
+            assertEquals(400, (qa.evaluate(mcp("2026-07-28", "/v1/mcp")) as AuthDecision.Reject).status)
+
+            // Modern version does not bypass pairing, Origin or ambiguous headers.
+            val unpaired = mcp("2026-07-28").copy(headers = mapOf("mcp-protocol-version" to listOf("2026-07-28")))
+            assertEquals(401, (qa.evaluate(unpaired) as AuthDecision.Reject).status)
+            val crossOrigin = mcp("2026-07-28").copy(headers = mcp("2026-07-28").headers + ("origin" to listOf("null")))
+            assertEquals(403, (qa.evaluate(crossOrigin) as AuthDecision.Reject).status)
+            val duplicates =
+                mcp("2026-07-28").copy(
+                    headers = mcp("2026-07-28").headers + ("mcp-protocol-version" to listOf("2026-07-28", "2026-07-28")),
+                )
+            assertEquals(400, (qa.evaluate(duplicates) as AuthDecision.Reject).status)
+        }
+
     @Test fun ambiguousHeadersAndMcpOriginRemainRejected() =
         runBlocking {
             val store = store()

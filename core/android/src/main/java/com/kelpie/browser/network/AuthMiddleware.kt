@@ -38,6 +38,7 @@ sealed interface AuthDecision {
  */
 class AuthMiddleware(
     private val store: PairingStore,
+    private val r5PrivateMcpQa: Boolean = false,
 ) {
     companion object {
         val UNAUTH_ALLOWLIST: Set<String> =
@@ -78,7 +79,13 @@ class AuthMiddleware(
         if (req.path == "/mcp" || req.path == "/v1/mcp") {
             if (req.headers.containsKey("origin")) return AuthDecision.Reject(403, "FORBIDDEN", "Browser Origin is not permitted on MCP")
             val versions = req.headers["mcp-protocol-version"]
-            if (versions != null && (versions.size != 1 || versions.single() !in setOf("2025-03-26", "2025-06-18"))) {
+            val supportedVersions =
+                if (r5PrivateMcpQa && req.path == "/mcp") {
+                    R5McpWireAdmission.SUPPORTED.toSet()
+                } else {
+                    setOf("2025-03-26", "2025-06-18")
+                }
+            if (versions != null && (versions.size != 1 || versions.single() !in supportedVersions)) {
                 return AuthDecision.Reject(400, "BAD_REQUEST", "Unsupported MCP protocol version")
             }
         }

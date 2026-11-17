@@ -88,7 +88,7 @@ class HTTPServer(
         private set
 
     fun start() {
-        val middleware = AccountPairingAuthorization(pairingStore)
+        val middleware = AccountPairingAuthorization(pairingStore, r5PrivateMcpQa = router.backgroundAgentQa)
         val pairEndpoints =
             PairEndpoints(pairingStore) { onPendingPairChanged() }
 
