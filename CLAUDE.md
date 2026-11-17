@@ -10,6 +10,15 @@ The complete embeddable browser and thin standalone host boundary follow [core/R
 
 Direct Mac artifacts use the inside-out signer and notarization checks in [Mac releases](docs/macos-release.md); `pnpm check:macos-signing` checks the signing plan without credentials.
 
+## Kelpie Link multi-agent onboarding QA
+
+Follow [ADR-R5-006](docs/adr/ADR-R5-006-kelpie-link-onboarding-remote-mcp.md).
+Draft PR57 improves the Android connection-center user experience and tests
+readiness labels. It does not provision OAuth or a secure public endpoint.
+All privileged actions remain behind real middleware authentication and
+native owner consent, not UI status. Treat this as isolated unreleased QA;
+iOS parity, private-host tests and device E2E acceptance remain open.
+
 ## Private Android R5 agent-first QA fork
 
 Follow [ADR-R5-005](docs/adr/ADR-R5-005-agent-first-startup-unified-consent.md)
