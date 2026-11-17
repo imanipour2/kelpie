@@ -22,7 +22,7 @@ internal object R5WebViewActionScripts {
           humanChallengeDetected:
             !!document.querySelector('[class*=captcha],[id*=captcha],.cf-turnstile')||
             [...document.querySelectorAll('iframe[src]')].some(f=>
-              /recaptcha|hcaptcha|challenges\\.cloudflare\\.com|turnstile/i.test(f.src))}))()
+              /recaptcha|hcaptcha|challenges\.cloudflare\.com|turnstile/i.test(f.src))}))()
         """
 
     // Ordinary links, JS buttons and non-financial forms are agent-controlled.
