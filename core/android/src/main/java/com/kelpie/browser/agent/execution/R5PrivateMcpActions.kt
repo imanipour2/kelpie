@@ -33,7 +33,9 @@ internal object R5PrivateMcpActions {
         if (method == "tabs.close") {
             val target = params["targetTabId"] as? String ?: return null
             if (target.isBlank() || target.length > 256) return null
-            return mapOf("targetTabId" to target)
+            val epoch = params["targetDocumentEpoch"] as? String ?: return null
+            if (epoch.isBlank() || epoch.length > 256) return null
+            return mapOf("targetTabId" to target, "targetDocumentEpoch" to epoch)
         }
         if (method == "tab.wait") {
             val selector = params["selector"] ?: return emptyMap()

@@ -20,6 +20,7 @@ data class AgentCommand(
     val captureRequest: R5VisionCaptureRequest = R5VisionCaptureRequest.LEGACY,
     /** An observed inactive tab may be closed; never reinterpret this as the active renderer ID. */
     val targetTabId: String? = null,
+    val targetDocumentEpoch: String? = null,
 )
 
 enum class Operation {

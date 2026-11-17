@@ -857,3 +857,5 @@ The full privacy/security contract and gated rollout are in [EF-OPS-KELPIE-PRODU
 ### R5 owner-consented Android QA screenshot behavior (unreleased)
 
 Only in the isolated R5 QA Android build, an authenticated, locally approved agent may obtain a screenshot of the exact active Kelpie WebView. The native private-display path serves genuine background captures; when the browser is visibly resumed and the private display has fully restored, a bounded app-WebView-only draw may serve a foreground capture. Both require the still-current native consent/tab/document and fail closed on device lock, STOP, in-progress private capture, identity change or unstable frame. No other Android app or lock-screen content is captured. This is a development candidate, not a public release or proof of E2E connection.
+
+K2 close-tab freshness: a mutation also requires the inactive tab's **targetDocumentEpoch** from a new tabs.list snapshot; closure rejects a changed target document or absent target. The active renderer must remain unchanged.

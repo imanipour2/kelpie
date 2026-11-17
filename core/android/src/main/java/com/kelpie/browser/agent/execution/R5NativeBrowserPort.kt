@@ -116,6 +116,10 @@ internal class R5NativeBrowserPort(
                     Operation.CLOSE_TAB -> {
                         val store = ctx.tabStore ?: return@withContext AdapterOutcome.Failed
                         val targetId = command.targetTabId ?: return@withContext AdapterOutcome.Failed
+                        val expectedEpoch = command.targetDocumentEpoch ?: return@withContext AdapterOutcome.Failed
+                        val targetTab = store.tabs.value.firstOrNull { it.id == targetId }
+                            ?: return@withContext AdapterOutcome.Failed
+                        if (targetTab.documentVersion != expectedEpoch) return@withContext AdapterOutcome.Failed
                         if (!store.closeBackgroundTab(targetId)) return@withContext AdapterOutcome.Failed
                         if (store.activeTab?.id != tab.id) return@withContext AdapterOutcome.Uncertain
                         Pair(targetId, mapOf("kind" to "close_tab", "tabId" to targetId))

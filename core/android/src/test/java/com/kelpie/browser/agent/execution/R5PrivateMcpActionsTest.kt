@@ -29,7 +29,8 @@ class R5PrivateMcpActionsTest {
         assertNull(R5PrivateMcpActions.safeArguments("tab.goto", mapOf("url" to " ")))
         assertTrue(R5PrivateMcpActions.safeArguments("tab.wait", emptyMap<String, Any>())?.isEmpty() == true)
         assertEquals(mapOf("url" to "https://example.com/"), R5PrivateMcpActions.safeArguments("tabs.new", mapOf("url" to "https://example.com/")))
-        assertEquals(mapOf("targetTabId" to "inactive-tab"), R5PrivateMcpActions.safeArguments("tabs.close", mapOf("targetTabId" to "inactive-tab")))
+        assertEquals(mapOf("targetTabId" to "inactive-tab", "targetDocumentEpoch" to "e2"), R5PrivateMcpActions.safeArguments("tabs.close", mapOf("targetTabId" to "inactive-tab", "targetDocumentEpoch" to "e2")))
+        assertNull(R5PrivateMcpActions.safeArguments("tabs.close", mapOf("targetTabId" to "inactive-tab")))
         assertNull(R5PrivateMcpActions.safeArguments("tabs.new", mapOf("url" to " ")))
         assertNull(R5PrivateMcpActions.safeArguments("tabs.close", mapOf("targetTabId" to "")))
     }

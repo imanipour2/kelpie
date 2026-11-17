@@ -242,6 +242,7 @@ class R5AgentCoordinator(
                     clientSequence = (body["clientSequence"] as? Number)?.toLong() ?: 0L,
                     captureRequest = capture,
                     targetTabId = body["targetTabId"] as? String,
+                    targetDocumentEpoch = body["targetDocumentEpoch"] as? String,
                 )
             // Capture a stable runtime reference: STOP may replace the active
             // generation while this suspended action is in flight.
