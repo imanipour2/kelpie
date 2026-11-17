@@ -29,6 +29,36 @@ handoff UX, process-recreation handling and live device verification remain
 follow-on K1 tasks. Never copy Google account tokens, passwords, OTPs or
 other apps' cookies. Draft only: no installation, merge or public release.
 
+## Kelpie Link connection center (scoped development, stacked draft PR #57)
+
+The owner-approved **Kelpie Link** private QA increment (18 November 2026)
+reduces first-use clutter on Android: the native Connect an AI agent sheet starts
+with ChatGPT/Claude, a provider-managed setup guide and a truthful connection
+readiness message. Only recently authenticated clients appear as candidates
+for the process-local approval screen; an old stored pairing, a successful
+local HTTP health check or an approved local grant **does not prove** cloud MCP
+reachability. Advanced HTTPS /mcp input, other providers and copied setup
+instructions remain available for developers but are not required in the
+default flow. The installed ChatGPT connector may expose only `kelpie_browser_control`
+even when the private MCP server advertises a separate session tool. In this
+isolated QA branch, **only** `session.request`, `session.status` and
+`session.stop` are additionally routed through the authenticated browser
+tool. These methods can request an owner dialog, read session metadata, or
+revoke a matching principal's grant; they **cannot approve** it, unlock a
+phone, or access tab content without the existing process generation.
+Unit guards reject `session.approve` and spoofed tool names. The existing
+native one-tap agent/background approval and STOP policy from PR56 remain
+authoritative.
+
+This is a **UI and policy increment**, not an automatically deployed tunnel,
+QR pairing server, OAuth broker or published ChatGPT plugin. The provider-neutral
+outbound gateway and verified App Link/QR challenge require a separately
+deployed and security-tested backend. See
+[Draft PR #57](https://github.com/imanipour2/kelpie/pull/57)
+and [ADR-R5-006](adr/ADR-R5-006-kelpie-link-onboarding-remote-mcp.md).
+Android/iOS parity and on-device S24 authentication/background QA remain release
+blockers; no merge, install or public beta is authorized.
+
 ## Android R5 agent-first startup — stacked draft PR #56 (not installed)
 
 In the **private R5 Android QA fork only**, Kelpie is intended primarily for a

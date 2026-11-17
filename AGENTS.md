@@ -6,6 +6,17 @@ The complete embeddable browser and thin standalone host boundary follow [core/R
 
 Direct Mac artifacts use the inside-out signer and notarization checks in [Mac releases](docs/macos-release.md); `pnpm check:macos-signing` checks the signing plan without credentials.
 
+## Kelpie Link pairing UX experiment (2026-11-18)
+
+The owner-approved multi-agent onboarding direction is
+[ADR-R5-006](docs/adr/ADR-R5-006-kelpie-link-onboarding-remote-mcp.md).
+Draft PR57 adds a progressive connection center over private QA PR56.
+Do not represent local pairing, HTTP health, or native consent as proof of a
+working remote agent; require an authenticated actual tabs/snapshot readback.
+The backend, OAuth provider integrations, managed tunnel, QR and App Link
+mechanisms are architectural gates, not shipped features. Public use requires
+secure backend deployment, Android/iOS parity and owner release acceptance.
+
 ## Isolated R5 owner-approved startup experiment (2026-11-18)
 
 The Android-only private QA fork may prototype an **agent-first** native startup gate

@@ -1,0 +1,28 @@
+name: QA Kelpie Link private rendezvous (no deploy)
+
+on:
+  pull_request:
+    paths:
+      - "packages/kelpie-link/**"
+      - ".github/workflows/kelpie-link-private-qa.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rendezvous:
+    name: Validate one-time QR challenge policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout PR source
+        uses: actions/checkout@v4
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Check syntax
+        run: node --check packages/kelpie-link/src/rendezvous.mjs
+      - name: Test expiry, binding, replay and revocation
+        run: node --test packages/kelpie-link/test/rendezvous.test.mjs

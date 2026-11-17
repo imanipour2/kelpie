@@ -1,0 +1,14 @@
+{
+  "name": "@unlikeotherai/kelpie-link-private",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test",
+    "lint": "node --check src/rendezvous.mjs",
+    "build": "node --check src/rendezvous.mjs"
+  }
+}
