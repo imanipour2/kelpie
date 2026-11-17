@@ -101,6 +101,31 @@ internal class R5NativeBrowserPort(
                         if (!committed) return@withContext AdapterOutcome.Uncertain
                         Pair(requested, mapOf("kind" to "navigate"))
                     }
+                    Operation.BACK, Operation.FORWARD -> {
+                        val previousUrl = view.url.orEmpty()
+                        val previousEpoch = tab.documentVersion
+                        val allowed =
+                            if (command.operation == Operation.BACK) view.canGoBack() else view.canGoForward()
+                        if (!allowed) return@withContext AdapterOutcome.Failed
+                        if (command.operation == Operation.BACK) view.goBack() else view.goForward()
+                        val navigationProof = R5ClickNavigationProof(previousUrl, previousEpoch)
+                        val settled =
+                            withTimeoutOrNull(CLICK_SETTLEMENT_TIMEOUT_MS) {
+                                repeat(CLICK_SETTLEMENT_POLLS) {
+                                    val liveTab = ctx.tabStore?.activeTab ?: return@withTimeoutOrNull false
+                                    if (liveTab.id != tab.id || liveTab.webView !== view) {
+                                        return@withTimeoutOrNull false
+                                    }
+                                    if (navigationProof.observedStableChange(view.url.orEmpty(), liveTab.documentVersion)) {
+                                        return@withTimeoutOrNull true
+                                    }
+                                    delay(CLICK_SETTLEMENT_POLL_MS)
+                                }
+                                false
+                            } ?: false
+                        if (!settled) return@withContext AdapterOutcome.Uncertain
+                        Pair(previousUrl, mapOf("kind" to "history"))
+                    }
                     Operation.CLICK -> {
                         val selector = command.selector ?: return@withContext AdapterOutcome.Failed
                         val previousUrl = view.url.orEmpty()
@@ -230,6 +255,8 @@ internal class R5NativeBrowserPort(
                     val final = evaluate(live.webView, R5WebViewActionScripts.SCROLL)
                     final != null && final != recorded.expected
                 }
+                Operation.BACK, Operation.FORWARD ->
+                    live.webView.url != recorded.expected || before.documentEpoch != after.documentEpoch
                 Operation.CLICK -> {
                     val oldFingerprint = recorded.payload["preFingerprint"] as? String
                     live.webView.url != recorded.expected ||
