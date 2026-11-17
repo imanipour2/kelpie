@@ -40,32 +40,32 @@ internal class R5PrivateMcpBridge(
         return when (envelope["method"] as? String) {
             "initialize" ->
                 rpcResult(
-                id,
-                mapOf(
-                    "protocolVersion" to "2025-11-25",
-                    "capabilities" to mapOf("tools" to emptyMap<String, Any>()),
-                    "serverInfo" to mapOf("name" to "kelpie-r5-private-qa", "version" to "0.1.0"),
-                ),
-            )
+                    id,
+                    mapOf(
+                        "protocolVersion" to "2025-11-25",
+                        "capabilities" to mapOf("tools" to emptyMap<String, Any>()),
+                        "serverInfo" to mapOf("name" to "kelpie-r5-private-qa", "version" to "0.1.0"),
+                    ),
+                )
             "server/discover" ->
                 rpcResult(
-                id,
-                mapOf(
-                    "resultType" to "complete",
-                    "supportedVersions" to listOf("2026-07-28", "2025-11-25"),
-                    "capabilities" to mapOf("tools" to emptyMap<String, Any>()),
-                    "_meta" to mapOf(
-                        "io.modelcontextprotocol/serverInfo" to mapOf("name" to "kelpie-r5-private-qa", "version" to "0.1.0"),
+                    id,
+                    mapOf(
+                        "resultType" to "complete",
+                        "supportedVersions" to listOf("2026-07-28", "2025-11-25"),
+                        "capabilities" to mapOf("tools" to emptyMap<String, Any>()),
+                        "_meta" to mapOf(
+                            "io.modelcontextprotocol/serverInfo" to mapOf("name" to "kelpie-r5-private-qa", "version" to "0.1.0"),
+                        ),
+                        "ttlMs" to 0,
+                        "cacheScope" to "private",
                     ),
-                    "ttlMs" to 0,
-                    "cacheScope" to "private",
-                ),
-            )
+                )
             "tools/list" ->
                 rpcResult(
-                id,
-                mapOf("resultType" to "complete", "tools" to toolCatalog(), "ttlMs" to 0, "cacheScope" to "private"),
-            )
+                    id,
+                    mapOf("resultType" to "complete", "tools" to toolCatalog(), "ttlMs" to 0, "cacheScope" to "private"),
+                )
             "tools/call" -> callTool(id, envelope, principal, router)
             else -> rpcError(id, -32601, "Unsupported private R5 MCP method")
         }
@@ -162,10 +162,10 @@ internal class R5PrivateMcpBridge(
         if (action == "tabs.list") {
             val (status, outcome) =
                 router.handle(
-                    "agent-tabs",
-                mapOf("consentGeneration" to generation),
-                fromGateway = true,
-            )
+                        "agent-tabs",
+                    mapOf("consentGeneration" to generation),
+                    fromGateway = true,
+                )
             return toolResult(id, outcome, status != 200 || outcome["success"] != true)
         }
         val operation =
@@ -223,16 +223,14 @@ internal class R5PrivateMcpBridge(
         id: Any,
         value: Map<String, Any?>,
         isError: Boolean = false,
-    ): Map<String, Any?> {
-        return rpcResult(id, complete(listOf(mapOf("type" to "text", "text" to stringify(value))), isError))
-    }
+    ): Map<String, Any?> =
+        rpcResult(id, complete(listOf(mapOf("type" to "text", "text" to stringify(value))), isError))
 
     private fun complete(
         content: List<Map<String, Any?>>,
         isError: Boolean,
-    ): Map<String, Any?> {
-        return mapOf("resultType" to "complete", "content" to content, "isError" to isError)
-    }
+    ): Map<String, Any?> =
+        mapOf("resultType" to "complete", "content" to content, "isError" to isError)
 
     private fun rpcResult(
         id: Any,
@@ -243,9 +241,8 @@ internal class R5PrivateMcpBridge(
         id: Any?,
         code: Int,
         message: String,
-    ): Map<String, Any?> {
-        return mapOf("jsonrpc" to "2.0", "id" to id, "error" to mapOf("code" to code, "message" to message))
-    }
+    ): Map<String, Any?> =
+        mapOf("jsonrpc" to "2.0", "id" to id, "error" to mapOf("code" to code, "message" to message))
 
     private fun stringify(value: Any?): String =
         when (value) {
