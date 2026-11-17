@@ -85,6 +85,7 @@ fun BrowserScreen(
     var showHistory by remember { mutableStateOf(false) }
     var showNetworkInspector by remember { mutableStateOf(false) }
     var showAI by remember { mutableStateOf(false) }
+    var showConnectAgent by remember { mutableStateOf(false) }
     val composeView = LocalView.current
     val isTablet = remember(context) { context.isTabletDevice() }
     val coroutineScope = rememberCoroutineScope()
@@ -282,6 +283,7 @@ fun BrowserScreen(
                             onHistory = { showHistory = true },
                             onNetworkInspector = { showNetworkInspector = true },
                             onAI = { showAI = true },
+                            onConnectAgent = { showConnectAgent = true },
                             onSnapshot3D = {
                                 coroutineScope.launch { toggle3DInspector() }
                             },
@@ -370,6 +372,7 @@ fun BrowserScreen(
             showHistory = false
             showNetworkInspector = false
             showAI = false
+            showConnectAgent = false
             pendingWelcomeFromHelp = false
             forceShowWelcome = false
             showWelcome = false
@@ -464,6 +467,18 @@ fun BrowserScreen(
         }
     }
 
+    if (showConnectAgent && agentSessionCoordinator != null) {
+        ModalBottomSheet(
+            onDismissRequest = { showConnectAgent = false },
+            sheetState = rememberModalBottomSheetState(),
+        ) {
+            AgentConnectionCenterSheet(
+                coordinator = agentSessionCoordinator,
+                onDismiss = { showConnectAgent = false },
+            )
+        }
+    }
+
     if (showAI) {
         ModalBottomSheet(
             onDismissRequest = { showAI = false },
@@ -484,6 +499,7 @@ fun BrowserScreen(
         showHistory = false
         showNetworkInspector = false
         showAI = false
+        showConnectAgent = false
         // Brief delay for Compose to process dismissals
         kotlinx.coroutines.delay(400)
         when (panel) {
