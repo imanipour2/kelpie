@@ -16,6 +16,53 @@ unsigned outputs and failed signatures stop the Android job; there is no unsigne
 or debug signing fallback. Existing isolated debug APKs are test artifacts only.
 Signing ownership must be approved before creating or replacing a release identity.
 
+## Isolated R5 native-consent QA MCP adapter (draft; not a release)
+
+The normal Android browser gateway described above is unchanged on `main`.
+In the explicitly gated R5 private background agent QA build only, the application
+registers a separate `POST /mcp` handler **after** the standard native catalog,
+replacing that envelope for R5 QA while preserving the legacy direct browser
+route-denial gates. The R5 QA catalog has only two tools:
+
+- `kelpie_agent_session`: `request`, `status`, and `stop`. Requires an
+  already authenticated/paired transport principal. `request` creates a
+  *pending* Android UI consent; only a real, local owner tap can approve it.
+  `stop` revokes the native session rather than renewing it.
+- `kelpie_browser_control`: `capabilities`, `documentation` (non-secret
+  setup metadata), and owner-consented read methods `tabs.list`,
+  `tab.snapshot`, `tab.screenshot`. Browser content reads require an
+  explicitly observed native `consentGeneration`; DOM/PNG additionally need
+  `tabId`, `documentEpoch`, `commandId` and strictly increasing
+  `clientSequence`. The delegate is the same R5 `agent-*` runtime with
+  native WebView ownership and independent action/result checks. Mutations,
+  credential export, cross-app/lock-screen capture and raw JS remain absent
+  from this QA MCP tool catalog.
+
+R5 responds to `server/discover`, `tools/list`, and `tools/call` for
+MCP `2026-07-28`, while temporarily admitting `2025-11-25` initialization
+for explicit older-client interoperability. For modern HTTP requests,
+`MCP-Protocol-Version`, `Mcp-Method`, and `Mcp-Name` (for tool calls) must
+agree with JSON-RPC; `params._meta` must include
+`io.modelcontextprotocol/protocolVersion` and
+`io.modelcontextprotocol/clientCapabilities`. `clientInfo` is optional,
+but when present must have a name and version. Self-reported metadata is never
+the authenticated identity. Unsupported versions and missing required metadata
+produce a fail-closed JSON-RPC HTTP 400.
+
+The external ChatGPT plugin still reports `FORBIDDEN` against the historically
+installed PR34 QA package. This draft adapter cannot be called functional
+until an exact-source signed/private APK is installed under explicit consent
+and a real authenticated `server/discover` / `tools/list` / session /
+`tabs.list` / `tab.snapshot` / `tab.screenshot` / STOP sequence succeeds
+over the intended no-USB provider connection. The issuer of the current
+`FORBIDDEN` has not been established. All R5 changes also require Android
+hardware, security, code review, platform parity decision, and explicit
+owner authorization before a public beta.
+
+Official protocol: https://modelcontextprotocol.io/specification/2026-07-28/basic/index
+and https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/docs/specification/2026-07-28/server/discover.mdx .
+Source and gates: `docs/qa/R5-BETA-ENGINEERING-RESEARCH-AND-GATES-20261117.md`.
+
 ## Native gateway
 
 Android exposes authenticated `POST /v1/browser-control` and `POST /mcp` through
