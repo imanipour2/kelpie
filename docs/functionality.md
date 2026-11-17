@@ -7,6 +7,17 @@ Every user-facing feature is described here. When adding or changing a feature, 
 
 ## Android R5 private agent QA — not released
 
+The source-only draft PR #41 adds a separate, explicitly write-capable
+`kelpie_browser_actions` MCP tool for normal navigation, native agent click,
+synthetic text fill, select, wait, Back/Forward and scroll. All actions require
+the real native owner-approved principal/generation, tab/document epoch,
+command ID and monotonically increasing client sequence. Only existing R5
+agent admission/safety and independently verified WebView effects can accept
+them. Password/OTP/payment, raw JavaScript, and tab OPEN/CLOSE/SWITCH are not
+part of this endpoint. These new tools are NOT hardware-verified and not
+authorized for public beta.
+
+
 A separately signed Android QA-only package tests a one-time **native owner approval**
 per active process session, private app-owned WebView observations, a persistent
 local **STOP**, and verified read/click/fill/scroll/screenshot operations. It

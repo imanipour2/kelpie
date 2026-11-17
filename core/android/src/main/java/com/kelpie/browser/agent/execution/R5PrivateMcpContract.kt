@@ -4,6 +4,7 @@ package com.kelpie.browser.agent.execution
 internal object R5PrivateMcpContract {
     const val BROWSER_TOOL = "kelpie_browser_control"
     const val SESSION_TOOL = "kelpie_agent_session"
+    const val ACTION_TOOL = "kelpie_browser_actions"
 
     private fun arguments(body: Map<String, Any?>): Map<*, *>? {
         val params = body["params"] as? Map<*, *> ?: return null

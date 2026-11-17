@@ -28,6 +28,14 @@ route-denial gates. The R5 QA catalog has only two tools:
   already authenticated/paired transport principal. `request` creates a
   *pending* Android UI consent; only a real, local owner tap can approve it.
   `stop` revokes the native session rather than renewing it.
+- In draft PR #41, the separate `kelpie_browser_actions` tool offers
+  `tab.goto`, `tab.click`, `tab.fill`, `tab.select`, `tab.wait`,
+  `tab.back`, `tab.forward`, and `page.scroll` as write-capable operations.
+  The same principal-scoped on-device consent, tab/epoch, replay and STOP
+  controls from native R5 apply to every command. The tool has
+  `readOnlyHint:false` and excludes sensitive operations. This is a source
+  QA proposal only, not a proven installed phone E2E agent.
+
 - `kelpie_browser_control`: `capabilities`, `documentation` (non-secret
   setup metadata), and owner-consented read methods `tabs.list`,
   `tab.snapshot`, `tab.screenshot`. Browser content reads require an

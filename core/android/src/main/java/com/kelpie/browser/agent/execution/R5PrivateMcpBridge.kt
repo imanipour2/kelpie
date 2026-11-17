@@ -97,6 +97,23 @@ internal class R5PrivateMcpBridge(
                 "annotations" to mapOf("readOnlyHint" to true),
             ),
             mapOf(
+                "name" to R5PrivateMcpContract.ACTION_TOOL,
+                "description" to "Mutating R5 QA: navigation/click/ordinary forms/history/scroll, native owner consent required.",
+                "inputSchema" to
+                    mapOf(
+                        "type" to "object",
+                        "required" to listOf("version", "method", "params"),
+                        "properties" to
+                            mapOf(
+                                "version" to mapOf("type" to "integer", "const" to 1),
+                                "method" to mapOf("type" to "string", "enum" to R5PrivateMcpActions.methods),
+                                "tabId" to mapOf("type" to "string"),
+                                "params" to mapOf("type" to "object"),
+                            ),
+                    ),
+                "annotations" to mapOf("readOnlyHint" to false),
+            ),
+            mapOf(
                 "name" to R5PrivateMcpContract.SESSION_TOOL,
                 "description" to "Request, inspect or STOP an R5 native session; approval happens only by real local Android tap.",
                 "inputSchema" to
@@ -129,11 +146,13 @@ internal class R5PrivateMcpBridge(
             val (status, outcome) = router.handle(route, emptyMap(), fromGateway = true)
             return toolResult(id, outcome, status != 200 || outcome["success"] != true)
         }
-        if (name != R5PrivateMcpContract.BROWSER_TOOL || (arguments["version"] as? Number)?.toInt() != 1) {
+        val actionTool = name == R5PrivateMcpContract.ACTION_TOOL
+        val supportedTool = name == R5PrivateMcpContract.BROWSER_TOOL || actionTool
+        if (!supportedTool || (arguments["version"] as? Number)?.toInt() != 1) {
             return rpcError(id, -32602, "Unsupported browser tool/version")
         }
         val action = arguments["method"] as? String ?: return rpcError(id, -32602, "Browser method required")
-        if (action == "documentation") {
+        if (!actionTool && action == "documentation") {
             return toolResult(
                 id,
                 mapOf(
@@ -142,7 +161,7 @@ internal class R5PrivateMcpBridge(
                 ),
             )
         }
-        if (action == "capabilities") {
+        if (!actionTool && action == "capabilities") {
             val active = AndroidAgentProcessSession.snapshot() as? SessionConsentCore.State.Active
             val owned = active != null && active.principalId == principal && !active.locked && browserReady()
             return toolResult(
@@ -152,7 +171,8 @@ internal class R5PrivateMcpBridge(
                     "nativeSession" to if (owned) "READY" else "OWNER_CONSENT_OR_RENDERER_REQUIRED",
                     "consentGeneration" to if (owned) active?.generation else null,
                     "methods" to listOf("tabs.list", "tab.snapshot", "tab.screenshot"),
-                    "mutationToolsAvailable" to false,
+                    "mutationToolsAvailable" to owned,
+                    "mutationTool" to R5PrivateMcpContract.ACTION_TOOL,
                 ),
             )
         }
@@ -161,7 +181,7 @@ internal class R5PrivateMcpBridge(
             (actionParams["consentGeneration"] as? String)
                 ?: (arguments["consentGeneration"] as? String)
                 ?: return rpcError(id, -32602, "Fresh consentGeneration required")
-        if (action == "tabs.list") {
+        if (!actionTool && action == "tabs.list") {
             val (status, outcome) =
                 router.handle(
                     "agent-tabs",
@@ -171,11 +191,15 @@ internal class R5PrivateMcpBridge(
             return toolResult(id, outcome, status != 200 || outcome["success"] != true)
         }
         val operation =
-            when (action) {
-                "tab.snapshot" -> "READ_DOM"
-                "tab.screenshot" -> "SCREENSHOT"
-                else -> return rpcError(id, -32601, "Unimplemented R5 browser method")
-            }
+            if (actionTool) {
+                R5PrivateMcpActions.operation(action)
+            } else {
+                when (action) {
+                    "tab.snapshot" -> "READ_DOM"
+                    "tab.screenshot" -> "SCREENSHOT"
+                    else -> null
+                }
+            } ?: return rpcError(id, -32601, "Unsupported R5 browser operation")
         val tab = (arguments["tabId"] as? String) ?: (actionParams["tabId"] as? String)
         val epoch = actionParams["documentEpoch"] as? String
         val commandId = actionParams["commandId"] as? String
@@ -192,6 +216,12 @@ internal class R5PrivateMcpBridge(
                 "clientSequence" to sequence,
                 "consentGeneration" to generation,
             )
+        if (actionTool) {
+            val extra =
+                R5PrivateMcpActions.safeArguments(action, actionParams)
+                    ?: return rpcError(id, -32602, "Mutation input missing or invalid")
+            request.putAll(extra)
+        }
         if (operation == "SCREENSHOT" && actionParams["capture"] != null) {
             request["capture"] = actionParams["capture"]
         }
@@ -199,6 +229,7 @@ internal class R5PrivateMcpBridge(
         if (status != 200 || outcome["status"] != "EXECUTED") {
             return toolResult(id, outcome, isError = true)
         }
+        if (actionTool) return toolResult(id, outcome)
         val payload = outcome["data"] as? Map<*, *> ?: return toolResult(id, mapOf("error" to "NO_EVIDENCE"), true)
         if (operation == "READ_DOM") {
             val snapshot = payload["snapshotJson"] as? String ?: return toolResult(id, mapOf("error" to "NO_DOM"), true)
