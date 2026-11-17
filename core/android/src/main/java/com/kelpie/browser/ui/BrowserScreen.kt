@@ -435,7 +435,14 @@ fun BrowserScreen(
     }
 
     PairingDialog(coordinator = pairingCoordinator)
-    BrowserConsentOverlays(captureCoordinator, tabStore, agentSessionCoordinator, r5AgentCoordinator != null)
+    BrowserConsentOverlays(
+        capture = captureCoordinator,
+        tabStore = tabStore,
+        agentConsent = agentSessionCoordinator,
+        r5AgentEnabled = r5AgentCoordinator != null,
+        onOpenAgentSetup = { showConnectAgent = true },
+        agentSetupVisible = showConnectAgent,
+    )
 
     LaunchedEffect(showSettings, pendingWelcomeFromHelp) {
         if (!showSettings && pendingWelcomeFromHelp) {
