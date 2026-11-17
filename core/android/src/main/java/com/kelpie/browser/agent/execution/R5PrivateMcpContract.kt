@@ -22,7 +22,15 @@ internal object R5PrivateMcpContract {
         val tool = params["name"] as? String
         if (tool == SESSION_TOOL) return true // Native router still verifies paired principal.
         val action = toolArguments(body)?.get("method") as? String
-        return tool == BROWSER_TOOL && action in setOf("capabilities", "documentation")
+        return tool == BROWSER_TOOL &&
+            action in
+            setOf(
+                "capabilities",
+                "documentation",
+                "session.request",
+                "session.status",
+                "session.stop",
+            )
     }
 
     fun expectedGeneration(body: Map<String, Any?>): String? {
