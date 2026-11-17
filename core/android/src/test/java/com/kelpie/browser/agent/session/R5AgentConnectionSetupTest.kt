@@ -22,21 +22,22 @@ class R5AgentConnectionSetupTest {
 
     @Test
     fun untrustedOrLeakyEndpointsCannotEnterSetupClipboard() {
-        val unsafe = listOf(
-            "http://secure.example.com/mcp",
-            "https://127.0.0.1/mcp",
-            "https://localhost/mcp",
-            "https://dev.local/mcp",
-            "https://internal.example.internal/mcp",
-            "https://user:pass@secure.example.com/mcp",
-            "https://secure.example.com/mcp?access_token=secret",
-            "https://secure.example.com/mcp#secret",
-            "https://secure.example.com/other",
-            "https://secure.example.com:8443/mcp",
-            "javascript:alert(1)",
-            "https://secure.example.com/mcp\nAuthorization: Bearer test",
-            "https://secure.example.com/mcp ",
-        )
+        val unsafe =
+            listOf(
+                "http://secure.example.com/mcp",
+                "https://127.0.0.1/mcp",
+                "https://localhost/mcp",
+                "https://dev.local/mcp",
+                "https://internal.example.internal/mcp",
+                "https://user:pass@secure.example.com/mcp",
+                "https://secure.example.com/mcp?access_token=secret",
+                "https://secure.example.com/mcp#secret",
+                "https://secure.example.com/other",
+                "https://secure.example.com:8443/mcp",
+                "javascript:alert(1)",
+                "https://secure.example.com/mcp\nAuthorization: Bearer test",
+                "https://secure.example.com/mcp ",
+            )
         for (value in unsafe) {
             if (value == "https://secure.example.com/mcp ") continue // Trimmed form is valid.
             assertNull("Should reject: " + value, R5AgentConnectionSetup.safeEndpoint(value))

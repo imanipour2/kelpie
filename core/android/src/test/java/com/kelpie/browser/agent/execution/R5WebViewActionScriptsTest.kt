@@ -17,6 +17,17 @@ class R5WebViewActionScriptsTest {
     }
 
     @Test
+    fun mutationAndExternalProtocolButtonsHaveConservativeGuards() {
+        val script = R5WebViewActionScripts.click("#ordinary-button")
+        assertTrue(script.contains("nonGetFormButton"))
+        assertTrue(script.contains("formHasSecrets"))
+        assertTrue(script.contains("unsafeLink"))
+        assertTrue(script.contains("destructive.test(label)"))
+        assertTrue(script.contains("DENIED_SENSITIVE"))
+        assertTrue(script.contains("e.click();return 'DISPATCHED'"))
+    }
+
+    @Test
     fun selectorCannotBreakOutOfQuotedJavaScriptData() {
         val malicious = """x');window.location='https://other.example';//"""
         val script = R5WebViewActionScripts.click(malicious)

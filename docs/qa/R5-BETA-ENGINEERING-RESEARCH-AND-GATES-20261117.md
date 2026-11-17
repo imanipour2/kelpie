@@ -1,0 +1,80 @@
+# Kelpie R5 — beta engineering research, implementation choices and evidence gates
+
+Date: 2026-11-17 | Scope: owner-authorized Android private QA in `imanipour2/kelpie`.
+Status: SOURCE REVIEW + FOCUSED FIXES; NO MAIN MERGE / NO PUBLIC BETA / DIRECT MCP UNVERIFIED.
+Decision anchors: EF-OPS-KELPIE-P4-SESSION-CONSENT-20261116 V2; EF-OPS-KELPIE-RELEASE-POLICY-001; EF-OPS-KELPIE-R5-TRIAL-20261116. Canonical owner decision record is ENERFOAM CDG, not this draft.
+
+## Evidence hierarchy and existing baseline
+
+1. **Physical evidence**: issue #98 and draft PR #34 identify one installed Android 17 SM-S928B QA APK with native owner consent; 2,000 verified private images, STOP resource release and 48 native command attempts (26 verified / 15 adapter failures / 6 admission rejects / 1 invalid argument). A non-secret USB/ADB harness proved the local R5 API, not the external ChatGPT plugin.
+2. **Newer source only**: PR #35 adds ordinary-button/SPA proof and SELECT, WAIT, BACK and FORWARD, plus Android Autofill/WebAuthn feature detection and CAPTCHA hints. PR #36 adds a non-secret ChatGPT/Claude/Gemini CLI setup sheet. Neither is proven installed or ready; both are stacked drafts.
+3. **Transport**: Phone's Termux tunnel reached ready/polling after correcting 18440 to 18460; the actual ChatGPT connector still returned FORBIDDEN while authenticated native `agent-*` endpoints returned 200. Legacy routes are intentionally denied; the exact upstream connector mapping is unavailable. Never claim the 403 issuer is known without gateway telemetry.
+4. **Today's CI root cause**: PR #35 Android failed at Kotlin condition wrapping in `R5NativeBrowserPort`; PR #36 Android failed at multiline declaration formatting in `R5AgentConnectionSetupTest`. This patch removes the fragile multiline expression and standardizes the declaration, then relies on exact new-head CI rather than historical passing runs.
+
+## Comparative research and practical choices
+
+| Capability / source | Observed engineering or user evidence | Choice for R5 | Acceptance |
+| --- | --- | --- | --- |
+| Real WebView ownership | Android WebView must be controlled on its creating UI thread; destroying/reparenting a live WebView during tab changes risks renderer loss | A single authoritative TabStore and serialized transition lease; deny unknown transitions rather than create a second WebView | 3 tabs, history/form/scroll preserved, same app-owned renderer; no cross-app capture |
+| Multiple tabs | Android WebChromeClient onCreateWindow is an explicit opt-in; default can block new windows | First implement native create/select/close with ownership handoff and STOP cancellation; add web-popup policy separately | Open/select/close/list 20 cycles; stale tab never executes |
+| BACK/FORWARD | WebView canGoBack/canGoForward and goBack/goForward operate on real history | Prefer native methods, observe stable URL/epoch afterwards; do not claim success on method return alone | Genuine S24 history navigation, blocked no-history response |
+| DOM/snapshot | Browser-use and agent-browser expose compact action targets; user reports say entire DOM per step is slow/expensive | Bounded visible interactive refs, fresh tab+document ID and semantic selectors; never leak hidden credential values | SPA/iframe/shadow-DOM diagnostic cases and stale-ref negative |
+| Safe click and SPA | Reddit reports brittle long workflows, stale/partial pages; Vercel agent-browser checks occlusion | Observe -> act -> independently verify; no automatic replay of uncertain non-idempotent actions | 25 ordinary JS buttons incl. same-URL DOM updates, overlay and delayed change |
+| Forms/select/type | Android WebView JS assignment is not hardware IME; some apps require real key events | Keep synthetic FILL clearly labelled; SELECT with independent readback; future native IME bridge, not global ADB shell input | Input/change, Vue/React controlled form and keyboard-specific test |
+| Financial/destructive actions | Untrusted site DOM and generated labels do not prove action semantics | For beta, conservatively deny identified finance/secret/destructive links, non-GET form-button submits and sensitive-credential forms. Native policy must independently gate typed PAYMENT/credential export; heuristic JS is not complete | Tests for payment/transfer/delete and hidden POST submit; human authorization for exceptions |
+| Screenshot fidelity | Existing physical PR34 achieved native 720x1280 AUTO and 1080x1920 HIGH; 512-frame epoch rotations | Preserve private native pixel proof, bounded 4/8 MiB PNG, quality negotiation and no image-retention | 2,000+ genuine frames, 24-hour low-memory, 16KB alignment, STOP cleanup |
+| Session consent | User approved one on-device consent per active browser process session, not per site | Principal-scoped local approval; show active provider; persistent STOP; screen lock suspends, process kill revokes | 50 real approvals; two distinct principals; locked/STOP mid-flight, no remote approve |
+| Android background | Android Doze, background-service types and One UI battery policy limit uptime | Respect OS lifecycle; safe reconnect and explicit unavailable state, not a fake keepalive or lock bypass | 24-hour Doze, power-saving, network handoff, restart + no duplicate tunnel |
+| CAPTCHA/Turnstile | CAPTCHA is website-owned and user-restricted; cross-origin challenges may not permit synthetic events | Expose detection hints; agent may attempt ordinary permitted UI actions or request explicit human interaction; do not extract challenge tokens, fake a human, or bypass verification | Real CAPTCHA handoff and resumed task; denied external capture/credential leakage |
+| Password/passkey | Android AutofillService is user-selected; Credential Manager/WebView WebAuthn needs capability and verified site association | Delegate secrets to Android; enable feature-detected APIs only for supported origins; never supply passwords/OTP/cards to AI | Android system Save/Fill; Digital Asset Links; unsupported-origin handling |
+| Download/upload | A full browser needs chooser and download handling, while remote agents must not exfiltrate files silently | Android SAF/content URI picker and user-visible DownloadManager; per-task scoped file selection | Deny arbitrary filesystem reads; selected-file positive and cancel path |
+| Search/address | A free browser must work without any agent or cloud account | Keep normal local navigation and search; account-free browsing baseline | Manual phone search/address, Back and tab controls without MCP |
+| External AI setup | Opera Neon differentiates read and write tools and uses a persistent MCP proxy; cloud providers vary | Choose provider -> approved secure connection -> native session consent; disconnected/forbidden are explicit states | ChatGPT, Claude and Gemini CLI per-provider E2E successful tool calls; remote provider requirements |
+| MCP auth and discovery | MCP authorization requires protected resource metadata, OAuth discovery/PKCE where applicable | Public HTTPS or trusted Secure MCP Tunnel; versioned tools, per-principal identities, no token in QR/URL/clipboard | Inspector tools/list, wrong audience/role/expired token/STOP rejects, no legacy bypass |
+| External cloud | Browser Use Cloud/TinyFish offer managed Chrome/proxies, unlike local WebView | Optional independent backend with separate billing, credentials and session ownership; never silently copy Kelpie cookies to cloud | Informed opt-in and data isolation, cloud failure leaves local browser usable |
+| Accessibility/localization | WCAG mobile touch/focus and Android TalkBack apply to actual screens | Compose semantics, accessible STOP, English-first experiment; full locale framework before public RTL release | TalkBack, 320/390 widths, landscape, high font scale, focus/contrast |
+| Release integrity | Repo requires iOS/Android parity unless separate exception, 500-line limit, signed production artifacts | Draft feature branch + exact CI + provenance + independent parity decision + owner release approval | Signed release SHA, 16KB native ELF, no leaked tokens, rollback from pinned APK |
+
+### Competitor / experience interpretation
+
+- **Opera Neon (MCP Connector, 2026-03-31):** separated read-tab/page/screenshot (default enabled) from mutation tools (opt-in); added a persistent proxy that can distinguish browser offline from connection failure. R5 should adopt the authorization UX and truthful availability state, **not** imply identical cloud uptime on Android.
+- **Browser Use (open-source 1.0 and Cloud):** persistent agent execution, CDP browser functions, local versus managed cloud distinction, checkpointed workflows and optional CAPTCHA solver. The real browser profile and full cloud services are distinct from the exact Android WebView the owner uses.
+- **Vercel agent-browser:** accessibility selectors and action refs; reported click blockers on overlays motivate fresh target/occlusion checks.
+- **Anecdotal Reddit user feedback, not representative statistics:** reports brittle long-running browser agents with iframes, CAPTCHA and stale DOM; repeated screenshots/LLM calls increase latency and cost. Prefer deterministic native actions and periodic checkpoints over sending complete screenshots at every step.
+
+## Implemented on this focused draft child
+
+- Correct Kotlin formatting root causes preventing PR35/36 Android ktlint.
+- Keep ordinary JS button dispatch, but add conservative in-document non-GET form/button, secret-bearing form, non-HTTP(S) anchor and explicit destructive-label guards, without granting the agent payment or secret permissions.
+- Add static Kotlin contract tests for new guard strings. These are **not** substitutes for real WebView instrumentation.
+
+## Beta gates and no-go decisions
+
+**G-B0 source/control**: identify exact owner-approved scope, PR stack and branch; no Android/iOS parity exception yet. Full benchmark spreadsheet unnecessary; this document is the component matrix.
+
+**G-B1 CI:** lint, unit, Android Gradle build, native 16KiB, proper package namespace, static security, dependencies/license/SBOM, workflow exact-head SUCCESS. A failing or pending job is NO-GO. Flaky/timeouts investigated, never suppressed to green.
+
+**G-B2 phone:** owner physically installs only verified test APK (distinct `com.kelpie.browser.r5fullverify`), backs up prior exact APK and confirms signature/hash; no global `adb shell input`. Native consent, full tabs, ordinary buttons/SELECT/WAIT/Back, lock/Doze/STOP, 2,000 fresh frames and memory/thermal verified.
+
+**G-B3 agent connection:** use real ChatGPT connector after verified per-principal native approval, tools/list, tabs.list, snapshot, screenshot, click/fill/STOP through a versioned adapter; repeated no-USB run. Record exact 403 issuer if still blocked. Claude/Gemini independently verified or expressly excluded from beta scope, never shown connected by UI alone.
+
+**G-B4 security/privacy:** prompt-injection separation (page text never owner command); no credential/OTP/card export; replay/mid-flight STOP/wrong principal/document; no public debug listeners, TLS auth and plugin tool-permission partition; independent review.
+
+**G-B5 release approval:** explicit owner decision for Android-only parity exception or shared iOS parity, production signing (all four required signing secrets), non-debug package/provenance, rollback, accessibility, user docs, license notices, distribution channel and scope. **No public beta, release tag, main merge or live Enerfoam website change without these checks.**
+
+Website-specific G0–G4 backup/staging/RTL/Woo QA are separate; this R5 QA creates no WordPress change.
+
+## Sources read (2026-11-17)
+
+- Android WebView UI-thread, history, multi-window, memory: https://developer.android.com/develop/ui/views/layout/webapps/webview and https://developer.android.com/reference/android/webkit/WebView
+- Android WebChromeClient onCreateWindow: https://developer.android.com/reference/android/webkit/WebChromeClient
+- Android Credential Manager/WebView: https://developer.android.com/identity/sign-in/credential-manager-webview ; Autofill: https://developer.android.com/identity/autofill
+- Android background constraints: https://developer.android.com/develop/background-work/services/fgs/service-types ; https://developer.android.com/training/monitoring-device-state/doze-standby
+- Android 16KB page size: https://developer.android.com/guide/practices/page-sizes
+- OpenAI Secure MCP Tunnel: https://developers.openai.com/api/docs/guides/secure-mcp-tunnels ; plugin connection https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt
+- MCP 2025-11-25 Authorization: https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/docs/specification/2025-11-25/basic/authorization.mdx
+- Anthropic remote MCP: https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp ; Gemini CLI: https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/mcp-server.md
+- Browser Use: https://github.com/browser-use/browser-use ; Opera Neon: https://blogs.opera.com/news/2026/03/opera-neon-adds-mcp-connector-to-the-browser/
+- Vercel agent-browser: https://github.com/vercel-labs/agent-browser
+- User feedback (anecdotal): https://www.reddit.com/r/LocalLLaMA/comments/1uh0uz7/whats_the_latest_on_agent_browser_use/ ; https://www.reddit.com/r/LocalLLaMA/comments/1rm5mkv/anyone_moved_off_browseruse_for_production_web/ ; https://www.reddit.com/r/AI_Agents/comments/1xr0r42/where_do_your_browser_agents_actually_break_login/
+- Internal: GitHub Draft PRs #29/#33/#34/#35/#36; ENERFOAM issue #98; canonical Drive R5 device QA and EF-GOV-DOCOPS-001.
