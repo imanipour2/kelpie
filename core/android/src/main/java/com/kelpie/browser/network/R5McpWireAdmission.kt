@@ -56,10 +56,9 @@ internal object R5McpWireAdmission {
         val infoSupplied = metadata?.containsKey("io.modelcontextprotocol/clientInfo") == true
         val identity = metadata?.get("io.modelcontextprotocol/clientInfo") as? Map<*, *>
         val capability = metadata?.get("io.modelcontextprotocol/clientCapabilities") as? Map<*, *>
-        val badIdentity =
-            infoSupplied &&
-                ((identity?.get("name") as? String).isNullOrBlank() ||
-                    (identity?.get("version") as? String).isNullOrBlank())
+        val malformedName = (identity?.get("name") as? String).isNullOrBlank()
+        val malformedVersion = (identity?.get("version") as? String).isNullOrBlank()
+        val badIdentity = infoSupplied && (malformedName || malformedVersion)
         if (capability == null || badIdentity) {
             return Failure(-32602, "Modern MCP client metadata invalid or incomplete", declared)
         }
