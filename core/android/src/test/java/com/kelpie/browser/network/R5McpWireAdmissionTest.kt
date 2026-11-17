@@ -45,6 +45,19 @@ class R5McpWireAdmissionTest {
     }
 
     @Test
+    fun rejectedProtocolResponseOffersSupportedVersionsWithoutSecrets() {
+        val failure = R5McpWireAdmission.Failure(-32022, "Unsupported protocol version", "1900-01-01")
+        val body = R5McpWireAdmission.errorBody(7, failure)
+        assertEquals("2.0", body["jsonrpc"])
+        assertEquals(7, body["id"])
+        val error = body["error"] as Map<*, *>
+        assertEquals(-32022, error["code"])
+        val data = error["data"] as Map<*, *>
+        assertEquals(R5McpWireAdmission.SUPPORTED, data["supported"])
+        assertEquals("1900-01-01", data["requested"])
+    }
+
+    @Test
     fun incompleteModernMetadataCannotHideBehindMissingHttpHeaders() {
         assertNotNull(R5McpWireAdmission.check(request(), null, null, null))
         assertNotNull(
