@@ -125,8 +125,10 @@ internal fun AgentConnectionCenterSheet(
             onClick = ::openProviderHelp,
             modifier = Modifier.fillMaxWidth(),
         ) { Text("Open " + provider.title + " connection guide") }
-        Text("A verified request will automatically appear here. " +
-            "Only your tap on the phone grants control; a cloud connection cannot approve itself.")
+        Text(
+            "A verified request will automatically appear here. " +
+                "Only your tap on the phone grants control; a cloud connection cannot approve itself.",
+        )
         HorizontalDivider()
         TextButton(
             onClick = { showAdvanced = !showAdvanced },
