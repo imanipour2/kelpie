@@ -92,7 +92,19 @@ internal class R5PrivateMcpBridge(
                                 "method" to
                                     mapOf(
                                         "type" to "string",
-                                        "enum" to (listOf("capabilities", "documentation", "tabs.list", "tab.snapshot", "tab.screenshot") + R5PrivateMcpActions.methods),
+                                        "enum" to
+                                            (
+                                                listOf(
+                                                    "capabilities",
+                                                    "documentation",
+                                                    "session.request",
+                                                    "session.status",
+                                                    "session.stop",
+                                                    "tabs.list",
+                                                    "tab.snapshot",
+                                                    "tab.screenshot",
+                                                ) + R5PrivateMcpActions.methods
+                                            ),
                                     ),
                                 "tabId" to mapOf("type" to "string"),
                                 "params" to mapOf("type" to "object"),
@@ -161,6 +173,20 @@ internal class R5PrivateMcpBridge(
         // The ChatGPT connector currently surfaces only BROWSER_TOOL. Reuse the
         // exact same native admission/replay path for its advertised write methods.
         val controlMutation = name == R5PrivateMcpContract.BROWSER_TOOL && action in R5PrivateMcpActions.methods
+        if (!actionTool && action in setOf("session.request", "session.status", "session.stop")) {
+            // Existing ChatGPT connectors may expose only the browser-control
+            // tool despite the separately discovered session tool. Route its
+            // session control through the same gateway-authenticated principal
+            // without creating a grant. Only Android native UI can approve.
+            val route =
+                when (action) {
+                    "session.request" -> "agent-session-request"
+                    "session.status" -> "agent-session-status"
+                    else -> "agent-session-stop"
+                }
+            val (status, outcome) = router.handle(route, emptyMap(), fromGateway = true)
+            return toolResult(id, outcome, status != 200 || outcome["success"] != true)
+        }
         if (!actionTool && action == "documentation") {
             return toolResult(
                 id,
