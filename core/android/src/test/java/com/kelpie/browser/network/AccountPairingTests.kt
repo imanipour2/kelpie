@@ -128,6 +128,32 @@ class AccountPairingTests {
             }
         }
 
+    @Test fun modernMcpRevisionsRequireTheSamePairedBearerAndRejectAmbiguousHeaders() =
+        runBlocking {
+            val store = store()
+            val auth = AccountPairingAuthorization(store, { "session" }, { _, _, _, _ -> System.currentTimeMillis() + 60_000 })
+            val (_, token) = connect(auth)
+            val base = request(token).copy(path = "/mcp")
+            for (revision in listOf("2025-03-26", "2025-06-18", "2025-11-25", "2026-07-28")) {
+                val probe = base.copy(headers = base.headers + ("mcp-protocol-version" to listOf(revision)))
+                assertEquals(AuthDecision.Authenticated("client"), auth.evaluate(probe))
+            }
+            val unsupported = base.copy(headers = base.headers + ("mcp-protocol-version" to listOf("1900-01-01")))
+            assertEquals(400, (auth.evaluate(unsupported) as AuthDecision.Reject).status)
+            val duplicated =
+                base.copy(headers = base.headers + ("mcp-protocol-version" to listOf("2026-07-28", "2025-11-25")))
+            assertEquals(400, (auth.evaluate(duplicated) as AuthDecision.Reject).status)
+            val withOrigin =
+                base.copy(headers = base.headers + ("mcp-protocol-version" to listOf("2026-07-28"), "origin" to listOf("null")))
+            assertEquals(403, (auth.evaluate(withOrigin) as AuthDecision.Reject).status)
+            val invalidToken =
+                request("not-a-real-bearer").copy(
+                    path = "/mcp",
+                    headers = request("not-a-real-bearer").headers + ("mcp-protocol-version" to listOf("2026-07-28")),
+                )
+            assertEquals(401, (auth.evaluate(invalidToken) as AuthDecision.Reject).status)
+        }
+
     @Test fun ambiguousHeadersAndMcpOriginRemainRejected() =
         runBlocking {
             val store = store()
