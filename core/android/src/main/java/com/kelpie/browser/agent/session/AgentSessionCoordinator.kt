@@ -36,8 +36,12 @@ class AgentSessionCoordinator(
                 context: Context,
                 intent: Intent,
             ) {
-                if (!closed && intent.action == Intent.ACTION_SCREEN_OFF) {
-                    AndroidAgentProcessSession.setDeviceLocked(true)
+                if (closed) return
+                when (intent.action) {
+                    Intent.ACTION_SCREEN_OFF -> AndroidAgentProcessSession.setDeviceLocked(true)
+                    // Protected system broadcast: never grants consent; only
+                    // refreshes the lock bit of an already-approved process grant.
+                    Intent.ACTION_USER_PRESENT -> syncLock()
                 }
             }
         }
@@ -46,7 +50,7 @@ class AgentSessionCoordinator(
         ContextCompat.registerReceiver(
             activity,
             screenOffReceiver,
-            IntentFilter(Intent.ACTION_SCREEN_OFF),
+            IntentFilter(Intent.ACTION_SCREEN_OFF).apply { addAction(Intent.ACTION_USER_PRESENT) },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
     }

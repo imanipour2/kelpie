@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.PowerManager
 import android.os.SystemClock
+import android.util.Log
 import android.webkit.WebView
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.Lifecycle
@@ -80,9 +81,20 @@ internal class R5NativeBrowserPort(
     ): AdapterOutcome =
         withContext(Dispatchers.Main.immediate) {
             proof = null
-            val tab = ctx.tabStore?.activeTab ?: return@withContext AdapterOutcome.Failed
-            val live = actualTarget(tab.id) ?: return@withContext AdapterOutcome.Failed
-            if (live != target) return@withContext AdapterOutcome.Failed
+            val tab =
+                ctx.tabStore?.activeTab ?: run {
+                    logHistoryRejected(command.operation, "NO_ACTIVE_TAB")
+                    return@withContext AdapterOutcome.Failed
+                }
+            val live =
+                actualTarget(tab.id) ?: run {
+                    logHistoryRejected(command.operation, "NATIVE_TARGET_MISSING")
+                    return@withContext AdapterOutcome.Failed
+                }
+            if (live != target) {
+                logHistoryRejected(command.operation, "NATIVE_TARGET_CHANGED")
+                return@withContext AdapterOutcome.Failed
+            }
             val view = tab.webView
             val result =
                 when (command.operation) {
@@ -119,7 +131,17 @@ internal class R5NativeBrowserPort(
                         val previousEpoch = tab.documentVersion
                         val allowed =
                             if (command.operation == Operation.BACK) view.canGoBack() else view.canGoForward()
-                        if (!allowed) return@withContext AdapterOutcome.Failed
+                        if (!allowed) {
+                            // Sanitized native history evidence: no URLs, titles,
+                            // page text or cross-WebView fallback navigation.
+                            val nativeHistory = view.copyBackForwardList()
+                            val reason = if (command.operation == Operation.BACK) "BACK" else "FORWARD"
+                            Log.i(
+                                "KelpieR5History",
+                                "${reason}_DENIED entries=${nativeHistory.size} index=${nativeHistory.currentIndex}",
+                            )
+                            return@withContext AdapterOutcome.Failed
+                        }
                         if (command.operation == Operation.BACK) view.goBack() else view.goForward()
                         val navigationProof = R5ClickNavigationProof(previousUrl, previousEpoch)
                         val settled =
@@ -136,7 +158,10 @@ internal class R5NativeBrowserPort(
                                 }
                                 false
                             } ?: false
-                        if (!settled) return@withContext AdapterOutcome.Uncertain
+                        if (!settled) {
+                            Log.i("KelpieR5History", "NATIVE_HISTORY_SETTLEMENT_UNVERIFIED")
+                            return@withContext AdapterOutcome.Uncertain
+                        }
                         Pair(previousUrl, mapOf("kind" to "history"))
                     }
                     Operation.CLICK -> {
@@ -352,6 +377,16 @@ internal class R5NativeBrowserPort(
             result.takeIf { screenshotSource(view) == R5ScreenshotSource.FOREGROUND_WEBVIEW }
         } finally {
             bitmap.recycle()
+        }
+    }
+
+    private fun logHistoryRejected(
+        operation: Operation,
+        code: String,
+    ) {
+        if (operation == Operation.BACK || operation == Operation.FORWARD) {
+            // No page contents, URLs, selectors, identities, or credentials.
+            Log.i("KelpieR5History", "HISTORY_$code")
         }
     }
 
