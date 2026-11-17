@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.PowerManager
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -28,7 +29,47 @@ class AgentSessionCoordinator(
     var runtimeReady: () -> Boolean = { false }
     internal val pending = AndroidAgentProcessSession.pending
     internal val active = AndroidAgentProcessSession.active
+    internal val startupRequired = AndroidAgentProcessSession.startupRequired
+    private val verifiedPresence = VerifiedAgentPresence(SystemClock::elapsedRealtime, { isStillPaired(it) })
+    internal val verifiedPrincipals = verifiedPresence.principals
+
+    /** These callbacks are wired to the existing PairingStore, never to remote-provided labels. */
+    var isStillPaired: (String) -> Boolean = { false }
+    var principalLabel: (String) -> String = { it }
+
     private var closed = false
+
+    fun observeAuthenticatedPrincipal(principalId: String) {
+        if (fullAgentQa && !closed) verifiedPresence.observeAuthenticated(principalId)
+    }
+
+    fun principalName(principalId: String): String =
+        principalLabel(principalId).take(MAX_VISIBLE_NAME_LENGTH).ifBlank { principalId.take(MAX_VISIBLE_NAME_LENGTH) }
+
+    fun isVerifiedPrincipalFresh(principalId: String): Boolean =
+        fullAgentQa && !closed && verifiedPresence.isFreshAndPaired(principalId)
+
+    /**
+     * One affirmative on-device tap starts a session only for a principal recently
+     * observed through the already-authenticated MCP gateway.
+     */
+    fun beginFromNativeUi(principalId: String): Boolean {
+        if (!isVerifiedPrincipalFresh(principalId) ||
+            !activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) ||
+            !activity.window.decorView.isShown ||
+            deviceLocked()
+        ) {
+            return false
+        }
+        val pending = AndroidAgentProcessSession.request(principalId) ?: return false
+        return approveFromNativeUi(pending.promptId)
+    }
+
+    fun exitFromNativeUi() {
+        stopFromNativeUi()
+        AndroidAgentProcessSession.markStartupHandled()
+        activity.finishAndRemoveTask()
+    }
 
     private val screenOffReceiver =
         object : BroadcastReceiver() {
@@ -69,6 +110,7 @@ class AgentSessionCoordinator(
                 ) {
                     return@withContext errorResponse("USER_TAP_REQUIRED", "Open the native Kelpie QA window to consent")
                 }
+                observeAuthenticatedPrincipal(principal)
                 val pending =
                     AndroidAgentProcessSession.request(principal)
                         ?: return@withContext errorResponse("PERMISSION_REQUIRED", "Consent already active or pending")
@@ -158,6 +200,7 @@ class AgentSessionCoordinator(
             AndroidAgentProcessSession.stop()
             return false
         }
+        AndroidAgentProcessSession.markStartupHandled()
         return granted.generation.isNotBlank()
     }
 
@@ -176,13 +219,17 @@ class AgentSessionCoordinator(
 
     fun onResume() {
         syncLock()
+        verifiedPresence.refresh()
     }
 
     fun close(revokeSession: Boolean) {
         if (closed) return
         closed = true
         activity.unregisterReceiver(screenOffReceiver)
-        if (revokeSession) stopFromNativeUi()
+        if (revokeSession) {
+            stopFromNativeUi()
+            AndroidAgentProcessSession.armStartupForNextLaunch()
+        }
     }
 
     private fun syncLock() {
@@ -193,6 +240,10 @@ class AgentSessionCoordinator(
         if (AndroidAgentProcessSession.active.value != null && !AgentSessionNotification.canNotify(activity)) {
             stopFromNativeUi()
         }
+    }
+
+    private companion object {
+        const val MAX_VISIBLE_NAME_LENGTH = 64
     }
 
     private fun deviceLocked(): Boolean {
