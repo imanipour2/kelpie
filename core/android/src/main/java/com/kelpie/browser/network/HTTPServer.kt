@@ -329,33 +329,18 @@ class HTTPServer(
             return
         }
         if (method == "mcp" && router.backgroundAgentQa) {
-            val rejected =
-                R5McpWireAdmission.check(
-                    body,
-                    call.request.headers["MCP-Protocol-Version"],
-                    call.request.headers["Mcp-Method"],
-                    call.request.headers["Mcp-Name"],
-                )
+            val h = call.request.headers
+            val rejected = R5McpWireAdmission.check(
+                body,
+                h["MCP-Protocol-Version"],
+                h["Mcp-Method"],
+                h["Mcp-Name"],
+            )
             if (rejected != null) {
-                val error =
-                    mapOf<String, Any?>(
-                        "jsonrpc" to "2.0",
-                        "id" to body["id"],
-                        "error" to
-                            mapOf(
-                                "code" to rejected.code,
-                                "message" to rejected.message,
-                                "data" to
-                                    mapOf(
-                                        "supported" to R5McpWireAdmission.SUPPORTED,
-                                        "requested" to rejected.requested,
-                                    ),
-                            ),
-                    )
                 call.respondText(
-                    text = mapToJsonString(error),
-                    contentType = ContentType.Application.Json,
-                    status = HttpStatusCode.BadRequest,
+                    mapToJsonString(R5McpWireAdmission.errorBody(body["id"], rejected)),
+                    ContentType.Application.Json,
+                    HttpStatusCode.BadRequest,
                 )
                 return
             }
