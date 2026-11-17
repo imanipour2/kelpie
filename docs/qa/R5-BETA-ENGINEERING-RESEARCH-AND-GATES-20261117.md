@@ -42,6 +42,32 @@ Decision anchors: EF-OPS-KELPIE-P4-SESSION-CONSENT-20261116 V2; EF-OPS-KELPIE-RE
 - **Vercel agent-browser:** accessibility selectors and action refs; reported click blockers on overlays motivate fresh target/occlusion checks.
 - **Anecdotal Reddit user feedback, not representative statistics:** reports brittle long-running browser agents with iframes, CAPTCHA and stale DOM; repeated screenshots/LLM calls increase latency and cost. Prefer deterministic native actions and periodic checkpoints over sending complete screenshots at every step.
 
+## 2026-11-17 physical S24 deployment recovery / PR42 authentication-version gate
+
+On the owner's unlocked Samsung SM-S928B running Android 17, independently
+read back the installed SHA-256 of the source-pinned PR41 QA APK as
+`9002104e0dd73fbb0e5c07b4387569435a15a62cebca4dd59c1e9508ec639ddf`
+(source commit `a5ff22b46a1b8a00d9d02c262061d2f8b4de1b9a`).
+A retained local execution ledger records safe old-app clean uninstall,
+new app install, and absent mother package `com.kelpie.browser` in owner
+user0 and dual profile user95. Owner user0 independently reports only
+`com.kelpie.browser.r5fullverify`. Native health on forwarded port 18460
+returns HTTP 200; local no-consent negative suite passed all nine legacy
+and native routes with HTTP 403, remaining OFF afterward.
+
+Reproduced a real **new-build** MCP blocker: with otherwise well-formed
+`MCP-Protocol-Version: 2026-07-28` requests, both `server/discover`
+and `tools/list` returned HTTP 400 `BAD_REQUEST` *before* hitting R5
+wire admission. The old outer `AuthMiddleware` permits only
+2025-03-26/2025-06-18, while the new R5 layer recognizes
+2025-11-25/2026-07-28. Draft PR42 extends the **authenticated** version
+allowlist (does not alter bearer/CSRF/Origin requirements) and adds a
+negative-test matrix for duplicate/unsupported headers, Origin and bad
+bearers. Re-test modern discovery on the exact PR42 physical APK before
+calling MCP E2E connected. Distinguish the host's Windows management
+tunnel/CDP port (needed for the authorized tooling) from the phone's
+old Termux tunnel; no broad kill/uninstall without process/port readback.
+
 ## Critical 2026-07-28 MCP specification update (verified 2026-11-17)
 
 The *current published* MCP core/Streamable HTTP specification is **2026-07-28**, replacing the 2025-11-25 revision for new implementations. It removes the old protocol `initialize` handshake and `Mcp-Session-Id` state. Every HTTP POST to a single `/mcp` endpoint must carry a self-contained request with protocol-version/client-capability metadata; the HTTP binding mirrors protocol version and method/name headers and rejects mismatch. A browser process **still needs local owner consent and per-principal authorization state**: MCP's lack of a protocol-level session is **not** permission to skip R5's application security controls. A remote bearer access token is validated as the resource-server identity, and the owner consent generation is verified against that principal on every call. Wrong principal, replayed clientSequence, stale tab/document epoch, STOP, lock and expired token must fail closed.
