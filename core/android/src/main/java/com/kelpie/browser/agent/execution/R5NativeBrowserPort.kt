@@ -1,14 +1,19 @@
 package com.kelpie.browser.agent.execution
 
 import android.app.KeyguardManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.os.PowerManager
+import android.os.SystemClock
 import android.webkit.WebView
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.Lifecycle
 import com.kelpie.browser.agent.contract.AdapterOutcome
 import com.kelpie.browser.agent.contract.AgentCommand
 import com.kelpie.browser.agent.contract.Operation
+import com.kelpie.browser.agent.contract.R5VisionCaptureRequest
 import com.kelpie.browser.capture.PrivateWebViewDisplay
+import com.kelpie.browser.capture.R5VerifiedFrameEncoder
 import com.kelpie.browser.handlers.HandlerContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -219,10 +224,14 @@ internal class R5NativeBrowserPort(
                         Pair(beforeScroll, mapOf("kind" to "scroll"))
                     }
                     Operation.SCREENSHOT -> {
-                        // Only the app's private virtual display supplies hidden frames.
-                        // Foreground/system or other-app capture is never a fallback.
-                        val png = privateRenderer.captureFreshPng(command.captureRequest) ?: return@withContext AdapterOutcome.Failed
-                        Pair(null, png + mapOf("kind" to "screenshot"))
+                        val source = screenshotSource(view)
+                        val png =
+                            when (source) {
+                                R5ScreenshotSource.PRIVATE_DISPLAY -> privateRenderer.captureFreshPng(command.captureRequest)
+                                R5ScreenshotSource.FOREGROUND_WEBVIEW -> captureVisibleOwnedWebView(view, command.captureRequest)
+                                R5ScreenshotSource.NONE -> null
+                            } ?: return@withContext AdapterOutcome.Failed
+                        Pair(null, png + mapOf("kind" to "screenshot", "captureSource" to source.name))
                     }
                     else -> return@withContext AdapterOutcome.Failed
                 }
@@ -284,11 +293,67 @@ internal class R5NativeBrowserPort(
                     evaluate(live.webView, R5WebViewActionScripts.verifySelect(selector, value)) == "true"
                 }
                 Operation.WAIT -> evaluate(live.webView, R5WebViewActionScripts.waitFor(command.selector)) == "true"
-                Operation.SCREENSHOT -> privateRenderer.canDeliverFrame()
+                Operation.SCREENSHOT -> {
+                    val source = recorded.payload["captureSource"] as? String
+                    source != null && screenshotSource(live.webView).name == source && source != R5ScreenshotSource.NONE.name
+                }
                 Operation.READ_DOM -> recorded.expected?.isNotBlank() == true
                 else -> false
             }
         }
+
+    /** Foreground PNG reads only the owner-approved, live app WebView, never the Android screen. */
+    private fun screenshotSource(view: WebView): R5ScreenshotSource =
+        R5ScreenshotRouting.select(
+            privateReady = privateRenderer.canDeliverFrame(),
+            privateIdle = privateRenderer.state.value == PrivateWebViewDisplay.State.IDLE,
+            foreground =
+                activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+                    activity.window.decorView.isShown &&
+                    view.isShown &&
+                    view.isAttachedToWindow,
+            sameOwnedView = ctx.webView === view,
+            unlocked = safeScreen(),
+            noConcurrentCapture = ctx.privateCaptureRestricted?.invoke() != true,
+        )
+
+    private suspend fun captureVisibleOwnedWebView(
+        view: WebView,
+        capture: R5VisionCaptureRequest,
+    ): Map<String, Any>? {
+        if (screenshotSource(view) != R5ScreenshotSource.FOREGROUND_WEBVIEW) return null
+        // A fresh visual-state callback prevents a just-navigated stale compositor frame.
+        val visualReady =
+            withTimeoutOrNull(2_500L) {
+                suspendCancellableCoroutine<Boolean> { continuation ->
+                    view.postVisualStateCallback(
+                        SystemClock.elapsedRealtimeNanos(),
+                        object : WebView.VisualStateCallback() {
+                            override fun onComplete(requestId: Long) {
+                                if (continuation.isActive) continuation.resume(true)
+                            }
+                        },
+                    )
+                }
+            } ?: false
+        if (!visualReady || screenshotSource(view) != R5ScreenshotSource.FOREGROUND_WEBVIEW) return null
+        val bitmap =
+            runCatching {
+                if (view.width <= 0 || view.height <= 0 || view.width.toLong() * view.height > 4_194_304L) {
+                    return null
+                }
+                Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888).also {
+                    view.draw(Canvas(it))
+                }
+            }.getOrNull() ?: return null
+        return try {
+            // Retain the bounded original R5 image encoder/scale contract.
+            val result = withContext(Dispatchers.Default) { R5VerifiedFrameEncoder(activity).encode(bitmap, capture) }
+            result.takeIf { screenshotSource(view) == R5ScreenshotSource.FOREGROUND_WEBVIEW }
+        } finally {
+            bitmap.recycle()
+        }
+    }
 
     private fun safeScreen(): Boolean =
         activity.getSystemService(PowerManager::class.java).isInteractive &&

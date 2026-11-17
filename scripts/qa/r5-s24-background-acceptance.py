@@ -208,10 +208,43 @@ def observe_dom(a, session):
                       "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest()}))
 
 
+
+def owner_screenshot(a, session):
+    generation, result = owner_read_only(a, session)
+    tab = next((item for item in result["tabs"] if item.get("active")), None)
+    emit("owned-active-webview", bool(tab), "Observed native tab in owner-approved process session")
+    command = {
+        "consentGeneration": generation,
+        "clientSequence": a.sequence,
+        "commandId": f"r5-owner-screenshot-{a.sequence}",
+        "operation": "SCREENSHOT",
+        "tabId": tab["tabId"],
+        "documentEpoch": tab["documentEpoch"],
+    }
+    code, result = request(a, "POST", "/v1/agent-command", command)
+    emit("owned-screenshot-verified", code == 200 and result.get("success") is True
+         and result.get("status") == "EXECUTED" and result.get("code") == "VERIFIED_EFFECT",
+         "R5 exact-tab screenshot executed and effect was independently verified")
+    encoded = (result.get("data") or {}).get("image")
+    emit("owned-screenshot-png-field", isinstance(encoded, str) and bool(encoded),
+         "Expected bounded PNG field exists; image never printed")
+    data = base64.b64decode(encoded, validate=True)
+    png_header = b"\x89PNG\r\n\x1a\n"
+    valid = data[:8] == png_header and len(data) > 24
+    width = int.from_bytes(data[16:20], "big") if valid else 0
+    height = int.from_bytes(data[20:24], "big") if valid else 0
+    emit("owned-screenshot-bounded-image", valid and 1 <= width <= 4096
+         and 1 <= height <= 4096 and len(data) <= 12 * 1024 * 1024,
+         "Valid PNG signature/dimensions/size, with no cross-app image logging")
+    print(json.dumps({"case": "owned-screenshot-evidence", "width": width,
+                      "height": height, "bytes": len(data),
+                      "sha256": hashlib.sha256(data).hexdigest()}))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--phase", choices=("package", "preflight", "negative",
-                                           "owner-readonly", "read-dom", "owner-stopped"),
+                                           "owner-readonly", "read-dom", "owner-screenshot", "owner-stopped"),
                         default="package")
     parser.add_argument("--apk", help="Exact candidate APK; mandatory in package phase")
     parser.add_argument("--sha256", help="Optional independently pinned APK SHA-256")
@@ -240,11 +273,13 @@ def main():
         session = device_preflight(a)
         if a.phase == "negative":
             negative(a, session)
-        elif a.phase in ("owner-readonly", "read-dom"):
+        elif a.phase in ("owner-readonly", "read-dom", "owner-screenshot"):
             if a.phase == "owner-readonly":
                 owner_read_only(a, session)
-            else:
+            elif a.phase == "read-dom":
                 observe_dom(a, session)
+            else:
+                owner_screenshot(a, session)
         elif a.phase == "owner-stopped":
             emit("owner-stop-readback", session.get("status") == "OFF",
                  "Owner STOP confirmed OFF without an automated click")

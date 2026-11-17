@@ -16,6 +16,16 @@ unsigned outputs and failed signatures stop the Android job; there is no unsigne
 or debug signing fallback. Existing isolated debug APKs are test artifacts only.
 Signing ownership must be approved before creating or replacing a release identity.
 
+## R5 private QA screenshot routing after Activity resume (draft, not published)
+
+The R5 `agent-command` screenshot previously delegated only to the private background `VirtualDisplay`; foreground Activity resume makes that display unavailable even while the owner-granted native WebView and DOM/actions are healthy. The real owner S24 reproduced `SCREENSHOT -> ADAPTER_FAILURE` after lock/unlock/foreground resume (other actions `VERIFIED_EFFECT`).
+
+The isolated development fix routes between two **mutually exclusive app-owned capture paths**: the original native-nonce private display **only while actually ready**, or the exact active app WebView **only while the Activity is RESUMED/visible, unlocked, attached, bound to the observed `HandlerContext` WebView, the private display is IDLE and no other capture owns it**. Foreground drawing awaits WebView `postVisualStateCallback`, uses a bounded bitmap-backed `Canvas` of the WebView itself (not the Android screen), then the existing memory-aware R5 lossless encoder. A fresh tab/document epoch, native consent, paired principal, monotonic command sequence and post-operation ownership checks remain in force. There is no screen capture of other applications and no fallback during display restoration, lock, STOP or uncertain frames. The resulting source is reported in QA evidence; no secret pixels are logged.
+
+Reproducible physical QA harness: `scripts/qa/r5-s24-background-acceptance.py --phase owner-screenshot --serial <explicit ADB serial> --sequence <new monotonic value>` never requests or simulates consent; it verifies owner-approved command status, PNG signature, dimensions and SHA without printing pixels. Run separately with the app foreground and HOME/background, then after lock/unlock under an independently observed new grant.
+
+Official Android references: [`WebView.postVisualStateCallback`](https://developer.android.com/reference/android/webkit/WebView#postVisualStateCallback(long,%20android.webkit.WebView.VisualStateCallback)) establishes the visual update barrier; [`View.draw(Canvas)`](https://developer.android.com/reference/android/view/View#draw(android.graphics.Canvas)) supports an app-owned view bitmap but may differ from hardware rendering, so device tests must validate real pixels/visible text before acceptance. CDP/desktop simulation is not hardware evidence. A provider-facing E2E fix, iOS parity decision, independent security review and release approval remain separately required.
+
 ## Physical R5 QA version compatibility fix (draft PR42)
 
 The QA-only private `/mcp` bridge advertises `2025-11-25` and
