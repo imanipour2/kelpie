@@ -111,11 +111,20 @@ def request(a, method, path, payload=None):
     req = urllib.request.Request(f"http://127.0.0.1:{a.port}{path}",
                                  data=raw if method == "POST" else None,
                                  headers=headers, method=method)
+    # PNG Base64 is substantially larger than a normal JSON status response.
+    # Reject unbounded payloads; NEVER parse a truncated success as corrupted JSON.
+    max_response_bytes = 20 * 1024 * 1024 if path == "/v1/agent-command" else 64 * 1024
     try:
-        with urllib.request.urlopen(req, timeout=8) as response:
-            return response.status, json.loads(response.read(65536))
+        with urllib.request.urlopen(req, timeout=18) as response:
+            raw_response = response.read(max_response_bytes + 1)
+            if len(raw_response) > max_response_bytes:
+                raise PreflightError("Native response exceeds bounded QA capture limit")
+            return response.status, json.loads(raw_response)
     except urllib.error.HTTPError as error:
-        return error.code, json.loads(error.read(65536))
+        raw_error = error.read(65537)
+        if len(raw_error) > 65536:
+            raise PreflightError("Native error response exceeds bounded QA limit")
+        return error.code, json.loads(raw_error)
 
 
 def device_preflight(a):
