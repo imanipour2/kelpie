@@ -10,7 +10,6 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.LinearLayout
 import android.widget.TextView
-import com.kelpie.browser.browser.BROWSER_USER_AGENT
 
 /**
  * Hosted UOA login in the main process and the default WebView profile, so the Google (and UOA)
@@ -72,7 +71,7 @@ class AccountLoginActivity : Activity() {
             domStorageEnabled = true
             loadWithOverviewMode = true
             useWideViewPort = true
-            userAgentString = BROWSER_USER_AGENT
+            // The legacy view is no longer the OAuth entrypoint and never spoofs a UA.
             allowFileAccess = false
             allowContentAccess = false
             // Popups (Google account choosers) hand off in this same view.
