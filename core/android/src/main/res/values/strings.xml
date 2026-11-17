@@ -18,6 +18,15 @@
 
     <!-- R5 consent-only QA: no remote browser actions are enabled by this grant. -->
     <string name="r5_agent_title">Kelpie agent session (QA)</string>
+    <string name="r5_agent_startup_title" translatable="false">Enable Kelpie AI Agent</string>
+    <string name="r5_agent_startup_disclosure" translatable="false">One local approval lets your authenticated, paired agent read and operate Kelpie tabs, including while Kelpie is in the background. Screenshots contain only Kelpie web content. A visible STOP control revokes access. Payments, publishing, irreversible deletion and credentials always require separate approval.</string>
+    <string name="r5_agent_startup_identity" translatable="false">Verified paired agent: %1$s</string>
+    <string name="r5_agent_startup_choose" translatable="false">Choose the authenticated paired agent:</string>
+    <string name="r5_agent_startup_wait" translatable="false">No authenticated paired agent is connected yet. Connect your AI client, then make a new capabilities request. The agent cannot approve this screen for you.</string>
+    <string name="r5_agent_startup_enable" translatable="false">Enable agent &amp; background access</string>
+    <string name="r5_agent_startup_connect" translatable="false">Connect an AI agent</string>
+    <string name="r5_agent_startup_exit" translatable="false">Exit Kelpie &amp; disable agent</string>
+    <string name="r5_agent_startup_unavailable" translatable="false">Verified agent presence expired. Reconnect your paired client and request capabilities again.</string>
     <string name="r5_agent_disclosure">Paired client: %1$s\n\nOne native approval for this running Kelpie process. This QA build only tests consent and STOP; remote browser actions and screenshots are NOT enabled. No other apps, lock screen or protected content may be captured. Payments, publishing, irreversible deletion and credential export need separate approval. STOP remains available in the app and notification.</string>
     <string name="r5_agent_approve">Approve this session</string>
     <string name="r5_agent_deny">Deny</string>

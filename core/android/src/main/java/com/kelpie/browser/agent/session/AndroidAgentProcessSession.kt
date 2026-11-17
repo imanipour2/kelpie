@@ -16,12 +16,24 @@ internal object AndroidAgentProcessSession {
     private val core = SessionConsentCore(SystemClock::elapsedRealtime)
     private val pendingState = MutableStateFlow<SessionConsentCore.State.Pending?>(null)
     private val activeState = MutableStateFlow<SessionConsentCore.State.Active?>(null)
+    private val startupGateState = MutableStateFlow(true)
 
     /** Same process-only authority used by the native UI and authenticated R5 runtime. */
     fun runtimeConsent(): SessionConsentCore = core
 
     val pending: StateFlow<SessionConsentCore.State.Pending?> = pendingState.asStateFlow()
     val active: StateFlow<SessionConsentCore.State.Active?> = activeState.asStateFlow()
+    val startupRequired: StateFlow<Boolean> = startupGateState.asStateFlow()
+
+    /** New process begins gated; normal HOME/resume never resets this switch. */
+    fun markStartupHandled() {
+        startupGateState.value = false
+    }
+
+    /** Only a real Activity/task end (not a rotation) may arm the next launch. */
+    fun armStartupForNextLaunch() {
+        startupGateState.value = true
+    }
 
     @Synchronized
     fun request(verifiedPrincipalId: String): SessionConsentCore.State.Pending? {

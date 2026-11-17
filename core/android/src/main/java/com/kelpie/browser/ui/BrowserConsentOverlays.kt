@@ -13,7 +13,16 @@ internal fun BrowserConsentOverlays(
     tabStore: TabStore,
     agentConsent: AgentSessionCoordinator?,
     r5AgentEnabled: Boolean = false,
+    onOpenAgentSetup: () -> Unit = {},
+    agentSetupVisible: Boolean = false,
 ) {
     capture?.let { PrivateCaptureConsentDialog(it, tabStore) }
-    agentConsent?.let { AgentSessionConsentUi(it, r5AgentEnabled) }
+    agentConsent?.let {
+        AgentSessionConsentUi(
+            coordinator = it,
+            r5AgentEnabled = r5AgentEnabled,
+            onOpenAgentSetup = onOpenAgentSetup,
+            agentSetupVisible = agentSetupVisible,
+        )
+    }
 }

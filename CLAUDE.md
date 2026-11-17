@@ -10,6 +10,15 @@ The complete embeddable browser and thin standalone host boundary follow [core/R
 
 Direct Mac artifacts use the inside-out signer and notarization checks in [Mac releases](docs/macos-release.md); `pnpm check:macos-signing` checks the signing plan without credentials.
 
+## Private Android R5 agent-first QA fork
+
+Follow [ADR-R5-005](docs/adr/ADR-R5-005-agent-first-startup-unified-consent.md)
+for one on-device approval of paired agent + background access, explicit Exit
+and immediate STOP, without network approval or implicit permission from
+saved pairings. This is an **unreleased QA-only source experiment**. Physical
+S24 checks, iOS parity decision and security sign-off are mandatory before
+merging into any release baseline.
+
 ## What This Is
 
 Kelpie is an LLM-first browser for iOS and Android that enables language models to control real mobile browsers on the local network via mDNS discovery, HTTP API, and MCP. A companion Node.js CLI orchestrates individual and group commands across multiple devices.

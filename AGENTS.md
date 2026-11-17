@@ -6,6 +6,17 @@ The complete embeddable browser and thin standalone host boundary follow [core/R
 
 Direct Mac artifacts use the inside-out signer and notarization checks in [Mac releases](docs/macos-release.md); `pnpm check:macos-signing` checks the signing plan without credentials.
 
+## Isolated R5 owner-approved startup experiment (2026-11-18)
+
+The Android-only private QA fork may prototype an **agent-first** native startup gate
+under [ADR-R5-005](docs/adr/ADR-R5-005-agent-first-startup-unified-consent.md)
+and canonical ENERFOAM decision EF-OPS-KELPIE-AGENT-FIRST-STARTUP-20261118.
+Only a real native owner tap may grant agent + background operation to a
+recently authenticated, already paired principal. No remote approval, silent
+process restart, credential export or cross-app capture. Android/iOS feature
+parity or an explicit reviewed exception remains a release blocker; this
+draft branch is NOT permission to merge, sign, install or release publicly.
+
 ## Source of Truth
 
 **Static docs — read these to understand the project:**
