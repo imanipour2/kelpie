@@ -16,6 +16,7 @@ import kotlinx.serialization.json.JsonPrimitive
  */
 internal class R5PrivateMcpBridge(
     private val browserReady: () -> Boolean,
+    private val onAuthenticatedPrincipal: (String) -> Unit = {},
 ) {
     fun register(router: Router) {
         router.register("mcp") { envelope ->
@@ -23,6 +24,9 @@ internal class R5PrivateMcpBridge(
             if (principal == null) {
                 rpcError(envelope["id"], -32001, "Authenticated paired client required")
             } else {
+                // Reached only after the existing HTTP/MCP bearer middleware verified identity.
+                // This is presence evidence for the PHONE UI, never remote consent.
+                onAuthenticatedPrincipal(principal)
                 handle(envelope, principal, router)
             }
         }
@@ -161,7 +165,7 @@ internal class R5PrivateMcpBridge(
             return toolResult(
                 id,
                 mapOf(
-                    "setup" to "Use kelpie_agent_session.status/request; owner approves in native Android UI, then use a fresh generation.",
+                    "setup" to "Open Kelpie's native startup prompt. After an authenticated paired MCP call, the owner can approve agent + background locally with one tap. No remote approval. Use a fresh generation.",
                     "restrictions" to "Private R5 QA only: no remote credential access, cross-app capture, or automatic STOP renewal.",
                 ),
             )
