@@ -135,7 +135,7 @@ class R5AgentCoordinator(
                         "status" to if (ready) "READY" else "SUSPENDED_OR_TRANSFER",
                         "owner" to ownership.status().name,
                         "privateRenderer" to renderer.state.value.name,
-                        "supported" to listOf("NAVIGATE", "BACK", "FORWARD", "READ_DOM", "CLICK", "FILL", "TYPE", "SELECT", "WAIT", "SCROLL", "SCREENSHOT"),
+                        "supported" to listOf("LIST_TABS", "NAVIGATE", "BACK", "FORWARD", "READ_DOM", "CLICK", "FILL", "TYPE", "SELECT", "WAIT", "SCROLL", "SCREENSHOT"),
                         "captureCapabilities" to R5VisionCaptureRequest.capabilities(),
                     ),
                 )
@@ -158,20 +158,7 @@ class R5AgentCoordinator(
             }
             withContext(Dispatchers.Main.immediate) {
                 val store = ctx.tabStore ?: return@withContext errorResponse("NO_WEBVIEW", "No owned tab store")
-                val tabs =
-                    store.tabs.value.take(40).map { tab ->
-                        mapOf(
-                            "tabId" to tab.id,
-                            "documentEpoch" to tab.documentVersion,
-                            "active" to (tab.id == store.activeTabId.value),
-                            "title" to tab.pageTitle.take(256),
-                            "urlWithoutQuery" to
-                                tab.currentUrl
-                                    .substringBefore("?")
-                                    .substringBefore("#")
-                                    .take(2048),
-                        )
-                    }
+                val tabs = R5AgentTabProjection.publicSnapshot(R5AgentTabProjection.fromStore(store))
                 if (!canUse(client, body["consentGeneration"] as? String, consent.snapshot() as? SessionConsentCore.State.Active)) {
                     errorResponse("SESSION_REVOKED", "Consent ended during tab observation")
                 } else {

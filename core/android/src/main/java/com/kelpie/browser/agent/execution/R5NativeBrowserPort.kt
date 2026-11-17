@@ -81,6 +81,14 @@ internal class R5NativeBrowserPort(
             val view = tab.webView
             val result =
                 when (command.operation) {
+                    Operation.LIST_TABS -> {
+                        val store = ctx.tabStore ?: return@withContext AdapterOutcome.Failed
+                        val observed = R5AgentTabProjection.fromStore(store)
+                        Pair(
+                            R5AgentTabProjection.stableIdentity(observed),
+                            mapOf("kind" to "tabs", "tabs" to R5AgentTabProjection.publicSnapshot(observed)),
+                        )
+                    }
                     Operation.READ_DOM -> {
                         val raw = evaluate(view, R5WebViewActionScripts.SNAPSHOT) ?: return@withContext AdapterOutcome.Failed
                         val json =
@@ -246,6 +254,10 @@ internal class R5NativeBrowserPort(
             val live = ctx.tabStore?.activeTab ?: return@withContext false
             if (actualTarget(after.tabId) != after) return@withContext false
             when (command.operation) {
+                Operation.LIST_TABS -> {
+                    val store = ctx.tabStore ?: return@withContext false
+                    recorded.expected == R5AgentTabProjection.stableIdentity(R5AgentTabProjection.fromStore(store))
+                }
                 Operation.NAVIGATE -> live.webView.url?.substringBefore("#") == recorded.expected?.substringBefore("#")
                 Operation.FILL, Operation.TYPE -> {
                     val selector = command.selector ?: return@withContext false

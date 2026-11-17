@@ -53,6 +53,7 @@ Migration/backward compatibility specifics: https://modelcontextprotocol.io/spec
 ## Implemented on this focused draft child
 
 - Correct Kotlin formatting root causes preventing PR35/36 Android ktlint.
+- The separate stacked draft PR #38 adds a bounded pure tab metadata projection shared by `agent-tabs` and an `agent-command LIST_TABS` implementation. It has a stable active/epoch readback proof and three source tests; it does not create, close or switch tabs and is not yet hardware-accepted.
 - Keep ordinary JS button dispatch, but add conservative in-document non-GET form/button, secret-bearing form, non-HTTP(S) anchor and explicit destructive-label guards, without granting the agent payment or secret permissions.
 - Add static Kotlin contract tests for new guard strings. These are **not** substitutes for real WebView instrumentation.
 
