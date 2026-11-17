@@ -72,6 +72,19 @@ content. These checks are source-only and require real modern/legacy MCP
 Inspector + ChatGPT testing; Ktor's existing Content-Length requirement may
 reject chunked clients and is a separate transport compatibility gate.
 
+## PR41: separate mutation tool (source only)
+
+Normal browsing actions are now implemented behind a distinct
+`kelpie_browser_actions` discovery entry. The read-only tool is unchanged;
+the mutating tool is marked non-read-only and delegates to native R5, requiring
+paired transport principal, native approved process grant, tab/document epoch,
+unique command ID and monotonic clientSequence. Fixed WebView scripts block
+known password/OTP/payment controls and unreviewed POST form buttons, but
+heuristics cannot prove that all dangerous actions are blocked. Therefore
+real Android hardware action QA, security review and provider-specific
+write-tool authorization remain release blockers. Native tab transfer
+OPEN/SWITCH/CLOSE, external cloud and CAPTCHA handling are not introduced.
+
 ## Beta gates and no-go decisions
 
 **G-B0 source/control**: identify exact owner-approved scope, PR stack and branch; no Android/iOS parity exception yet. Full benchmark spreadsheet unnecessary; this document is the component matrix.
