@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.PowerManager
 import android.util.Log
+import android.view.ViewTreeObserver
 import androidx.activity.ComponentActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -72,6 +73,23 @@ class R5AgentCoordinator(
 
     @Volatile private var closed = false
 
+    // The Activity can stay RESUMED through a keyguard round-trip. Android
+    // delivers window focus independently of onResume / USER_PRESENT, so a
+    // valid same-generation unlock must be rechecked when real focus returns.
+    // Focus itself grants nothing; the existing native consent and same-WebView
+    // gates in rebindAfterRealOwnerUnlock remain authoritative.
+    private val focusObserver = activity.window.decorView.viewTreeObserver
+    private val focusRegainedListener =
+        ViewTreeObserver.OnWindowFocusChangeListener { hasFocus ->
+            if (!hasFocus || closed || ownership.status() != WebViewOwnershipState.Host.SUSPENDED) {
+                return@OnWindowFocusChangeListener
+            }
+            val active = consent.snapshot() as? SessionConsentCore.State.Active
+            if (active != null && !active.locked) {
+                scope.launch { rebindAfterRealOwnerUnlock(active) }
+            }
+        }
+
     private fun newRuntime(): AgentOperationRuntime = AgentOperationRuntime(consent, VerifiedNativeBrowserAdapter(consent, ownership, nativePort))
 
     private val screenOffReceiver =
@@ -91,6 +109,9 @@ class R5AgentCoordinator(
         }
 
     init {
+        if (focusObserver.isAlive) {
+            focusObserver.addOnWindowFocusChangeListener(focusRegainedListener)
+        }
         ContextCompat.registerReceiver(
             activity,
             screenOffReceiver,
@@ -428,6 +449,9 @@ class R5AgentCoordinator(
         if (closed) return
         closed = true
         activity.unregisterReceiver(screenOffReceiver)
+        if (focusObserver.isAlive) {
+            focusObserver.removeOnWindowFocusChangeListener(focusRegainedListener)
+        }
         ready = false
         runtime.cancelInFlight()
         nativePort.clearPendingEvidence()
