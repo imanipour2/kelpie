@@ -1,0 +1,50 @@
+package com.kelpie.browser.network
+
+/** Verify the private R5 QA HTTP MCP 2026 envelope before any native route. */
+internal object R5McpWireAdmission {
+    const val MODERN = "2026-07-28"
+    const val LEGACY = "2025-11-25"
+    val SUPPORTED = listOf(MODERN, LEGACY)
+
+    data class Failure(
+        val code: Int,
+        val message: String,
+        val requested: String?,
+    )
+
+    fun check(
+        body: Map<String, Any?>,
+        httpVersion: String?,
+        httpMethod: String?,
+        httpName: String?,
+    ): Failure? {
+        val params = body["params"] as? Map<*, *>
+        val metadata = params?.get("_meta") as? Map<*, *>
+        val declared = metadata?.get("io.modelcontextprotocol/protocolVersion") as? String
+        if (httpVersion == null) {
+            // Legacy clients establish a handshake; modern callers MUST send
+            // matching version/method headers and complete request metadata.
+            if (declared == MODERN) return Failure(-32600, "Modern MCP version header missing", declared)
+            return null
+        }
+        if (httpVersion !in SUPPORTED) return Failure(-32022, "Unsupported protocol version", httpVersion)
+        if (httpVersion == LEGACY) {
+            if (declared == MODERN) return Failure(-32600, "Mismatched legacy MCP envelope", declared)
+            return null
+        }
+        if (declared != MODERN) return Failure(-32600, "Modern MCP metadata version mismatch", declared)
+        val identity = metadata["io.modelcontextprotocol/clientInfo"] as? Map<*, *>
+        val capability = metadata["io.modelcontextprotocol/clientCapabilities"] as? Map<*, *>
+        if ((identity?.get("name") as? String).isNullOrBlank() ||
+            (identity?.get("version") as? String).isNullOrBlank() ||
+            capability == null
+        ) {
+            return Failure(-32600, "Modern MCP client metadata incomplete", declared)
+        }
+        if (body["method"] != httpMethod) return Failure(-32600, "Mcp-Method disagrees with JSON-RPC method", declared)
+        if (body["method"] == "tools/call" && params?.get("name") != httpName) {
+            return Failure(-32600, "Mcp-Name disagrees with selected tool", declared)
+        }
+        return null
+    }
+}

@@ -58,6 +58,19 @@ Migration/backward compatibility specifics: https://modelcontextprotocol.io/spec
 - Keep ordinary JS button dispatch, but add conservative in-document non-GET form/button, secret-bearing form, non-HTTP(S) anchor and explicit destructive-label guards, without granting the agent payment or secret permissions.
 - Add static Kotlin contract tests for new guard strings. These are **not** substitutes for real WebView instrumentation.
 
+## Private MCP wire admission hardening
+
+R5 QA-only `/mcp` now validates a modern `2026-07-28` request's transport version,
+`Mcp-Method`/`Mcp-Name` routing headers, and `_meta` protocol, clientInfo,
+and clientCapabilities against its JSON-RPC body **before** dispatching to the
+authenticated native bridge. Unsupported versions produce a JSON-RPC HTTP 400
+with `-32022` and supported revision list. Legacy `2025-11-25` or a
+headerless legacy initialize remains a deliberate compatibility path, still
+subject to native bearer pairing and local session consent for any browser
+content. These checks are source-only and require real modern/legacy MCP
+Inspector + ChatGPT testing; Ktor's existing Content-Length requirement may
+reject chunked clients and is a separate transport compatibility gate.
+
 ## Beta gates and no-go decisions
 
 **G-B0 source/control**: identify exact owner-approved scope, PR stack and branch; no Android/iOS parity exception yet. Full benchmark spreadsheet unnecessary; this document is the component matrix.
