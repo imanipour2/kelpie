@@ -136,10 +136,11 @@ internal fun AgentConnectionCenterSheet(
             enabled = instructions != null,
             onClick = {
                 if (instructions != null) {
-                    val send = Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(Intent.EXTRA_TEXT, instructions)
-                    }
+                    val send =
+                        Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, instructions)
+                        }
                     context.startActivity(Intent.createChooser(send, "Share Kelpie setup"))
                 }
             },
