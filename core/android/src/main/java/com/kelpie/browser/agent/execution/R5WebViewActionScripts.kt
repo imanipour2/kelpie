@@ -19,7 +19,6 @@ internal object R5WebViewActionScripts {
           scroll:{x:scrollX,y:scrollY}}))()
         """
 
-
     // Ordinary links, JS buttons and non-financial forms are agent-controlled.
     // Password/OTP entry and payment/financial controls remain device-protected.
     // The AI decides whether to click; this native boundary only blocks secrets/payment.
