@@ -48,6 +48,7 @@ class PrivateWebViewDisplay(
 
     private data class FrameWait(
         val expectedRgb: Int,
+        val expectedSecondaryRgb: Int?,
         val result: OneShotFrameBuffer<Bitmap>,
     )
 
@@ -85,6 +86,7 @@ class PrivateWebViewDisplay(
     private var previousCssScrollX = 0.0
     private var previousCssScrollY = 0.0
     private var qaFrameSequence = 0
+    private var visualRequestId = 0L
 
     @Volatile private var active = false
 
@@ -117,6 +119,7 @@ class PrivateWebViewDisplay(
             previousScrollX = original.scrollX
             previousScrollY = original.scrollY
             qaFrameSequence = 0
+            visualRequestId = 0L
             callbackCount.set(0)
             matchingFrameCount.set(0)
             lastFrameOutcome = "DISPLAY_INITIALIZING"
@@ -182,30 +185,40 @@ class PrivateWebViewDisplay(
                 }
                 val images = reader ?: return@withContext null
                 val current = view ?: return@withContext null
-                if (qaFrameSequence >= if (useNativeFrameProof) R5NativeFrameProof.MAX_FRAMES else 20) {
+                if (!useNativeFrameProof && qaFrameSequence >= 20) {
                     return@withContext null
                 }
+                // Only one pending frame is allowed, including during epoch rollover.
+                if (pendingImage.get() != null) return@withContext null
                 // Reader timestamps and SystemClock can have different timebases.
-                // A matching pixel nonce is proof of the NEW render, not a cached frame.
+                // A matching private native pixel PAIR proves a new compositor
+                // frame; a new seed pair is generated every 512 requests without
+                // reparenting the real WebView or renewing local consent.
                 runCatching { images.acquireLatestImage()?.close() }
-                val next = qaFrameSequence + 1
-                val expectedRgb =
+                val nativeToken =
                     if (useNativeFrameProof) {
-                        nativeFrameProof?.expectedRgb(next) ?: return@withContext null
+                        runCatching { nativeFrameProof?.nextProof() }.getOrNull() ?: return@withContext null
                     } else {
-                        PrivateCaptureQaPixelProof.rgb(next)
+                        null
                     }
-                val wait = FrameWait(expectedRgb, OneShotFrameBuffer(Bitmap::recycle))
+                val next = nativeToken?.sequence ?: qaFrameSequence + 1
+                val expectedRgb = nativeToken?.primaryRgb ?: PrivateCaptureQaPixelProof.rgb(next)
+                val wait =
+                    FrameWait(
+                        expectedRgb = expectedRgb,
+                        expectedSecondaryRgb = nativeToken?.secondaryRgb,
+                        result = OneShotFrameBuffer(Bitmap::recycle),
+                    )
                 if (!pendingImage.compareAndSet(null, wait)) return@withContext null
-                // The QA nonce must advance only for a newly accepted single flight.
                 qaFrameSequence = next
+                visualRequestId += 1
                 lastFrameOutcome = "WAITING_FOR_FRESH_NONCE"
                 if (useNativeFrameProof) {
-                    // The tiny nonce is painted by the app's Presentation, not
-                    // injected into the visited website or another Android app.
-                    nativeFrameProof?.repaint(expectedRgb)
+                    // Both markers are painted by our Presentation, never by
+                    // JavaScript and never on any other Android application's UI.
+                    nativeFrameProof?.repaint(nativeToken ?: return@withContext null)
                     current.postVisualStateCallback(
-                        next.toLong(),
+                        visualRequestId,
                         object : WebView.VisualStateCallback() {
                             override fun onComplete(requestId: Long) {
                                 if (pendingImage.get() === wait && wait.result.isOpen) {
@@ -408,6 +421,16 @@ class PrivateWebViewDisplay(
                 lastFrameOutcome = "STALE_OR_WRONG_PIXEL"
                 return
             }
+            if (useNativeFrameProof) {
+                val expectedSecondary = waiting.expectedSecondaryRgb ?: return
+                val actualSecondary =
+                    runCatching { sampleRgb(image, R5NativeFrameProof.SECOND_SAMPLE_PX) }
+                        .getOrNull() ?: return
+                if (!R5FrameNonce.matches(expectedSecondary, actualSecondary)) {
+                    lastFrameOutcome = "STALE_OR_WRONG_SECOND_PIXEL"
+                    return
+                }
+            }
             matchingFrameCount.incrementAndGet()
             // Keep the request published until the awaiting coroutine takes it,
             // or STOP closes its holder. Removing it here creates a leak window:
@@ -424,12 +447,15 @@ class PrivateWebViewDisplay(
         }
     }
 
-    private fun sampleRgb(image: Image): Int {
-        require(image.width > 12 && image.height > 12)
+    private fun sampleRgb(
+        image: Image,
+        nativeSampleY: Int = R5NativeFrameProof.SAMPLE_PX,
+    ): Int {
+        require(image.width > 12 && image.height > nativeSampleY)
         val plane = image.planes.single()
         require(plane.pixelStride == 4)
         val x = if (useNativeFrameProof) R5NativeFrameProof.SAMPLE_PX else image.width / 2
-        val y = if (useNativeFrameProof) R5NativeFrameProof.SAMPLE_PX else image.height / 2
+        val y = if (useNativeFrameProof) nativeSampleY else image.height / 2
         val offset = y * plane.rowStride + x * plane.pixelStride
         val buffer = plane.buffer
         require(offset + 2 < buffer.limit())

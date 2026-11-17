@@ -7,23 +7,25 @@ import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
 import android.widget.FrameLayout
-import java.security.SecureRandom
 
 /**
- * R5-only compositor freshness nonce rendered by Kelpie itself.
+ * R5 compositor freshness: two independent native 24-bit markers are painted
+ * outside the web page. Neither the visited DOM nor another Android app is
+ * touched. Verified 48-bit marker pairs rotate on 512-frame epoch boundaries.
  *
- * P4's example.com DOM marker is never allowed on real customer sites. This
- * tiny, noninteractive native overlay belongs to an app-private Presentation;
- * it cannot read the phone screen or change the visited document.
- *
- * A matching nonce proves the ImageReader frame is new, but it does not on
- * its own prove web-page navigation completion; callers verify page state.
+ * This is image freshness evidence, NOT permission to access the browser.
  */
 internal class R5NativeFrameProof(
     context: Context,
 ) {
-    private val seed = SecureRandom().nextInt(0xFFFFFF)
-    private val marker =
+    private val sequence = R5FrameProofEpochSequence()
+    private val primaryMarker =
+        View(context).apply {
+            isClickable = false
+            isFocusable = false
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+    private val secondaryMarker =
         View(context).apply {
             isClickable = false
             isFocusable = false
@@ -42,31 +44,51 @@ internal class R5NativeFrameProof(
                 ),
             )
             frame.addView(
-                marker,
+                primaryMarker,
                 FrameLayout.LayoutParams(MARKER_PX, MARKER_PX, Gravity.TOP or Gravity.LEFT),
+            )
+            frame.addView(
+                secondaryMarker,
+                FrameLayout.LayoutParams(MARKER_PX, MARKER_PX, Gravity.TOP or Gravity.LEFT).apply {
+                    topMargin = MARKER_PX
+                },
             )
             root = frame
         }
     }
 
-    fun expectedRgb(sequence: Int): Int = R5FrameNonce.color(seed, sequence)
+    fun nextProof(): R5FrameProofEpochSequence.Token {
+        check(root != null) { "Native frame proof renderer is not attached" }
+        return sequence.next()
+    }
 
-    fun repaint(expectedRgb: Int) {
-        check(root != null) { "Native proof renderer is not attached" }
-        require(expectedRgb in 0..0xFFFFFF)
-        marker.setBackgroundColor(Color.rgb(expectedRgb shr 16, (expectedRgb shr 8) and 255, expectedRgb and 255))
-        marker.invalidate()
+    fun repaint(proof: R5FrameProofEpochSequence.Token) {
+        check(root != null) { "Native frame proof renderer is not attached" }
+        setRgb(primaryMarker, proof.primaryRgb)
+        setRgb(secondaryMarker, proof.secondaryRgb)
+        primaryMarker.invalidate()
+        secondaryMarker.invalidate()
         root?.postInvalidateOnAnimation()
     }
 
+    private fun setRgb(
+        view: View,
+        rgb: Int,
+    ) {
+        require(rgb in 0..0xFFFFFF)
+        view.setBackgroundColor(Color.rgb(rgb shr 16, (rgb shr 8) and 255, rgb and 255))
+    }
+
     fun dispose() {
-        (marker.parent as? ViewGroup)?.removeView(marker)
+        (primaryMarker.parent as? ViewGroup)?.removeView(primaryMarker)
+        (secondaryMarker.parent as? ViewGroup)?.removeView(secondaryMarker)
         root = null
     }
 
     companion object {
         const val MAX_FRAMES = R5FrameNonce.MAX_FRAMES
-        const val SAMPLE_PX = 12
         private const val MARKER_PX = 24
+        const val SAMPLE_PX = 12
+        const val SECOND_SAMPLE_PX = SAMPLE_PX + MARKER_PX
     }
 }
