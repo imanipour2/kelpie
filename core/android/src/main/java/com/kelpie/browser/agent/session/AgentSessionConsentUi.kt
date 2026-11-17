@@ -87,7 +87,10 @@ fun AgentSessionConsentUi(
         mutableStateOf(request?.principalId ?: candidates.singleOrNull())
     }
 
-    fun ownerTappedApprove(principal: String?, promptId: String?) {
+    fun ownerTappedApprove(
+        principal: String?,
+        promptId: String?,
+    ) {
         if (principal == null ||
             (promptId == null && !coordinator.isVerifiedPrincipalFresh(principal))
         ) {
