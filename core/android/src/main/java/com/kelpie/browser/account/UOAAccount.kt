@@ -112,13 +112,13 @@ object UOAAccount {
         }
     }
 
-    /** The in-app login shares the tabs' WebView profile, so the Google session reaches every tab. */
+    /** Native-app OAuth must use a browser supported by the identity provider, not a WebView. */
     private fun openPendingLogin() {
         val url = pendingUrl ?: return
         if (liveHost() == null) return
         pendingUrl = null
         loginOpen = true
-        openLogin?.invoke(url, generation.toString())
+        openInBrowser(url)
     }
 
     fun finishLogin(
@@ -135,16 +135,23 @@ object UOAAccount {
         }
     }
 
-    /** Last resort when no WebView can be created; the callback returns via [AccountCallbackActivity]. */
-    private fun openInBrowser() {
+    /** Browser-owned OAuth: never render an identity-provider authorization page inside Kelpie. */
+    private fun openInBrowser(requestedUrl: String? = null) {
         val pending = attempt ?: return
+        val url = requestedUrl ?: pending.authorization.url(pending.clientId)
+        if (!AccountLoginPolicy.isAuthorizeUrl(url)) {
+            fail("Could not open login. Please try again.")
+            return
+        }
         val intent =
-            Intent(Intent.ACTION_VIEW, Uri.parse(pending.authorization.url(pending.clientId)))
+            Intent(Intent.ACTION_VIEW, Uri.parse(url))
                 .addCategory(Intent.CATEGORY_BROWSABLE)
         val activity = liveHost() ?: return fail("Could not open login. Please try again.")
         try {
             activity.startActivity(intent)
         } catch (_: android.content.ActivityNotFoundException) {
+            fail("Could not open login. Please try again.")
+        } catch (_: SecurityException) {
             fail("Could not open login. Please try again.")
         }
     }
