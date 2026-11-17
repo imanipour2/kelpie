@@ -6,8 +6,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.PowerManager
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
 import com.kelpie.browser.agent.contract.AgentCommand
 import com.kelpie.browser.agent.contract.ExecutionStatus
 import com.kelpie.browser.agent.contract.Operation
@@ -114,6 +116,10 @@ class R5AgentCoordinator(
                     ownership = WebViewOwnershipState()
                     runtime = newRuntime()
                     scope.launch { activateRenderer(state) }
+                } else if (ownership.status() == WebViewOwnershipState.Host.SUSPENDED) {
+                    // Unlock updates safetyEpoch but does NOT create a new generation.
+                    // Activity may already be RESUMED, so onResume will not re-fire.
+                    scope.launch { rebindAfterRealOwnerUnlock(state) }
                 }
             }
         }
@@ -308,10 +314,64 @@ class R5AgentCoordinator(
                         }
                     }
                 }
+                PrivateWebViewDisplay.State.IDLE -> {
+                    val active = consent.snapshot() as? SessionConsentCore.State.Active
+                    if (active != null && !active.locked && ownership.status() == WebViewOwnershipState.Host.SUSPENDED) {
+                        rebindAfterRealOwnerUnlock(active)
+                    }
+                }
                 else -> Unit
             }
         }
     }
+
+    /** Unlock is a native signal, not a renewed remote authorization. */
+    private suspend fun rebindAfterRealOwnerUnlock(active: SessionConsentCore.State.Active) =
+        transferMutex.withLock {
+            if (closed || ready || consent.snapshot() != active) return@withLock
+            val tab = ctx.tabStore?.activeTab ?: return@withLock
+            val keyguard = activity.getSystemService(KeyguardManager::class.java)
+            val power = activity.getSystemService(PowerManager::class.java)
+            val eligible =
+                R5UnlockedForegroundGate.canRebind(
+                    consentActive = !active.locked && currentGeneration == active.generation,
+                    sameGeneration = consent.snapshot() == active,
+                    owner = ownership.status(),
+                    privateDisplayIdle = renderer.state.value == PrivateWebViewDisplay.State.IDLE,
+                    resumed = activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED),
+                    windowVisible = activity.window.decorView.isShown,
+                    windowFocused = activity.hasWindowFocus(),
+                    attached = tab.webView.isAttachedToWindow,
+                    shown = tab.webView.isShown,
+                    interactive = power?.isInteractive == true,
+                    keyguardGone = keyguard?.isDeviceLocked == false,
+                    stopNotificationPresent = AgentSessionNotification.canNotify(activity),
+                )
+            if (!eligible) return@withLock
+            val target = nativePort.nativeTargetForBinding(tab.id) ?: return@withLock
+            if (!ownership.unlockNeedsReattach(active.generation)) return@withLock
+            if (!ownership.bindForeground(active.generation, target.rendererIdentity)) {
+                ownership.failRenderer()
+                AndroidAgentProcessSession.stop()
+                return@withLock
+            }
+            val unchanged =
+                consent.snapshot() == active &&
+                    ctx.tabStore?.activeTab?.webView === tab.webView &&
+                    ctx.tabStore?.activeTab?.id == tab.id &&
+                    !closed &&
+                    power?.isInteractive == true &&
+                    keyguard?.isDeviceLocked == false &&
+                    renderer.state.value == PrivateWebViewDisplay.State.IDLE
+            if (!unchanged) {
+                ready = false
+                ownership.failRenderer()
+                AndroidAgentProcessSession.stop()
+                return@withLock
+            }
+            ready = true
+            Log.i("KelpieR5Unlock", "OWNER_UNLOCK_REBIND_VERIFIED")
+        }
 
     private suspend fun activateRenderer(active: SessionConsentCore.State.Active) =
         transferMutex.withLock {
