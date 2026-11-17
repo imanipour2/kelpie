@@ -2,9 +2,7 @@ package com.kelpie.browser.account
 
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import androidx.activity.ComponentActivity
-import androidx.browser.customtabs.CustomTabsIntent
 import com.kelpie.browser.browser.BookmarkStore
 import com.kelpie.browser.storage.SecretStore
 import kotlinx.coroutines.CoroutineScope
@@ -140,24 +138,13 @@ object UOAAccount {
         }
     }
 
-    /** Open the owner-visible system browser. Callback is handled by [AccountCallbackActivity]. */
+    /** Browser-owned OAuth only. Callback is validated by [AccountCallbackActivity]. */
     private fun openInBrowser() {
         val pending = attempt ?: return
-        val intent =
-            Intent(Intent.ACTION_VIEW, Uri.parse(pending.authorization.url(pending.clientId)))
-                .addCategory(Intent.CATEGORY_BROWSABLE)
         val activity = liveHost() ?: return fail("Could not open login. Please try again.")
-        try {
-            // A real browser surface is required for Google OAuth (RFC 8252);
-            // Custom Tabs uses the chosen browser's own cookies, never WebView.
-            CustomTabsIntent.Builder().build().launchUrl(activity, intent.data!!)
-        } catch (_: android.content.ActivityNotFoundException) {
-            // Preserve the supported external browser fallback, never WebView.
-            try {
-                activity.startActivity(intent)
-            } catch (_: android.content.ActivityNotFoundException) {
-                fail("Could not open login. Please try again.")
-            }
+        val url = pending.authorization.url(pending.clientId)
+        if (!UOAExternalAuthLauncher.launch(activity, url)) {
+            fail("Could not open login. Please try again.")
         }
     }
 

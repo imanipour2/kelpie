@@ -18,6 +18,26 @@ The current Android project uses compileSdk 34 and an older AGP toolchain. Andro
 
 The cookie/session jar belongs to the external browser. No Google credential, token, OTP or cookie is copied to Kelpie. This only fixes the app-owned UOA OAuth user-agent. Third-party websites opened as Kelpie WebView tabs may still reject Google SSO; a separate owner-visible handoff with explicit no-session-continuity notice is required.
 
+## SDK34 provider discovery and launcher boundary
+
+A compatibility review after CI found that the first draft launched a Custom Tabs intent
+without verifying that an actual Custom Tabs browser provider was available. On Android
+11+, the package visibility declaration is required for provider discovery.
+
+The corrected source adds `android.support.customtabs.action.CustomTabsService` to the
+library manifest, checks `CustomTabsClient.getPackageName` and binds the resulting package
+explicitly when launching. The dedicated `UOAExternalAuthLauncher` checks the exact HTTPS
+UOA authorization endpoint before either route. When no provider is available, or its
+activity disappears, the only fallback is an owner-visible Android `ACTION_VIEW` request.
+No embedded WebView or custom User-Agent is used. A system VIEW handler is not proof
+that an arbitrary third-party site's session will continue inside Kelpie.
+
+CI source tests exercise legitimate and hostile authorization URLs; exact provider
+selection, fallback, Android 17 callbacks, cancellation and process death require an
+instrumented/physical S24 test. Relevant official guidance:
+https://developer.chrome.com/docs/android/custom-tabs/howto-custom-tab-check and
+https://developer.android.com/reference/androidx/browser/customtabs/CustomTabsClient .
+
 ## Acceptance gates
 
 1. Android Gradle dependency resolution and unchanged SDK34/AGP baseline; lint and unit test compile.

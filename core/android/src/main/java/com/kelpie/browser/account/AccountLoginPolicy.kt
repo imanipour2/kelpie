@@ -30,7 +30,8 @@ internal object AccountLoginPolicy {
             uri.host == LOGIN_HOST &&
             uri.path == "/oauth/authorize" &&
             uri.userInfo == null &&
-            uri.port == -1
+            uri.port == -1 &&
+            uri.fragment == null
     }
 
     /** Exact match for the registered redirect URI; query validation happens in [UOAAuthorization]. */
