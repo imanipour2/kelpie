@@ -1,12 +1,12 @@
 package com.kelpie.browser.account
 
+import java.net.URI
+import java.net.URLDecoder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.net.URI
-import java.net.URLDecoder
 
 /** K1 regression: external browser changes the host, not the PKCE/state contract. */
 class UOAAuthorizationSecurityTest {
