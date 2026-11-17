@@ -330,12 +330,7 @@ class HTTPServer(
         }
         if (method == "mcp" && router.backgroundAgentQa) {
             val h = call.request.headers
-            val rejected = R5McpWireAdmission.check(
-                body,
-                h["MCP-Protocol-Version"],
-                h["Mcp-Method"],
-                h["Mcp-Name"],
-            )
+            val rejected = R5McpWireAdmission.check(body, h["MCP-Protocol-Version"], h["Mcp-Method"], h["Mcp-Name"])
             if (rejected != null) {
                 call.respondText(
                     mapToJsonString(R5McpWireAdmission.errorBody(body["id"], rejected)),
