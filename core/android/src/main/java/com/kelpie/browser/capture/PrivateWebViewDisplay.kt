@@ -13,6 +13,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
 import android.os.PowerManager
+import android.util.Log
 import android.view.ViewGroup
 import android.webkit.WebView
 import com.kelpie.browser.agent.contract.R5VisionCaptureRequest
@@ -280,6 +281,18 @@ class PrivateWebViewDisplay(
             // Repeated STOP must not reparent the same WebView or replay
             // composeRestore() while an earlier restore is still settling.
             if (stateFlow.value != State.IDLE && stateFlow.value != State.RESTORE_PENDING) {
+                // In R5 the agent can navigate/scroll after moving to PRIVATE_DISPLAY.
+                // The entry snapshot is then stale: restore the latest owned document CSS
+                // scroll rather than rewinding its browser actions. P4 is unchanged.
+                if (useNativeFrameProof && stateFlow.value == State.PRIVATE_DISPLAY && !isLocked()) {
+                    val observed =
+                        view?.takeIf { it.isAttachedToWindow }?.let {
+                            withTimeoutOrNull(2_500L) { readCssScroll(it) }
+                        }
+                    val selected = R5CssRestoreTarget.choose(previousCssScrollX, previousCssScrollY, observed)
+                    previousCssScrollX = selected.first
+                    previousCssScrollY = selected.second
+                }
                 releaseAndRestore(State.RESTORE_PENDING)
             }
         }
@@ -303,15 +316,17 @@ class PrivateWebViewDisplay(
             val original =
                 view ?: run {
                     stateFlow.value = State.IDLE
+                    noteRestore("NO_VIEW_RESTORED")
                     return@withContext true
                 }
             val attached =
-                withTimeoutOrNull(RELEASE_TIMEOUT_MS) {
+                withTimeoutOrNull(if (useNativeFrameProof) 5_000L else RELEASE_TIMEOUT_MS) {
                     while (!original.isAttachedToWindow) delay(100)
                     true
                 } ?: false
             if (!attached) {
                 stateFlow.value = State.FAILED
+                noteRestore("WEBVIEW_ATTACH_TIMEOUT")
                 return@withContext false
             }
             // WebView can apply a late compositor/layout scroll restore after the
@@ -349,9 +364,15 @@ class PrivateWebViewDisplay(
                 stableObservations = 0
             }
             stateFlow.value = if (matched) State.IDLE else State.FAILED
+            noteRestore(if (matched) "CSS_RESTORED" else "CSS_STABILITY_FAILED")
             if (matched) view = null
             matched
         }
+
+    /** QA-only lifecycle category; never log URLs, pixels, tokens or user inputs. */
+    private fun noteRestore(code: String) {
+        if (useNativeFrameProof) Log.i("KelpieR5Restore", code)
+    }
 
     /** Only document-local CSS values are used, never cross-display native pixels. */
     private suspend fun readCssScroll(original: WebView): Pair<Double, Double>? {
