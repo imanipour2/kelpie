@@ -380,10 +380,12 @@ class PrivateWebViewDisplay(
             val reply = CompletableDeferred<String>()
             original.evaluateJavascript(expression) { raw -> reply.complete(raw) }
             val value = withTimeoutOrNull(800L) { reply.await() }?.toDoubleOrNull()
-            return value?.takeIf { it.isFinite() && it >= 0.0 }
+            // Horizontal CSS scroll can be negative for an RTL root in Chromium.
+            // Validate finiteness here; only vertical scroll must be nonnegative.
+            return value?.takeIf { it.isFinite() }
         }
         val x = coordinate("window.scrollX") ?: return null
-        val y = coordinate("window.scrollY") ?: return null
+        val y = coordinate("window.scrollY")?.takeIf { it >= 0.0 } ?: return null
         return x to y
     }
 

@@ -24,3 +24,7 @@ Operational thread: https://github.com/imanipour2/enerfoam-website/issues/98
 
 - Android Developers, Activity lifecycle: https://developer.android.com/guide/components/activities/activity-lifecycle — interrupted activity receives onPause and resumes through onResume; onPause does not reliably allow long-running saving, so the repair runs in a bounded coroutine rather than blocking the Android callback.
 - Android Developers, WebView API: https://developer.android.com/reference/android/webkit/WebView#postVisualStateCallback(long,%20android.webkit.WebView.VisualStateCallback) — visual DOM synchronization is conditional on attachment; the separate PR #44 foreground PNG path retains its gate.
+
+## Physical RCA added after first install: Android RTL signed horizontal scroll
+
+The **real** owner S24 RTL fixture readback after HOME/SCROLL reported `window.scrollX = -68.26667022705078`, `scrollY = 640`. Under the first revision, WebView CSS coordinate parser required nonnegative X and Y, so the latest snapshot was dropped; the device returned `CSS_STABILITY_FAILED` and native grant OFF on restore. For RTL, CSSOM horizontal scroll is allowed to be negative. Fix both snapshot and R5 target policy to accept finite negative X, retain `Y >= 0` and all stable restoration/lock/principal checks. No coordinate values, URLs or pixels emitted to runtime logs; only this synthetic QA fixture value belongs in the test record. This is a hardware-proven root cause, not merely a guess.

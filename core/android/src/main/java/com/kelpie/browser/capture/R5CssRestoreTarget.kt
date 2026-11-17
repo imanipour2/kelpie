@@ -7,6 +7,6 @@ internal object R5CssRestoreTarget {
         entryY: Double,
         current: Pair<Double, Double>?,
     ): Pair<Double, Double> =
-        current?.takeIf { (x, y) -> x.isFinite() && y.isFinite() && x >= 0.0 && y >= 0.0 }
+        current?.takeIf { (x, y) -> x.isFinite() && y.isFinite() && y >= 0.0 }
             ?: (entryX to entryY)
 }
