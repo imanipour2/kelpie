@@ -38,7 +38,8 @@ internal class R5PrivateMcpBridge(
         if (id == null && envelope["method"] == "notifications/initialized") return emptyMap()
         if (id == null) return rpcError(null, -32600, "Request id required")
         return when (envelope["method"] as? String) {
-            "initialize" -> rpcResult(
+            "initialize" ->
+                rpcResult(
                 id,
                 mapOf(
                     "protocolVersion" to "2025-11-25",
@@ -46,7 +47,8 @@ internal class R5PrivateMcpBridge(
                     "serverInfo" to mapOf("name" to "kelpie-r5-private-qa", "version" to "0.1.0"),
                 ),
             )
-            "server/discover" -> rpcResult(
+            "server/discover" ->
+                rpcResult(
                 id,
                 mapOf(
                     "resultType" to "complete",
@@ -59,7 +61,8 @@ internal class R5PrivateMcpBridge(
                     "cacheScope" to "private",
                 ),
             )
-            "tools/list" -> rpcResult(
+            "tools/list" ->
+                rpcResult(
                 id,
                 mapOf("resultType" to "complete", "tools" to toolCatalog(), "ttlMs" to 0, "cacheScope" to "private"),
             )
@@ -157,8 +160,9 @@ internal class R5PrivateMcpBridge(
                 ?: (arguments["consentGeneration"] as? String)
                 ?: return rpcError(id, -32602, "Fresh consentGeneration required")
         if (action == "tabs.list") {
-            val (status, outcome) = router.handle(
-                "agent-tabs",
+            val (status, outcome) =
+                router.handle(
+                    "agent-tabs",
                 mapOf("consentGeneration" to generation),
                 fromGateway = true,
             )
@@ -219,14 +223,16 @@ internal class R5PrivateMcpBridge(
         id: Any,
         value: Map<String, Any?>,
         isError: Boolean = false,
-    ): Map<String, Any?> =
-        rpcResult(id, complete(listOf(mapOf("type" to "text", "text" to stringify(value))), isError))
+    ): Map<String, Any?> {
+        return rpcResult(id, complete(listOf(mapOf("type" to "text", "text" to stringify(value))), isError))
+    }
 
     private fun complete(
         content: List<Map<String, Any?>>,
         isError: Boolean,
-    ): Map<String, Any?> =
-        mapOf("resultType" to "complete", "content" to content, "isError" to isError)
+    ): Map<String, Any?> {
+        return mapOf("resultType" to "complete", "content" to content, "isError" to isError)
+    }
 
     private fun rpcResult(
         id: Any,
@@ -237,8 +243,9 @@ internal class R5PrivateMcpBridge(
         id: Any?,
         code: Int,
         message: String,
-    ): Map<String, Any?> =
-        mapOf("jsonrpc" to "2.0", "id" to id, "error" to mapOf("code" to code, "message" to message))
+    ): Map<String, Any?> {
+        return mapOf("jsonrpc" to "2.0", "id" to id, "error" to mapOf("code" to code, "message" to message))
+    }
 
     private fun stringify(value: Any?): String =
         when (value) {
