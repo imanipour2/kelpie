@@ -21,6 +21,7 @@ internal fun BrowserMoreMenu(
     onNetworkInspector: () -> Unit,
     onAI: () -> Unit,
     onConnectAgent: () -> Unit,
+    agentConnectionAvailable: Boolean,
     onSnapshot3D: () -> Unit,
     show3DInspector: Boolean,
     showMobileViewportToggle: Boolean,
@@ -44,7 +45,7 @@ internal fun BrowserMoreMenu(
     HorizontalDivider()
     item("History", onHistory)
     item("AI", onAI)
-    item("Connect AI agent", onConnectAgent)
+    if (agentConnectionAvailable) item("Connect AI agent", onConnectAgent)
     item("Network inspector", onNetworkInspector)
     if (show3DInspector) item("3D inspector", onSnapshot3D)
     if (showMobileViewportToggle) {
