@@ -178,7 +178,7 @@ class TabStore(
                 settings.useWideViewPort = true
                 settings.setSupportMultipleWindows(false)
                 settings.mediaPlaybackRequiresUserGesture = false
-                settings.userAgentString = BROWSER_USER_AGENT
+                // Keep the actual Android System WebView user agent; do not impersonate Chrome.
                 addJavascriptInterface(JsBridge(handlerContext), JS_BRIDGE_NAME)
                 WebSocketHandler.installBridge(this)
             }
