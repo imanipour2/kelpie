@@ -16,9 +16,11 @@ the installed Android WebView's default, truthful user agent for normal tabs.
 
 This **does not** claim that an arbitrary website opened in a Kelpie WebView can
 complete Google OAuth inside that embedded tab, or that Google/Chrome login
-cookies can be transferred to Kelpie. Owner-visible browser handoff for
-third-party websites, AndroidX Auth Tab/Custom Tabs, provider/browser
-compatibility and device acceptance are follow-on K1 gates. Do not collect
+cookies can be transferred to Kelpie. The separate [draft Auth Tab PR](https://github.com/imanipour2/kelpie/pulls) adds
+AndroidX Browser 1.9.0 and an AuthTabIntent launcher with Custom Tabs fallback
+for the app-owned UOA flow; it is source-only and device/provider acceptance
+remains open. Owner-visible browser handoff for third-party websites and
+browser compatibility are separate K1 gates. Do not collect
 the owner's Google credentials or copy another application's cookie jar.
 The draft is not merged, installed or publicly released.
 
