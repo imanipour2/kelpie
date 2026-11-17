@@ -104,22 +104,24 @@ internal fun AgentConnectionCenterSheet(
         if (provider != R5AgentProvider.CHATGPT || !chatGptTunnel) {
             Text("Paste your trusted HTTPS MCP address")
             OutlinedTextField(
-            value = endpoint,
-            onValueChange = { endpoint = it.take(1024) },
-            label = { Text("https://your-host.example/mcp") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
+                value = endpoint,
+                onValueChange = { endpoint = it.take(1024) },
+                label = { Text("https://your-host.example/mcp") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
             Text(
                 if (validUrl == null) {
-                "No endpoint accepted yet. Use HTTPS, a DNS hostname, and /mcp. Do not paste tokens."
-            } else {
-                "Address format accepted. This does not prove reachability, trust or authentication."
+                    "No endpoint accepted yet. Use HTTPS, a DNS hostname, and /mcp. Do not paste tokens."
+                } else {
+                    "Address format accepted. This does not prove reachability, trust or authentication."
                 },
             )
         } else {
-            Text("Use an existing authorized Secure MCP Tunnel inside ChatGPT web Plugins. " +
-                "No public phone endpoint or token is required here.")
+            Text(
+                "Use an existing authorized Secure MCP Tunnel inside ChatGPT web Plugins. " +
+                    "No public phone endpoint or token is required here.",
+            )
         }
         Button(
             enabled = instructions != null,
