@@ -16,7 +16,13 @@ internal object R5WebViewActionScripts {
               e.getAttribute('placeholder')||e.innerText||'').slice(0,120),
               selector:e.id ? '#'+CSS.escape(e.id) : '',
               type:(e.getAttribute('type')||'').slice(0,24)})),
-          scroll:{x:scrollX,y:scrollY}}))()
+          scroll:{x:scrollX,y:scrollY},
+          // Observation only: challenge ownership and answers stay with the
+          // visited website / human. Never read a challenge token or bypass it.
+          humanChallengeDetected:
+            !!document.querySelector('[class*=captcha],[id*=captcha],.cf-turnstile')||
+            [...document.querySelectorAll('iframe[src]')].some(f=>
+              /recaptcha|hcaptcha|challenges\\.cloudflare\\.com|turnstile/i.test(f.src))}))()
         """
 
     // Ordinary links, JS buttons and non-financial forms are agent-controlled.
