@@ -21,7 +21,10 @@ Unsafe URL schemes, financial/credential actions and unreviewed POST form
 actions are blocked by conservative native and script checks. These heuristics
 do not replace a real action-risk review; uncertain writes are never replayed
 without a new observation. Native tab creation/switch/close and direct MCP
-tool routing remain beta blockers.
+tool routing remain beta blockers. The source-only child PR #38 now unifies
+the metadata projection for native `agent-tabs` and `LIST_TABS` command,
+with independent active-tab/document identity readback; this has not yet
+been accepted on a physical Android device.
 
 See [R5 beta engineering research and gates](qa/R5-BETA-ENGINEERING-RESEARCH-AND-GATES-20261117.md)
 and [the canonical operations issue](https://github.com/imanipour2/enerfoam-website/issues/98).
