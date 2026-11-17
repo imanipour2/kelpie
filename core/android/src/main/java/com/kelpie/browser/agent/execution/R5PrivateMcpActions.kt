@@ -2,7 +2,7 @@ package com.kelpie.browser.agent.execution
 
 /** Explicit write-tool dispatch; native admission independently validates the live owner and target. */
 internal object R5PrivateMcpActions {
-    val methods = listOf("tab.goto", "tab.click", "tab.fill", "tab.select", "tab.wait", "tab.back", "tab.forward", "page.scroll")
+    val methods = listOf("tab.goto", "tab.click", "tab.fill", "tab.select", "tab.wait", "tab.back", "tab.forward", "page.scroll", "tabs.new", "tabs.close")
 
     fun operation(method: String): String? =
         when (method) {
@@ -14,6 +14,8 @@ internal object R5PrivateMcpActions {
             "tab.back" -> "BACK"
             "tab.forward" -> "FORWARD"
             "page.scroll" -> "SCROLL"
+            "tabs.new" -> "OPEN_TAB"
+            "tabs.close" -> "CLOSE_TAB"
             else -> null
         }
 
@@ -23,6 +25,16 @@ internal object R5PrivateMcpActions {
     ): Map<String, Any?>? {
         if (method !in methods) return null
         if (method == "tab.back" || method == "tab.forward") return emptyMap()
+        if (method == "tabs.new") {
+            val url = params["url"] as? String ?: return null
+            if (url.isBlank() || url.length > 2048) return null
+            return mapOf("url" to url)
+        }
+        if (method == "tabs.close") {
+            val target = params["targetTabId"] as? String ?: return null
+            if (target.isBlank() || target.length > 256) return null
+            return mapOf("targetTabId" to target)
+        }
         if (method == "tab.wait") {
             val selector = params["selector"] ?: return emptyMap()
             if (selector !is String || selector.isBlank() || selector.length > 500) return null

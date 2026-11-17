@@ -171,3 +171,7 @@ extension discovery, renderer timeout retirement, and the actual OpenAI agent
 catalog/admission/uncertainty stop using a local mock endpoint. It also runs the
 standard MCP SDK initialize/list/call journey from the CLI's installed dependency.
 Bearer contents stay in memory and stdin; no persistent pairing is created.
+
+### Isolated R5 QA background-tab actions (not published)
+
+`kelpie_browser_actions.tabs.new` takes `params.url` and creates an unselected tab while preserving active WebView ownership. `tabs.close` takes `params.targetTabId` and refuses to close the currently active tab; both use the observed active `tabId` / `documentEpoch`, current `consentGeneration`, unique `commandId` and monotonic `clientSequence`. The authenticated R5 runtime must verify native effect and STOP safety. Neither starts the Activity. `tabs.select` remains blocked pending private-display renderer handoff proof. These are source-only QA capabilities; agent-provider publication and iOS parity are not complete.

@@ -241,6 +241,7 @@ class R5AgentCoordinator(
                     scrollDeltaY = (body["scrollY"] as? Number)?.toDouble() ?: 0.0,
                     clientSequence = (body["clientSequence"] as? Number)?.toLong() ?: 0L,
                     captureRequest = capture,
+                    targetTabId = body["targetTabId"] as? String,
                 )
             // Capture a stable runtime reference: STOP may replace the active
             // generation while this suspended action is in flight.
