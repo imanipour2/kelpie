@@ -134,7 +134,9 @@ internal class R5PrivateMcpBridge(
     ): Map<String, Any?> {
         val params = envelope["params"] as? Map<*, *> ?: return rpcError(id, -32602, "Tool params required")
         val name = params["name"] as? String ?: return rpcError(id, -32602, "Tool name required")
-        val arguments = params["arguments"] as? Map<*, *> ?: return rpcError(id, -32602, "Tool arguments required")
+        val arguments =
+            R5PrivateMcpContract.toolArguments(envelope)
+                ?: return rpcError(id, -32602, "Valid tool arguments required")
         if (name == R5PrivateMcpContract.SESSION_TOOL) {
             val route =
                 when (arguments["method"]) {
