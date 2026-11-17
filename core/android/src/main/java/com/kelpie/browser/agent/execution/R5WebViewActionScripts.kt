@@ -67,25 +67,25 @@ internal object R5WebViewActionScripts {
         value: String,
     ): String =
         """
-        (()=>{const e=document.querySelector(__SEL__);
+        (()=>{const e=document.querySelector(${q(selector)});
           if(!(e instanceof HTMLSelectElement)||!e.getClientRects().length||e.disabled) return false;
-          const found=[...e.options].filter(o=>!o.disabled&&(o.value===__VAL__||o.text.trim()===__VAL__));
+          const found=[...e.options].filter(o=>!o.disabled&&(o.value===${q(value)}||o.text.trim()===${q(value)}));
           if(found.length!==1)return false;
           e.value=found[0].value;
           e.dispatchEvent(new Event('input',{bubbles:true}));
           e.dispatchEvent(new Event('change',{bubbles:true}));return true;})()
-        """.replace("__SEL__", q(selector)).replace("__VAL__", q(value))
+        """
 
     fun verifySelect(
         selector: String,
         value: String,
     ): String =
         """
-        (()=>{const e=document.querySelector(__SEL__);
+        (()=>{const e=document.querySelector(${q(selector)});
           if(!(e instanceof HTMLSelectElement))return false;
           const selected=e.selectedOptions[0];
-          return !!selected&&(selected.value===__VAL__||selected.text.trim()===__VAL__);})()
-        """.replace("__SEL__", q(selector)).replace("__VAL__", q(value))
+          return !!selected&&(selected.value===${q(value)}||selected.text.trim()===${q(value)});})()
+        """
 
     fun waitFor(selector: String?): String =
         if (selector == null) {
