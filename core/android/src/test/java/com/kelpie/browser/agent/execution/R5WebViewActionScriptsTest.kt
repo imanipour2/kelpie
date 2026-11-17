@@ -28,6 +28,19 @@ class R5WebViewActionScriptsTest {
     }
 
     @Test
+    fun snapshotProvidesBoundedUniqueCssFallbackWhenIdIsMissing() {
+        val snapshot = R5WebViewActionScripts.SNAPSHOT
+        assertTrue(snapshot.contains("uniqueSelector(e)"))
+        assertTrue(snapshot.contains(":nth-of-type("))
+        assertTrue(snapshot.contains("depth<24"))
+        assertTrue(snapshot.contains("css.length>500"))
+        assertTrue(snapshot.contains("document.querySelectorAll(css).length===1"))
+        assertTrue(snapshot.contains("role:(e.getAttribute('role')"))
+        assertFalse(snapshot.contains("selector:e.id ?"))
+        assertFalse(snapshot.contains("e.value"))
+    }
+
+    @Test
     fun selectorCannotBreakOutOfQuotedJavaScriptData() {
         val malicious = """x');window.location='https://other.example';//"""
         val script = R5WebViewActionScripts.click(malicious)
