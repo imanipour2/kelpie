@@ -37,10 +37,11 @@ internal object R5AgentTabProjection {
                 "documentEpoch" to tab.documentEpoch,
                 "active" to tab.active,
                 "title" to tab.title.take(256),
-                "urlWithoutQuery" to tab.url
-                    .substringBefore("?")
-                    .substringBefore("#")
-                    .take(2048),
+                "urlWithoutQuery" to
+                    tab.url
+                        .substringBefore("?")
+                        .substringBefore("#")
+                        .take(2048),
             )
         }
 
