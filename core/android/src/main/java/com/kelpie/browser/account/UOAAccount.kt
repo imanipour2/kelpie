@@ -140,7 +140,7 @@ object UOAAccount {
         // A browser fallback may complete through AccountCallbackActivity before
         // the Auth Tab launcher later reports CANCELED. Never invalidate a
         // completed or superseded login attempt.
-        if (nonce != generation.toString() || attempt?.id != generation) return
+        if (!AccountLoginPolicy.isCurrentLoginResult(nonce, generation.toString(), attempt?.id?.toString())) return
         loginOpen = false
         when (val outcome = AccountLoginPolicy.outcome(resultCode, callback)) {
             is AccountLoginPolicy.Outcome.Callback -> receiveCallback(outcome.url)
