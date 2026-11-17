@@ -1,6 +1,9 @@
 package com.kelpie.browser.ui
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.webkit.WebView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -38,6 +41,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.kelpie.browser.FeatureFlags
 import com.kelpie.browser.agent.execution.R5AgentCoordinator
 import com.kelpie.browser.browser.BrowserState
+import com.kelpie.browser.browser.ExternalBrowserHandoffPolicy
 import com.kelpie.browser.browser.KeyboardObserver
 import com.kelpie.browser.browser.SessionStore
 import com.kelpie.browser.browser.TabStore
@@ -68,6 +72,8 @@ fun BrowserScreen(
     r5AgentCoordinator: R5AgentCoordinator? = null,
 ) {
     var showPairedClients by remember { mutableStateOf(false) }
+    var pendingExternalBrowser by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var externalBrowserUnavailable by remember { mutableStateOf(false) }
     val browserState = remember { BrowserState() }
     val captureMoved = browserWebViewRelinquished(captureCoordinator, r5AgentCoordinator)
     val context = LocalContext.current
@@ -274,6 +280,13 @@ fun BrowserScreen(
                             onAddTab = { tabStore.addTab() },
                             tabCount = tabs.size,
                             onShare = { sharePage(context, currentUrl) },
+                            onOpenInSupportedBrowser = {
+                                val tabId = tabStore.activeTabId.value
+                                val url = tabStore.activeTab?.currentUrl.orEmpty()
+                                if (!captureMoved && tabId != null && ExternalBrowserHandoffPolicy.mayOpen(url)) {
+                                    pendingExternalBrowser = tabId to url
+                                }
+                            },
                             onWelcome = {
                                 forceShowWelcome = true
                                 showWelcome = true
@@ -487,6 +500,56 @@ fun BrowserScreen(
         ) {
             AIStatusSheet(onDismiss = { showAI = false })
         }
+    }
+
+    pendingExternalBrowser?.let { (tabId, url) ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { pendingExternalBrowser = null },
+            title = { androidx.compose.material3.Text("Open in another browser?") },
+            text = {
+                androidx.compose.material3.Text(
+                    "Sign-in may be available in a supported browser, but its cookies and login state " +
+                        "will not automatically transfer back to this Kelpie tab.",
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        pendingExternalBrowser = null
+                        val tab = tabStore.activeTab
+                        if (tab?.id == tabId && tab.currentUrl == url && ExternalBrowserHandoffPolicy.mayOpen(url)) {
+                            try {
+                                activity.startActivity(
+                                    Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                        .addCategory(Intent.CATEGORY_BROWSABLE),
+                                )
+                            } catch (_: ActivityNotFoundException) {
+                                externalBrowserUnavailable = true
+                            } catch (_: SecurityException) {
+                                externalBrowserUnavailable = true
+                            }
+                        }
+                    },
+                ) { androidx.compose.material3.Text("Open browser") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { pendingExternalBrowser = null }) {
+                    androidx.compose.material3.Text("Cancel")
+                }
+            },
+        )
+    }
+    if (externalBrowserUnavailable) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { externalBrowserUnavailable = false },
+            title = { androidx.compose.material3.Text("No supported browser") },
+            text = { androidx.compose.material3.Text("Enable a supported browser and try again.") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { externalBrowserUnavailable = false }) {
+                    androidx.compose.material3.Text("OK")
+                }
+            },
+        )
     }
 
     // Observe programmatic panel requests from the HTTP API
