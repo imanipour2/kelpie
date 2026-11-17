@@ -48,6 +48,7 @@ internal object R5McpWireAdmission {
             if (declared == MODERN) return Failure(-32600, "Mismatched legacy MCP envelope", declared)
             return null
         }
+        if (declared == null) return Failure(-32602, "Required modern MCP protocolVersion metadata missing", null)
         if (declared != MODERN) return Failure(-32600, "Modern MCP metadata version mismatch", declared)
         val infoSupplied = metadata?.containsKey("io.modelcontextprotocol/clientInfo") == true
         val identity = metadata?.get("io.modelcontextprotocol/clientInfo") as? Map<*, *>
