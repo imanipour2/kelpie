@@ -71,6 +71,23 @@ class R5McpWireAdmissionTest {
     }
 
     @Test
+    fun modernRequestMayOmitOptionalClientInfoButNotRequiredCapabilities() {
+        val base = request()
+        val params = base["params"] as Map<*, *>
+        val originalMeta = params["_meta"] as Map<*, *>
+        val withoutInfo = originalMeta.filterKeys { it != "io.modelcontextprotocol/clientInfo" }
+        val valid = base + ("params" to (params + ("_meta" to withoutInfo)))
+        assertNull(R5McpWireAdmission.check(valid, R5McpWireAdmission.MODERN, "tools/call", "kelpie_browser_control"))
+
+        val withoutCapabilities = originalMeta.filterKeys { it != "io.modelcontextprotocol/clientCapabilities" }
+        val invalid = base + ("params" to (params + ("_meta" to withoutCapabilities)))
+        assertEquals(
+            -32602,
+            R5McpWireAdmission.check(invalid, R5McpWireAdmission.MODERN, "tools/call", "kelpie_browser_control")?.code,
+        )
+    }
+
+    @Test
     fun LegacyHandshakeWithout2026MetadataRemainsSupportedForExistingClients() {
         val legacy = mapOf<String, Any?>("method" to "initialize", "params" to emptyMap<String, Any>())
         assertNull(R5McpWireAdmission.check(legacy, null, null, null))
