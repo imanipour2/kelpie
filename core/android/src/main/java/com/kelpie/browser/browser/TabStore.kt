@@ -96,6 +96,33 @@ class TabStore(
         return tab
     }
 
+    /** Create an agent-owned background tab without changing the visible or private WebView. */
+    fun addBackgroundTab(url: String): BrowserTab? {
+        if (!BackgroundTabPolicy.canCreate(_tabs.value.map { it.id }, _activeTabId.value)) return null
+        val tab = createTab(isStartPage = false)
+        return try {
+            tab.currentUrl = url
+            _tabs.value = _tabs.value + tab
+            tab.webView.loadUrl(url)
+            persistSession()
+            tab
+        } catch (_: RuntimeException) {
+            // Do not leave a half-created tab or an untracked WebView after a
+            // failed load dispatch. Never switch the active renderer on failure.
+            _tabs.value = _tabs.value.filterNot { it.id == tab.id }
+            destroyWebView(tab.webView)
+            persistSession()
+            null
+        }
+    }
+
+    /** Fail closed if asked to destroy the renderer currently owned by the UI/agent. */
+    fun closeBackgroundTab(id: String): Boolean {
+        if (!BackgroundTabPolicy.canClose(_tabs.value.map { it.id }, _activeTabId.value, id)) return false
+        closeTab(id)
+        return _tabs.value.none { it.id == id }
+    }
+
     fun closeTab(id: String) {
         if (id == _activeTabId.value) {
             com.kelpie.browser.connect.NessieConnection

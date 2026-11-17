@@ -106,6 +106,25 @@ internal class R5NativeBrowserPort(
                             mapOf("kind" to "tabs", "tabs" to R5AgentTabProjection.publicSnapshot(observed)),
                         )
                     }
+                    Operation.OPEN_TAB -> {
+                        val store = ctx.tabStore ?: return@withContext AdapterOutcome.Failed
+                        val url = command.targetUrl ?: return@withContext AdapterOutcome.Failed
+                        val opened = store.addBackgroundTab(url) ?: return@withContext AdapterOutcome.Failed
+                        if (store.activeTab?.id != tab.id) return@withContext AdapterOutcome.Uncertain
+                        Pair(opened.id, mapOf("kind" to "open_tab", "tabId" to opened.id))
+                    }
+                    Operation.CLOSE_TAB -> {
+                        val store = ctx.tabStore ?: return@withContext AdapterOutcome.Failed
+                        val targetId = command.targetTabId ?: return@withContext AdapterOutcome.Failed
+                        val expectedEpoch = command.targetDocumentEpoch ?: return@withContext AdapterOutcome.Failed
+                        val targetTab =
+                            store.tabs.value.firstOrNull { it.id == targetId }
+                                ?: return@withContext AdapterOutcome.Failed
+                        if (targetTab.documentVersion != expectedEpoch) return@withContext AdapterOutcome.Failed
+                        if (!store.closeBackgroundTab(targetId)) return@withContext AdapterOutcome.Failed
+                        if (store.activeTab?.id != tab.id) return@withContext AdapterOutcome.Uncertain
+                        Pair(targetId, mapOf("kind" to "close_tab", "tabId" to targetId))
+                    }
                     Operation.READ_DOM -> {
                         val raw = evaluate(view, R5WebViewActionScripts.SNAPSHOT) ?: return@withContext AdapterOutcome.Failed
                         val json =
@@ -291,6 +310,17 @@ internal class R5NativeBrowserPort(
                 Operation.LIST_TABS -> {
                     val store = ctx.tabStore ?: return@withContext false
                     recorded.expected == R5AgentTabProjection.stableIdentity(R5AgentTabProjection.fromStore(store))
+                }
+                Operation.OPEN_TAB -> {
+                    val store = ctx.tabStore ?: return@withContext false
+                    store.activeTab?.id == before.tabId &&
+                        store.tabs.value.any { it.id == recorded.expected && it.id != before.tabId }
+                }
+                Operation.CLOSE_TAB -> {
+                    val store = ctx.tabStore ?: return@withContext false
+                    store.activeTab?.id == before.tabId &&
+                        recorded.expected == command.targetTabId &&
+                        store.tabs.value.none { it.id == command.targetTabId }
                 }
                 Operation.NAVIGATE -> live.webView.url?.substringBefore("#") == recorded.expected?.substringBefore("#")
                 Operation.FILL, Operation.TYPE -> {

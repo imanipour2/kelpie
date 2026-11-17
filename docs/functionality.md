@@ -32,6 +32,8 @@ other apps' cookies. Draft only: no installation, merge or public release.
 
 **R5 beta native safety contract:** General agent consent cannot approve PAYMENTS, PUBLISH, IRREVERSIBLE_DELETE or EXPORT_CREDENTIALS operations; the admission layer returns SENSITIVE_ACTION_REQUIRES_APPROVAL. Site-specific click side effects also need deeper independent semantics checks before beta.
 
+**R5 QA-only inactive-tab operations (source candidate):** The locally owner-approved `kelpie_browser_actions` MCP tool adds `tabs.new` (a validated HTTP(S) URL, creates a background tab without selecting it) and `tabs.close` (an observed inactive `targetTabId`, never the active renderer). Every call is paired-principal, native-consent, generation/epoch, unique command ID and monotonic sequence checked by the existing R5 runtime. Neither operation launches or foregrounds the Android Activity. `tabs.select`, native private-display renderer handoff and connector tool discovery remain open; this is not a public beta.
+
 **Android address-bar usability (R5 QA candidate, not a release):** When the URL/search field is being edited and contains text, a 48dp accessible **Clear address** control appears inside the field. It clears the editable buffer without navigating or changing the current page, then retains input focus; when not editing, the existing Reload/Stop control remains. The bottom toolbar groups Back and Forward together, keeps the address field flexible, and uses 48dp touch targets. This does not grant any agent or background privilege.
 
 ## Android R5 private agent QA — not released
@@ -855,3 +857,5 @@ The full privacy/security contract and gated rollout are in [EF-OPS-KELPIE-PRODU
 ### R5 owner-consented Android QA screenshot behavior (unreleased)
 
 Only in the isolated R5 QA Android build, an authenticated, locally approved agent may obtain a screenshot of the exact active Kelpie WebView. The native private-display path serves genuine background captures; when the browser is visibly resumed and the private display has fully restored, a bounded app-WebView-only draw may serve a foreground capture. Both require the still-current native consent/tab/document and fail closed on device lock, STOP, in-progress private capture, identity change or unstable frame. No other Android app or lock-screen content is captured. This is a development candidate, not a public release or proof of E2E connection.
+
+K2 close-tab freshness: a mutation also requires the inactive tab's **targetDocumentEpoch** from a new tabs.list snapshot; closure rejects a changed target document or absent target. The active renderer must remain unchanged.
