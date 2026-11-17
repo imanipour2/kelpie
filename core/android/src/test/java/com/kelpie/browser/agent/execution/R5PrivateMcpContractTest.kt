@@ -45,6 +45,84 @@ class R5PrivateMcpContractTest {
         assertNull(R5PrivateMcpContract.expectedGeneration(browserCall("capabilities")))
     }
 
+    private fun wrappedBrowserCall(
+        method: String,
+        values: Map<String, Any?> = emptyMap(),
+        name: String = R5PrivateMcpContract.BROWSER_TOOL,
+        version: Int = 1,
+    ): Map<String, Any?> =
+        mapOf(
+            "method" to "tools/call",
+            "params" to
+                mapOf(
+                    "name" to name,
+                    "arguments" to
+                        mapOf(
+                            "request" to
+                                mapOf("version" to version, "method" to method, "params" to values),
+                        ),
+                ),
+        )
+
+    @Test
+    fun installedBrowserControlWrapperAllowsOnlyStaticDiscoveryWithoutGrant() {
+        for (method in listOf("capabilities", "documentation")) {
+            val body = wrappedBrowserCall(method)
+            assertTrue(R5PrivateMcpContract.isGrantExempt(body))
+            assertFalse(R5AgentDeliveryGuard.requiresGrant("mcp", body))
+            assertEquals(method, R5PrivateMcpContract.toolArguments(body)?.get("method"))
+        }
+        for (method in listOf("tabs.list", "tab.snapshot", "tab.screenshot", "tab.goto")) {
+            val body = wrappedBrowserCall(method)
+            assertFalse(R5PrivateMcpContract.isGrantExempt(body))
+            assertTrue(R5AgentDeliveryGuard.requiresGrant("mcp", body))
+        }
+    }
+
+    @Test
+    fun wrappedGenerationIsStillStrictlyRequiredForAnyPrivilegedOperation() {
+        val values = mapOf<String, Any?>("consentGeneration" to "native-generation")
+        val body = wrappedBrowserCall("tabs.list", values)
+        assertEquals("native-generation", R5PrivateMcpContract.expectedGeneration(body))
+        assertEquals("native-generation", R5AgentDeliveryGuard.expectedGeneration("mcp", body))
+        assertNull(R5PrivateMcpContract.expectedGeneration(wrappedBrowserCall("tabs.list")))
+    }
+
+    @Test
+    fun ambiguousOrSpoofedWrappersAreNeverExemptOrUnwrapped() {
+        val valid = wrappedBrowserCall("capabilities")
+        val fakeTool = wrappedBrowserCall("capabilities", name = R5PrivateMcpContract.ACTION_TOOL)
+        val versionMismatch = wrappedBrowserCall("capabilities", version = 2)
+        val wrongType =
+            mapOf<String, Any?>(
+                "method" to "tools/call",
+                "params" to
+                    mapOf(
+                        "name" to R5PrivateMcpContract.BROWSER_TOOL,
+                        "arguments" to mapOf("request" to "capabilities"),
+                    ),
+            )
+        val ambiguous =
+            mapOf<String, Any?>(
+                "method" to "tools/call",
+                "params" to
+                    mapOf(
+                        "name" to R5PrivateMcpContract.BROWSER_TOOL,
+                        "arguments" to
+                            mapOf(
+                                "method" to "capabilities",
+                                "request" to mapOf("version" to 1, "method" to "tabs.list"),
+                            ),
+                    ),
+            )
+        assertTrue(R5PrivateMcpContract.isGrantExempt(valid))
+        for (body in listOf(fakeTool, versionMismatch, wrongType, ambiguous)) {
+            assertNull(R5PrivateMcpContract.toolArguments(body))
+            assertFalse(R5PrivateMcpContract.isGrantExempt(body))
+            assertTrue(R5AgentDeliveryGuard.requiresGrant("mcp", body))
+        }
+    }
+
     @Test
     fun nativeSessionMethodsRemainPairedClientOnlyInTheRouter() {
         for (method in listOf("request", "status", "stop")) {
