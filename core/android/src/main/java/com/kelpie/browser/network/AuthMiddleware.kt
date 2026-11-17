@@ -78,7 +78,14 @@ class AuthMiddleware(
         if (req.path == "/mcp" || req.path == "/v1/mcp") {
             if (req.headers.containsKey("origin")) return AuthDecision.Reject(403, "FORBIDDEN", "Browser Origin is not permitted on MCP")
             val versions = req.headers["mcp-protocol-version"]
-            if (versions != null && (versions.size != 1 || versions.single() !in setOf("2025-03-26", "2025-06-18"))) {
+            // Accepted header revisions are not authorization. The paired bearer and
+            // browser Origin checks above remain mandatory; R5 QA additionally
+            // validates modern per-request metadata in R5McpWireAdmission.
+            if (versions != null &&
+                (versions.size != 1 ||
+                    versions.single() !in
+                    setOf("2025-03-26", "2025-06-18", "2025-11-25", "2026-07-28"))
+            ) {
                 return AuthDecision.Reject(400, "BAD_REQUEST", "Unsupported MCP protocol version")
             }
         }
