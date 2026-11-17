@@ -40,6 +40,16 @@ internal object AccountLoginPolicy {
         path: String?,
     ): Boolean = scheme == CALLBACK_SCHEME && host == "oauth" && path == "/callback"
 
+    /** Ignore an Auth Tab cancel arriving after an accepted callback or a newer attempt. */
+    fun isCurrentLoginResult(
+        resultNonce: String?,
+        currentGeneration: String,
+        pendingAttemptGeneration: String?,
+    ): Boolean =
+        !resultNonce.isNullOrBlank() &&
+            resultNonce == currentGeneration &&
+            pendingAttemptGeneration == currentGeneration
+
     /** Every other navigation stays in the login view only over https (Google handoffs included). */
     fun allowsNavigation(scheme: String?): Boolean = scheme == "https"
 
