@@ -46,6 +46,16 @@ class R5AgentConnectionSetupTest {
     }
 
     @Test
+    fun privateChatGptTunnelNeedsNoEndpointOrSecret() {
+        val instructions = R5AgentConnectionSetup.chatGptTunnelInstructions()
+        assertTrue(instructions.contains("Secure MCP Tunnel"))
+        assertTrue(instructions.contains("tunnel_id"))
+        assertTrue(instructions.contains("native Kelpie"))
+        assertFalse(instructions.contains("Authorization: Bearer"))
+        assertFalse(instructions.contains("CONNECTED"))
+    }
+
+    @Test
     fun providerTemplatesHaveRealGuidanceButNeverAuthorize() {
         val url = "https://secure.example.com/mcp"
         for (provider in R5AgentProvider.entries) {
