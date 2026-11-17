@@ -153,6 +153,15 @@ class KelpieBrowserSession(
         TapCalibrationStore.init(browserContext)
         pairingStore = PairingStore.forContext(browserContext)
         pairingCoordinator = PairApprovalCoordinator(pairingStore)
+        agentSessionCoordinator?.isStillPaired = { id ->
+            pairingStore.listPersistent().any { it.clientId == id } ||
+                pairingStore.listSessions().any { it.clientId == id }
+        }
+        agentSessionCoordinator?.principalLabel = { id ->
+            pairingStore.listPersistent().firstOrNull { it.clientId == id }?.clientName
+                ?: pairingStore.listSessions().firstOrNull { it.clientId == id }?.clientName
+                ?: id
+        }
 
         browserView =
             ComposeView(browserContext).apply {
@@ -296,7 +305,9 @@ class KelpieBrowserSession(
             .register()
         // Isolated native-consent QA replaces only the private /mcp envelope.
         // Legacy browser methods remain blocked by Router.consentOnlyQa.
-        r5AgentCoordinator?.registerPrivateMcp(router)
+        r5AgentCoordinator?.registerPrivateMcp(router) { principal ->
+            agentSessionCoordinator?.observeAuthenticatedPrincipal(principal)
+        }
     }
 
     private fun startServer(deviceInfo: DeviceInfo) {
