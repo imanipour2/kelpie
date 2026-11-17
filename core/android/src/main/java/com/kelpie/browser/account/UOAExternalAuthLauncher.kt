@@ -13,7 +13,10 @@ import androidx.browser.customtabs.CustomTabsIntent
  */
 internal object UOAExternalAuthLauncher {
     /** Returns false instead of creating an embedded login if no browser can launch. */
-    fun launch(activity: ComponentActivity, requestedUrl: String): Boolean {
+    fun launch(
+        activity: ComponentActivity,
+        requestedUrl: String,
+    ): Boolean {
         if (!AccountLoginPolicy.isAuthorizeUrl(requestedUrl)) return false
         val url = Uri.parse(requestedUrl)
 
