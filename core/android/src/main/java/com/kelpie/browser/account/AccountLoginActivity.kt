@@ -10,13 +10,11 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.LinearLayout
 import android.widget.TextView
-import com.kelpie.browser.browser.BROWSER_USER_AGENT
 
 /**
- * Hosted UOA login in the main process and the default WebView profile, so the Google (and UOA)
- * cookies and storage it creates are shared with every browser tab by design. It is not a tab:
- * it is never registered with the tab store, history, session persistence or automation, and it
- * exposes no JavaScript bridge.
+ * Legacy embedded login view retained only for compatibility with older call paths.
+ * New UOA login requests use the supported external system browser instead.
+ * Do not route Google authentication back through this WebView.
  */
 class AccountLoginActivity : Activity() {
     private var webView: WebView? = null
@@ -72,7 +70,6 @@ class AccountLoginActivity : Activity() {
             domStorageEnabled = true
             loadWithOverviewMode = true
             useWideViewPort = true
-            userAgentString = BROWSER_USER_AGENT
             allowFileAccess = false
             allowContentAccess = false
             // Popups (Google account choosers) hand off in this same view.
