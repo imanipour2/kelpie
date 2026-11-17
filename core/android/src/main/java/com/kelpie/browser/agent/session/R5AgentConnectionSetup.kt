@@ -79,6 +79,20 @@ internal object R5AgentConnectionSetup {
         return "https://$host/mcp"
     }
 
+    fun chatGptTunnelInstructions(): String =
+        listOf(
+            "Kelpie R5 — private ChatGPT MCP tunnel setup",
+            "Open ChatGPT on the web and choose Plugins > Add custom MCP server.",
+            "Under Connection, choose Tunnel and select an available Secure MCP Tunnel.",
+            "If required, enter a tunnel_id from your authorized OpenAI Platform tunnel setup.",
+            "Follow your workspace's authorization and risk acknowledgement steps.",
+            "Review discovered MCP tools, install the plugin, and explicitly approve the",
+            "native Kelpie session on your Android device.",
+            "Finally verify tools/list, actual tabs and a fresh page observation.",
+            "Tunnel readiness alone does not mean the browser agent is connected.",
+            "Never share your tunnel API key, password, bank data or authorization token.",
+        ).joinToString("\n")
+
     fun setupInstructions(
         provider: R5AgentProvider,
         rawEndpoint: String,
