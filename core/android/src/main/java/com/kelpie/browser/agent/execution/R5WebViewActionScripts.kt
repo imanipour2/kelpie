@@ -8,13 +8,32 @@ internal object R5WebViewActionScripts {
     private fun q(text: String) = Json.encodeToString(text)
 
     const val SNAPSHOT = """
-        (() => JSON.stringify({url:location.href,title:document.title,
+        (() => {const uniqueSelector=e=>{
+          if(e.id){const byId='#'+CSS.escape(e.id);
+            if(document.querySelectorAll(byId).length===1)return byId;}
+          const parts=[];let node=e;
+          for(let depth=0;node&&node.nodeType===1&&depth<24;depth++){
+            const parent=node.parentElement;let part=node.localName;
+            if(parent){let same=0,index=0;
+              for(const sibling of parent.children){
+                if(sibling.localName===node.localName){
+                  same++;if(sibling===node)index=same;}}
+              if(same>1)part+=':nth-of-type('+index+')';}
+            if(node.id)part+='#'+CSS.escape(node.id);
+            parts.unshift(part);
+            if(node.id&&document.querySelectorAll('#'+CSS.escape(node.id)).length===1)break;
+            node=parent;}
+          const css=parts.join(' > ');
+          if(css.length>500)return '';
+          try{return document.querySelectorAll(css).length===1?css:'';}catch(_){return '';}};
+        return JSON.stringify({url:location.href,title:document.title,
           text:(document.body?.innerText||'').slice(0,28000),
           elements:[...document.querySelectorAll('a,button,input,textarea,select,[role=tab]')]
             .filter(e=>e.getClientRects().length).slice(0,160).map(e=>({
               tag:e.tagName.toLowerCase(),name:(e.getAttribute('aria-label')||
               e.getAttribute('placeholder')||e.innerText||'').slice(0,120),
-              selector:e.id ? '#'+CSS.escape(e.id) : '',
+              selector:uniqueSelector(e),
+              role:(e.getAttribute('role')||'').slice(0,48),
               type:(e.getAttribute('type')||'').slice(0,24)})),
           scroll:{x:scrollX,y:scrollY},
           // Observation only: challenge ownership and answers stay with the
@@ -22,7 +41,7 @@ internal object R5WebViewActionScripts {
           humanChallengeDetected:
             !!document.querySelector('[class*=captcha],[id*=captcha],.cf-turnstile')||
             [...document.querySelectorAll('iframe[src]')].some(f=>
-              /recaptcha|hcaptcha|challenges\.cloudflare\.com|turnstile/i.test(f.src))}))()
+              /recaptcha|hcaptcha|challenges\.cloudflare\.com|turnstile/i.test(f.src))})})()
         """
 
     // The agent controls ordinary navigation and explicitly non-sensitive buttons.
