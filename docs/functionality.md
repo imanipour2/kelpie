@@ -850,3 +850,9 @@ The full privacy/security contract and gated rollout are in [EF-OPS-KELPIE-PRODU
 ### R5 owner-consented Android QA screenshot behavior (unreleased)
 
 Only in the isolated R5 QA Android build, an authenticated, locally approved agent may obtain a screenshot of the exact active Kelpie WebView. The native private-display path serves genuine background captures; when the browser is visibly resumed and the private display has fully restored, a bounded app-WebView-only draw may serve a foreground capture. Both require the still-current native consent/tab/document and fail closed on device lock, STOP, in-progress private capture, identity change or unstable frame. No other Android app or lock-screen content is captured. This is a development candidate, not a public release or proof of E2E connection.
+
+### R5 owner-only private beta QA — address editor and background tab management (2026-11-17 draft)
+
+The Android URL/search editor displays a clear-text × only while focused/nonempty; clearing never navigates. Back/Forward share a stable visual group with 48dp targets. Separate QA beta package `com.kelpie.browser.r5betaverify` uses 18461 and does not disturb the existing `r5fullverify` on 18460.
+
+The owner-consented R5 MCP facade supports `tabs.new` (unselected/background), `tabs.close` (inactive/unattached), `tabs.select` (rehosts the real Kelpie WebView in the existing private VirtualDisplay, no Activity foreground), `tab.goto`, click/type/fill/select/wait, scrolling, Back/Forward, fresh DOM and owned PNG. All mutations retain verified principal/generation, sequence replay and native STOP protections. See [ADR-R5-004](adr/ADR-R5-004-owner-consented-private-tab-lifecycle.md) and [QA acceptance](qa/EF-OPS-KELPIE-R5-BETA-ACCEPTANCE-20261117.md). This Android-only draft requires physical QA, outstanding P0 security closure and iOS parity decision before main/release.

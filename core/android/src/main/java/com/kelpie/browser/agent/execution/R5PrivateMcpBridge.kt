@@ -77,7 +77,7 @@ internal class R5PrivateMcpBridge(
         listOf(
             mapOf(
                 "name" to R5PrivateMcpContract.BROWSER_TOOL,
-                "description" to "Authenticated R5 QA: discover native consent, list owned tabs, observe a fresh DOM or PNG. Not remote JS.",
+                "description" to "Owner-consented R5 QA browser: tabs, navigation, DOM, scroll, clicks, normal form input and app-owned PNG; never other apps or remote JS.",
                 "inputSchema" to
                     mapOf(
                         "type" to "object",
@@ -88,13 +88,13 @@ internal class R5PrivateMcpBridge(
                                 "method" to
                                     mapOf(
                                         "type" to "string",
-                                        "enum" to listOf("capabilities", "documentation", "tabs.list", "tab.snapshot", "tab.screenshot"),
+                                        "enum" to (listOf("capabilities", "documentation", "tabs.list", "tab.snapshot", "tab.screenshot") + R5PrivateMcpActions.methods),
                                     ),
                                 "tabId" to mapOf("type" to "string"),
                                 "params" to mapOf("type" to "object"),
                             ),
                     ),
-                "annotations" to mapOf("readOnlyHint" to true),
+                "annotations" to mapOf("readOnlyHint" to false),
             ),
             mapOf(
                 "name" to R5PrivateMcpContract.ACTION_TOOL,
@@ -154,6 +154,9 @@ internal class R5PrivateMcpBridge(
             return rpcError(id, -32602, "Unsupported browser tool/version")
         }
         val action = arguments["method"] as? String ?: return rpcError(id, -32602, "Browser method required")
+        // The ChatGPT connector currently surfaces only BROWSER_TOOL. Reuse the
+        // exact same native admission/replay path for its advertised write methods.
+        val controlMutation = name == R5PrivateMcpContract.BROWSER_TOOL && action in R5PrivateMcpActions.methods
         if (!actionTool && action == "documentation") {
             return toolResult(
                 id,
@@ -193,7 +196,7 @@ internal class R5PrivateMcpBridge(
             return toolResult(id, outcome, status != 200 || outcome["success"] != true)
         }
         val operation =
-            if (actionTool) {
+            if (actionTool || controlMutation) {
                 R5PrivateMcpActions.operation(action)
             } else {
                 when (action) {
@@ -218,7 +221,7 @@ internal class R5PrivateMcpBridge(
                 "clientSequence" to sequence,
                 "consentGeneration" to generation,
             )
-        if (actionTool) {
+        if (actionTool || controlMutation) {
             val extra =
                 R5PrivateMcpActions.safeArguments(action, actionParams)
                     ?: return rpcError(id, -32602, "Mutation input missing or invalid")
@@ -231,7 +234,7 @@ internal class R5PrivateMcpBridge(
         if (status != 200 || outcome["status"] != "EXECUTED") {
             return toolResult(id, outcome, isError = true)
         }
-        if (actionTool) return toolResult(id, outcome)
+        if (actionTool || controlMutation) return toolResult(id, outcome)
         val payload = outcome["data"] as? Map<*, *> ?: return toolResult(id, mapOf("error" to "NO_EVIDENCE"), true)
         if (operation == "READ_DOM") {
             val snapshot = payload["snapshotJson"] as? String ?: return toolResult(id, mapOf("error" to "NO_DOM"), true)

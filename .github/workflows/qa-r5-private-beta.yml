@@ -1,0 +1,123 @@
+name: QA R5 Private Beta Candidate Android (No Auto Install)
+
+on:
+  pull_request:
+    paths:
+      - 'apps/android/**'
+      - 'core/android/**'
+      - '.github/workflows/qa-r5-private-beta.yml'
+      - 'scripts/qa/r5-s24-acceptance.py'
+      - 'scripts/qa/r5-s24-background-acceptance.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r5-private-beta-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  private-beta-build:
+    name: Verify isolated R5 private beta native package, agent tab operations and STOP gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6.0.3
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: ./.github/actions/browser-contract
+      - uses: actions/setup-java@v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4.0.3
+      - name: Install SDK tools
+        run: sdkmanager "platforms;android-34" "build-tools;35.0.0"
+      - uses: actions/cache@v5.0.5
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            apps/android/.gradle
+          key: gradle-${{ runner.os }}-${{ hashFiles('core/android/**/*.gradle*', 'apps/android/**/*.gradle*', 'apps/android/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+      - name: Validate S24 owner-safe acceptance harness without ADB
+        run: |
+          python3 -m py_compile scripts/qa/r5-s24-acceptance.py
+          python3 -m py_compile scripts/qa/r5-s24-background-acceptance.py
+          python3 scripts/qa/r5-s24-background-acceptance.py --help > /dev/null
+          python3 scripts/qa/r5-s24-acceptance.py --help > /dev/null
+      - name: KtLint, agent JVM tests and private-display R5 private beta QA APK
+        working-directory: apps/android
+        run: |
+          ./gradlew --no-daemon \
+            -PkelpieR5PrivateBetaQaProfile=true \
+            :kelpie-browser:ktlintCheck \
+            :kelpie-browser:testDebugUnitTest \
+            :app:assembleDebug
+      - name: Android Lint for R5 browser and isolated app
+        working-directory: apps/android
+        run: |
+          ./gradlew --no-daemon \
+            -PkelpieR5PrivateBetaQaProfile=true \
+            :kelpie-browser:lintDebug \
+            :app:lintDebug
+      - name: Verify both BuildConfig ports, unique identity, signature and native binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=apps/android/app/build/outputs/apk/debug/app-debug.apk
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          SIGN="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          CORE=core/android/build/generated/source/buildConfig/debug/com/kelpie/browser/BuildConfig.java
+          APP=apps/android/app/build/generated/source/buildConfig/debug/com/unlikeotherai/kelpie/app/BuildConfig.java
+          test -s "$CORE" && test -s "$APP" && test -s "$APK"
+          grep -Eq 'LOCAL_HTTP_PORT[[:space:]]*=[[:space:]]*18461;' "$CORE"
+          grep -Eq 'LOCAL_HTTP_PORT[[:space:]]*=[[:space:]]*18461;' "$APP"
+          grep -Eq 'PRIVATE_CAPTURE_QA_ENABLED[[:space:]]*=[[:space:]]*false;' "$APP"
+          grep -Eq 'R5_NATIVE_CONSENT_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
+          "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.browser.r5betaverify'"
+          "$AAPT" dump badging "$APK" | grep -F "versionCode='34' versionName='0.2.14-r5-private-beta-qa'"
+          "$SIGN" verify --verbose --print-certs "$APK"
+          ! "$AAPT" dump permissions "$APK" | grep -F 'android.permission.RECORD_AUDIO'
+          native_count=0
+          while IFS= read -r member; do
+            native_count=$((native_count + 1))
+            unzip -p "$APK" "$member" > /tmp/kelpie-r5-source-native.so
+            while IFS= read -r alignment; do
+              if (( alignment < 16384 )); then
+                echo "::error::Unaligned native segment in $member ($alignment)"
+                exit 1
+              fi
+            done < <(readelf -lW /tmp/kelpie-r5-source-native.so | awk '$1 == "LOAD" {print $NF}')
+          done < <(unzip -Z1 "$APK" | grep -E '^lib/(arm64-v8a|x86_64)/.*[.]so$')
+          test "$native_count" -gt 0
+          # Native principal-bound runtime is present; old unsafe routes stay gated.
+          grep -F 'R5AgentCoordinator(activity, handlerContext)' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
+          grep -F 'backgroundAgentQa = agentBackgroundQaEnabled' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
+          grep -F 'useNativeFrameProof = true' core/android/src/main/java/com/kelpie/browser/agent/execution/R5AgentCoordinator.kt
+          grep -F 'AgentOperationRuntime(consent' core/android/src/main/java/com/kelpie/browser/agent/execution/R5AgentCoordinator.kt
+          grep -Eq 'R5_BACKGROUND_AGENT_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
+          sha256sum "$APK" > apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
+          {
+            echo "source_commit=$(git rev-parse HEAD)"
+            echo "package=com.kelpie.browser.r5betaverify"
+            echo "version=0.2.14-r5-private-beta-qa"
+            echo "versionCode=34"
+            echo "port=18461"
+            echo "agent_routes=OWNER_GATED_R5_PRIVATE_BETA_TAB_OPERATIONS"
+            echo "signature=debug-only"
+            echo "install=OWNER_PRIVATE_BETA_AFTER_SIGNER_AND_HARDWARE_PREFLIGHT"
+            echo "artifact_sha256=$(sha256sum "$APK" | awk '{print $1}')"
+          } > apps/android/app/build/outputs/apk/debug/provenance.txt
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: kelpie-r5-private-beta-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            apps/android/app/build/outputs/apk/debug/app-debug.apk
+            apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
+            apps/android/app/build/outputs/apk/debug/provenance.txt
+          if-no-files-found: error
+          retention-days: 14

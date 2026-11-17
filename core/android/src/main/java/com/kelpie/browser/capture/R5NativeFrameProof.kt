@@ -57,6 +57,34 @@ internal class R5NativeFrameProof(
         }
     }
 
+    /** Swap only the app-owned WebView; retain the independent native proof markers. */
+    fun swapWebView(
+        oldView: WebView,
+        nextView: WebView,
+    ): Boolean {
+        val frame = root ?: return false
+        if (oldView.parent !== frame || nextView.parent != null || oldView === nextView) return false
+        return try {
+            frame.removeView(oldView)
+            frame.addView(
+                nextView,
+                0,
+                FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
+            )
+            nextView.parent === frame
+        } catch (_: RuntimeException) {
+            (nextView.parent as? ViewGroup)?.removeView(nextView)
+            if (oldView.parent == null) {
+                frame.addView(
+                    oldView,
+                    0,
+                    FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
+                )
+            }
+            false
+        }
+    }
+
     fun nextProof(): R5FrameProofEpochSequence.Token {
         check(root != null) { "Native frame proof renderer is not attached" }
         return sequence.next()

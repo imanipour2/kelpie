@@ -209,6 +209,100 @@ class AgentOperationRuntime(
         }
     }
 
+    /**
+     * Tab lifecycle operations share the SAME command lock, replay sequence and
+     * local consent generation as WebView commands. Their postcondition can
+     * legitimately change the active tab and native renderer identity, so the
+     * ordinary single-WebView adapter cannot verify them.
+     */
+    suspend fun dispatchTabMutation(
+        command: AgentCommand,
+        verifiedPrincipal: String?,
+        observe: suspend () -> ObservedTarget?,
+        mutate: suspend () -> Boolean,
+        verify: suspend () -> Boolean,
+    ): AgentReceipt {
+        if (verifiedPrincipal.isNullOrBlank() || verifiedPrincipal != command.principalId) {
+            return rejected(command, AdmissionCode.WRONG_PRINCIPAL)
+        }
+        val job = currentCoroutineContext()[Job]
+        if (job != null) synchronized(jobsLock) { running += job }
+        var effectStarted = false
+        return try {
+            commandMutex.withLock {
+                val start =
+                    consent.snapshot() as? SessionConsentCore.State.Active
+                        ?: return@withLock rejected(command, AdmissionCode.NO_ACTIVE_SESSION)
+                if (start.principalId != verifiedPrincipal) return@withLock rejected(command, AdmissionCode.WRONG_PRINCIPAL)
+                if (start.generation != command.consentGeneration) return@withLock rejected(command, AdmissionCode.WRONG_GENERATION)
+                if (start.locked) return@withLock rejected(command, AdmissionCode.LOCKED)
+                if (commandGeneration != start.generation) {
+                    usedIds.clear()
+                    lastSequencedCommand = 0L
+                    commandGeneration = start.generation
+                }
+                if (command.clientSequence <= 0L ||
+                    command.clientSequence <= lastSequencedCommand ||
+                    command.commandId in usedIds
+                ) {
+                    return@withLock AgentReceipt(command.commandId, ExecutionStatus.REJECTED, ExecutionCode.DUPLICATE_COMMAND)
+                }
+                val before =
+                    try {
+                        observe()
+                    } catch (_: Exception) {
+                        null
+                    } ?: return@withLock AgentReceipt(command.commandId, ExecutionStatus.FAILED, ExecutionCode.NO_TARGET)
+                val admission = AgentAdmissionPolicy.check(start, command, before.tabId, before.documentEpoch)
+                if (!admission.allowed) return@withLock rejected(command, admission.code, before)
+                if (command.tabId != before.tabId || command.observedDocumentEpoch != before.documentEpoch) {
+                    return@withLock rejected(command, AdmissionCode.STALE_DOCUMENT, before)
+                }
+                lastSequencedCommand = command.clientSequence
+                if (usedIds.size >= maxTrackedCommands) usedIds.remove(usedIds.first())
+                usedIds.add(command.commandId)
+                val changed =
+                    try {
+                        withTimeout(MAX_OPERATION_MS) {
+                            if (consent.snapshot() != start || observe() != before) return@withTimeout false
+                            effectStarted = true
+                            mutate()
+                        }
+                    } catch (_: TimeoutCancellationException) {
+                        return@withLock AgentReceipt(command.commandId, ExecutionStatus.UNCERTAIN, ExecutionCode.OPERATION_TIMEOUT, before = before)
+                    } catch (_: Exception) {
+                        return@withLock AgentReceipt(command.commandId, ExecutionStatus.UNCERTAIN, ExecutionCode.INTERNAL_FAILURE, before = before)
+                    }
+                val after = runCatching { observe() }.getOrNull()
+                if (consent.snapshot() != start) {
+                    return@withLock AgentReceipt(command.commandId, ExecutionStatus.UNCERTAIN, ExecutionCode.SESSION_REVOKED, before = before, after = after)
+                }
+                if (!changed) {
+                    return@withLock AgentReceipt(command.commandId, ExecutionStatus.FAILED, ExecutionCode.ADAPTER_FAILURE, before = before, after = after)
+                }
+                val proved =
+                    try {
+                        withTimeout(MAX_OPERATION_MS) { verify() }
+                    } catch (_: Exception) {
+                        false
+                    }
+                if (consent.snapshot() != start || !proved) {
+                    AgentReceipt(command.commandId, ExecutionStatus.UNCERTAIN, ExecutionCode.UNVERIFIED_EFFECT, before = before, after = after)
+                } else {
+                    AgentReceipt(command.commandId, ExecutionStatus.EXECUTED, ExecutionCode.VERIFIED_EFFECT, before = before, after = after)
+                }
+            }
+        } catch (_: CancellationException) {
+            AgentReceipt(
+                command.commandId,
+                if (effectStarted) ExecutionStatus.UNCERTAIN else ExecutionStatus.CANCELLED,
+                ExecutionCode.ADAPTER_CANCELLED,
+            )
+        } finally {
+            if (job != null) synchronized(jobsLock) { running.remove(job) }
+        }
+    }
+
     private fun rejected(
         command: AgentCommand,
         code: AdmissionCode,

@@ -73,6 +73,21 @@ class R5AgentCoordinator(
 
     @Volatile private var closed = false
 
+    private val tabCommands by lazy(LazyThreadSafetyMode.NONE) {
+        R5AgentTabCommands(
+            activity = activity,
+            context = ctx,
+            renderer = renderer,
+            nativePort = nativePort,
+            consent = consent,
+            transferMutex = transferMutex,
+            ownership = { ownership },
+            isReady = { ready },
+            setReady = { ready = it },
+            onSelected = { currentTabId = it },
+        )
+    }
+
     // The Activity can stay RESUMED through a keyguard round-trip. Android
     // delivers window focus independently of onResume / USER_PRESENT, so a
     // valid same-generation unlock must be rechecked when real focus returns.
@@ -166,7 +181,8 @@ class R5AgentCoordinator(
                         "status" to if (ready) "READY" else "SUSPENDED_OR_TRANSFER",
                         "owner" to ownership.status().name,
                         "privateRenderer" to renderer.state.value.name,
-                        "supported" to listOf("LIST_TABS", "NAVIGATE", "BACK", "FORWARD", "READ_DOM", "CLICK", "FILL", "TYPE", "SELECT", "WAIT", "SCROLL", "SCREENSHOT"),
+                        "supported" to
+                            listOf("LIST_TABS", "OPEN_TAB", "CLOSE_TAB", "SWITCH_TAB", "NAVIGATE", "BACK", "FORWARD", "READ_DOM", "CLICK", "FILL", "TYPE", "SELECT", "WAIT", "SCROLL", "SCREENSHOT"),
                         "captureCapabilities" to R5VisionCaptureRequest.capabilities(),
                     ),
                 )
@@ -235,7 +251,7 @@ class R5AgentCoordinator(
                     observedDocumentEpoch = epoch,
                     operation = operation,
                     targetUrl = body["url"] as? String,
-                    selector = body["selector"] as? String,
+                    selector = (body["targetTabId"] as? String) ?: (body["selector"] as? String),
                     inputText = body["text"] as? String,
                     scrollDeltaX = (body["scrollX"] as? Number)?.toDouble() ?: 0.0,
                     scrollDeltaY = (body["scrollY"] as? Number)?.toDouble() ?: 0.0,
@@ -245,7 +261,18 @@ class R5AgentCoordinator(
             // Capture a stable runtime reference: STOP may replace the active
             // generation while this suspended action is in flight.
             val selectedRuntime = runtime
-            val receipt = selectedRuntime.dispatch(command, client)
+            val receipt =
+                if (operation in setOf(Operation.OPEN_TAB, Operation.CLOSE_TAB, Operation.SWITCH_TAB)) {
+                    selectedRuntime.dispatchTabMutation(
+                        command,
+                        client,
+                        observe = tabCommands::observe,
+                        mutate = { tabCommands.perform(command) },
+                        verify = { tabCommands.verify(command) },
+                    )
+                } else {
+                    selectedRuntime.dispatch(command, client)
+                }
             val stillOwner = canUse(client, generation, consent.snapshot() as? SessionConsentCore.State.Active) && ready
             val payload =
                 if (receipt.status == ExecutionStatus.EXECUTED && stillOwner) {
