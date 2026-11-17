@@ -135,7 +135,7 @@ class R5AgentCoordinator(
                         "status" to if (ready) "READY" else "SUSPENDED_OR_TRANSFER",
                         "owner" to ownership.status().name,
                         "privateRenderer" to renderer.state.value.name,
-                        "supported" to listOf("NAVIGATE", "READ_DOM", "CLICK", "FILL", "TYPE", "SCROLL", "SCREENSHOT"),
+                        "supported" to listOf("NAVIGATE", "BACK", "FORWARD", "READ_DOM", "CLICK", "FILL", "TYPE", "SELECT", "WAIT", "SCROLL", "SCREENSHOT"),
                         "captureCapabilities" to R5VisionCaptureRequest.capabilities(),
                     ),
                 )

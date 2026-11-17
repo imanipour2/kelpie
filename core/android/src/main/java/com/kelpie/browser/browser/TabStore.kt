@@ -2,7 +2,10 @@ package com.kelpie.browser.browser
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.view.View
 import android.webkit.WebView
+import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewFeature
 import com.kelpie.browser.handlers.HandlerContext
 import com.kelpie.browser.handlers.WebSocketHandler
 import com.kelpie.browser.kelpieActivity
@@ -156,8 +159,21 @@ class TabStore(
         val webView =
             WebView(context).apply {
                 PartitionRegistry.bind(this, profile)
+                // Keep the real Android AutofillService responsible for credential
+                // selection, save prompts and biometric gates. Never pass passwords
+                // through the remote R5 agent command channel or a local vault.
+                importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
+                // WebAuthn is enabled only for websites with a verified Digital
+                // Asset Link to this app; privileged arbitrary-site browser
+                // WebAuthn cannot be claimed by a normal sideloaded QA APK.
+                if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_AUTHENTICATION)) {
+                    WebSettingsCompat.setWebAuthenticationSupport(
+                        settings,
+                        WebSettingsCompat.WEB_AUTHENTICATION_SUPPORT_FOR_APP,
+                    )
+                }
                 settings.loadWithOverviewMode = true
                 settings.useWideViewPort = true
                 settings.setSupportMultipleWindows(false)
