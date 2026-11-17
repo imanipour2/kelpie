@@ -150,13 +150,13 @@ internal class R5PrivateMcpBridge(
         }
         val actionTool = name == R5PrivateMcpContract.ACTION_TOOL
         val supportedTool = name == R5PrivateMcpContract.BROWSER_TOOL || actionTool
-        // The ChatGPT connector currently surfaces only BROWSER_TOOL. Reuse the
-        // exact same native admission/replay path for its advertised write methods.
-        val controlMutation = name == R5PrivateMcpContract.BROWSER_TOOL && action in R5PrivateMcpActions.methods
         if (!supportedTool || (arguments["version"] as? Number)?.toInt() != 1) {
             return rpcError(id, -32602, "Unsupported browser tool/version")
         }
         val action = arguments["method"] as? String ?: return rpcError(id, -32602, "Browser method required")
+        // The ChatGPT connector currently surfaces only BROWSER_TOOL. Reuse the
+        // exact same native admission/replay path for its advertised write methods.
+        val controlMutation = name == R5PrivateMcpContract.BROWSER_TOOL && action in R5PrivateMcpActions.methods
         if (!actionTool && action == "documentation") {
             return toolResult(
                 id,
