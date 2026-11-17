@@ -54,8 +54,22 @@ Migration/backward compatibility specifics: https://modelcontextprotocol.io/spec
 
 - Correct Kotlin formatting root causes preventing PR35/36 Android ktlint.
 - The separate stacked draft PR #38 adds a bounded pure tab metadata projection shared by `agent-tabs` and an `agent-command LIST_TABS` implementation. It has a stable active/epoch readback proof and three source tests; it does not create, close or switch tabs and is not yet hardware-accepted.
+- The separate stacked draft PR #39 implements an **R5 QA-only** `/mcp` read facade with `server/discover`, `initialize`, `tools/list`, `tools/call`: local native session request/status/STOP, paired `capabilities`, authenticated `tabs.list`, command-sequenced `tab.snapshot` and bounded PNG `tab.screenshot`. It replaces the generic gateway's `mcp` handler only for the R5 QA application and never opens legacy `/v1` browser methods. Ktor header validation, complete modern/legacy wire interoperability, and the external 403 source remain **UNVERIFIED** and must be tested on S24 and provider endpoints before claiming a fix.
 - Keep ordinary JS button dispatch, but add conservative in-document non-GET form/button, secret-bearing form, non-HTTP(S) anchor and explicit destructive-label guards, without granting the agent payment or secret permissions.
 - Add static Kotlin contract tests for new guard strings. These are **not** substitutes for real WebView instrumentation.
+
+## Private MCP wire admission hardening
+
+R5 QA-only `/mcp` now validates a modern `2026-07-28` request's transport version,
+`Mcp-Method`/`Mcp-Name` routing headers, and `_meta` protocol, clientInfo,
+and clientCapabilities against its JSON-RPC body **before** dispatching to the
+authenticated native bridge. Unsupported versions produce a JSON-RPC HTTP 400
+with `-32022` and supported revision list. Legacy `2025-11-25` or a
+headerless legacy initialize remains a deliberate compatibility path, still
+subject to native bearer pairing and local session consent for any browser
+content. These checks are source-only and require real modern/legacy MCP
+Inspector + ChatGPT testing; Ktor's existing Content-Length requirement may
+reject chunked clients and is a separate transport compatibility gate.
 
 ## Beta gates and no-go decisions
 

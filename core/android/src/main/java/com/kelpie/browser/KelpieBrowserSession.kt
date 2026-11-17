@@ -294,6 +294,9 @@ class KelpieBrowserSession(
         com.kelpie.browser.network
             .BrowserGatewayBinding(router, handlerContext)
             .register()
+        // Isolated native-consent QA replaces only the private /mcp envelope.
+        // Legacy browser methods remain blocked by Router.consentOnlyQa.
+        r5AgentCoordinator?.registerPrivateMcp(router)
     }
 
     private fun startServer(deviceInfo: DeviceInfo) {

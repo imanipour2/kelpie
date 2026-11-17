@@ -328,6 +328,18 @@ class HTTPServer(
             )
             return
         }
+        if (method == "mcp" && router.backgroundAgentQa) {
+            val h = call.request.headers
+            val rejected = R5McpWireAdmission.check(body, h["MCP-Protocol-Version"], h["Mcp-Method"], h["Mcp-Name"])
+            if (rejected != null) {
+                call.respondText(
+                    mapToJsonString(R5McpWireAdmission.errorBody(body["id"], rejected)),
+                    ContentType.Application.Json,
+                    HttpStatusCode.BadRequest,
+                )
+                return
+            }
+        }
         val (status, result) =
             kotlinx.coroutines.withContext(AuthenticatedClientContext.fromVerifiedDecision(principal)) {
                 router.handle(method, body)
