@@ -29,6 +29,37 @@ handoff UX, process-recreation handling and live device verification remain
 follow-on K1 tasks. Never copy Google account tokens, passwords, OTPs or
 other apps' cookies. Draft only: no installation, merge or public release.
 
+## Android R5 agent-first startup — stacked draft PR #56 (not installed)
+
+In the **private R5 Android QA fork only**, Kelpie is intended primarily for a
+verified AI agent, not unassisted web browsing. On a genuinely new app session,
+a native modal offers **Enable agent & background access** or **Exit Kelpie &
+disable agent**. It requires one real, affirmative owner tap on the phone.
+A client verified by the existing pairing bearer/MCP middleware must first
+be seen within a short freshness window; just having a name in stored pairing
+history cannot enable control. With multiple recently verified paired agents,
+the owner explicitly chooses one. Without a verified agent, the screen offers
+the existing **Connect an AI agent** setup sheet and prevents a false grant.
+
+The standalone ChatGPT connector previously exposed only browser_control,
+not agent_session.request. In this draft, a real authenticated capabilities
+call supplies short-lived principal presence to the native dialog; it does
+**not** remotely approve it. Local approval binds one principal and new
+process-memory generation. Normal HOME/ChatGPT switches, additional tabs,
+and page captures do not solicit repeated consent; STOP revokes immediately,
+and a new process requires a new tap. Android POST_NOTIFICATIONS may still
+display its own mandatory system permission prompt. Auth, lock, WebView-only
+capture, notification STOP, and sensitive-operation gates remain separate.
+Exit stops the R5 grant and finishes its Android task; the separate Termux
+tunnel is not deleted or restarted by this choice.
+
+Source implementation candidate and unit cases are in
+[Draft PR #56](https://github.com/imanipour2/kelpie/pull/56) and
+[ADR-R5-005](adr/ADR-R5-005-agent-first-startup-unified-consent.md).
+CI and physical S24 QA are required before calling it functional; do not
+confuse this source code with the installed QA APK. Android/iOS parity is open,
+and no public release, main merge, or site deployment is authorized.
+
 ## Android R5 private agent QA — not released
 
 The source-only draft PR #41 adds a separate, explicitly write-capable
