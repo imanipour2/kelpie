@@ -43,9 +43,15 @@ internal fun AgentConnectionCenterSheet(
     val clipboard = LocalClipboardManager.current
     val session by coordinator.active.collectAsState()
     var provider by remember { mutableStateOf(R5AgentProvider.CHATGPT) }
+    var chatGptTunnel by remember { mutableStateOf(false) }
     var endpoint by remember { mutableStateOf("") }
     val validUrl = R5AgentConnectionSetup.safeEndpoint(endpoint)
-    val instructions = R5AgentConnectionSetup.setupInstructions(provider, endpoint)
+    val instructions =
+        if (provider == R5AgentProvider.CHATGPT && chatGptTunnel) {
+            R5AgentConnectionSetup.chatGptTunnelInstructions()
+        } else {
+            R5AgentConnectionSetup.setupInstructions(provider, endpoint)
+        }
 
     Column(
         modifier =
@@ -78,21 +84,43 @@ internal fun AgentConnectionCenterSheet(
                 TextButton(onClick = { provider = candidate }) { Text(candidate.title) }
             }
         }
-        Text("2. Paste your trusted HTTPS MCP address")
-        OutlinedTextField(
+        if (provider == R5AgentProvider.CHATGPT) {
+            Text("2. Choose a ChatGPT connection method")
+            Row {
+                RadioButton(
+                    selected = !chatGptTunnel,
+                    onClick = { chatGptTunnel = false },
+                )
+                TextButton(onClick = { chatGptTunnel = false }) { Text("HTTPS endpoint") }
+            }
+            Row {
+                RadioButton(
+                    selected = chatGptTunnel,
+                    onClick = { chatGptTunnel = true },
+                )
+                TextButton(onClick = { chatGptTunnel = true }) { Text("Secure MCP Tunnel") }
+            }
+        }
+        if (provider != R5AgentProvider.CHATGPT || !chatGptTunnel) {
+            Text("Paste your trusted HTTPS MCP address")
+            OutlinedTextField(
             value = endpoint,
             onValueChange = { endpoint = it.take(1024) },
             label = { Text("https://your-host.example/mcp") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
-        Text(
-            if (validUrl == null) {
+            Text(
+                if (validUrl == null) {
                 "No endpoint accepted yet. Use HTTPS, a DNS hostname, and /mcp. Do not paste tokens."
             } else {
                 "Address format accepted. This does not prove reachability, trust or authentication."
-            },
-        )
+                },
+            )
+        } else {
+            Text("Use an existing authorized Secure MCP Tunnel inside ChatGPT web Plugins. " +
+                "No public phone endpoint or token is required here.")
+        }
         Button(
             enabled = instructions != null,
             onClick = {
