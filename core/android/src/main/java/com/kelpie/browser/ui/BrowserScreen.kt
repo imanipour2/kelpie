@@ -284,6 +284,7 @@ fun BrowserScreen(
                             onNetworkInspector = { showNetworkInspector = true },
                             onAI = { showAI = true },
                             onConnectAgent = { showConnectAgent = true },
+                            agentConnectionAvailable = agentSessionCoordinator != null,
                             onSnapshot3D = {
                                 coroutineScope.launch { toggle3DInspector() }
                             },
