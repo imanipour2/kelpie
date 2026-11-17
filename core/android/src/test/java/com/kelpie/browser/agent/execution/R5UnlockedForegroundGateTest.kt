@@ -46,6 +46,16 @@ class R5UnlockedForegroundGateTest {
     }
 
     @Test
+    fun focusRegainReevaluatesOriginalGrantWithoutBypassingTheKeyguard() {
+        assertFalse(allow(windowFocused = false))
+        assertTrue(allow(windowFocused = true))
+        assertFalse(allow(windowFocused = true, consentActive = false))
+        assertFalse(allow(windowFocused = true, sameGeneration = false))
+        assertFalse(allow(windowFocused = true, keyguardGone = false))
+        assertFalse(allow(windowFocused = true, owner = WebViewOwnershipState.Host.PRIVATE))
+    }
+
+    @Test
     fun backgroundOrLockedOrHiddenDisplayCannotBeRebound() {
         assertFalse(allow(resumed = false))
         assertFalse(allow(windowVisible = false))
