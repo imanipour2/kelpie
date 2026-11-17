@@ -5,6 +5,29 @@ The embeddable browser extraction keeps the complete native UI, tabs and behavio
 
 Every user-facing feature is described here. When adding or changing a feature, update this file in the same commit.
 
+## Android R5 private agent QA — not released
+
+A separately signed Android QA-only package tests a one-time **native owner approval**
+per active process session, private app-owned WebView observations, a persistent
+local **STOP**, and verified read/click/fill/scroll/screenshot operations. It
+cannot capture Android's lock screen or other apps. The owner's private QA
+reports 2,000 distinct successful frames on the Samsung S24 Ultra using
+draft PR #34, not a production release. Newer command and multi-agent
+setup implementations remain unmerged and must not be described as installed.
+
+The R5 Connection Center in draft PR #36 is an onboarding **helper**, not a
+working OAuth registration, cloud tunnel installer or direct ChatGPT bridge.
+Unsafe URL schemes, financial/credential actions and unreviewed POST form
+actions are blocked by conservative native and script checks. These heuristics
+do not replace a real action-risk review; uncertain writes are never replayed
+without a new observation. Native tab creation/switch/close and direct MCP
+tool routing remain beta blockers.
+
+See [R5 beta engineering research and gates](qa/R5-BETA-ENGINEERING-RESEARCH-AND-GATES-20261117.md)
+and [the canonical operations issue](https://github.com/imanipour2/enerfoam-website/issues/98).
+
+---
+
 ## App updates
 
 Standalone Kelpie apps on macOS, Windows, Linux and Android check GitHub for compatible stable releases at launch and

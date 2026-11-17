@@ -25,22 +25,31 @@ internal object R5WebViewActionScripts {
               /recaptcha|hcaptcha|challenges\.cloudflare\.com|turnstile/i.test(f.src))}))()
         """
 
-    // Ordinary links, JS buttons and non-financial forms are agent-controlled.
-    // Password/OTP entry and payment/financial controls remain device-protected.
-    // The AI decides whether to click; this native boundary only blocks secrets/payment.
+    // The agent controls ordinary navigation and explicitly non-sensitive buttons.
+    // Unknown POST form submissions, secrets, finance and destructive actions
+    // require an independently reviewed human authorization path (not supplied here).
+    // These guards are defense-in-depth, not a universal semantic risk classifier.
     fun click(selector: String): String =
         """
         (()=>{const e=document.querySelector(__SEL__);
           if(!e||!e.getClientRects().length||!e.isConnected||e.disabled) return 'DENIED';
-          const form=e.closest('form');
-          const label=[e.getAttribute('aria-label')||'',e.getAttribute('value')||'',
-            e.innerText||'',e.getAttribute('name')||''].join(' ').slice(0,600);
+          const action=e.closest('button,[role=button],input[type=submit],a[href]')||e;
+          const form=action.closest('form');
+          const label=[action.getAttribute('aria-label')||'',action.getAttribute('value')||'',
+            action.textContent||'',action.getAttribute('name')||''].join(' ').slice(0,600);
           const formIdentity=form?[form.getAttribute('action')||'',form.id||'',
             form.getAttribute('aria-label')||''].join(' '):'';
           const financial=/(payment|checkout|pay now|credit.card|card.number|bank.transfer|iban|wire.transfer|پرداخت|درگاه|بانک|رمز پویا|رمز دوم|شماره کارت|شماره شبا|انتقال وجه)/i;
-          const secret=e.matches('input[type=password],[autocomplete=one-time-code],[autocomplete^="cc-"]');
-          if(secret||financial.test(label)||financial.test(formIdentity)||
-            (form&&form.querySelector('[autocomplete^="cc-"]'))) return 'DENIED_SENSITIVE';
+          const destructive=/(delete.account|delete.all|delete.permanent|remove.account|publish|make.public|unsubscribe|حذف حساب|حذف دائم|انتشار عمومی)/i;
+          const secret=!!action.closest('input[type=password],[autocomplete=one-time-code],[autocomplete^="cc-"]');
+          const formHasSecrets=!!form&&!!form.querySelector('input[type=password],[autocomplete=one-time-code],[autocomplete^="cc-"]');
+          const nonGetFormButton=!!form&&(form.method||'get').toLowerCase()!=='get'&&
+            !!action.closest('button,[role=button],input[type=submit]');
+          const anchor=action.closest('a[href]');
+          const unsafeLink=!!anchor&&!/^https?:$/i.test(anchor.protocol);
+          if(secret||formHasSecrets||nonGetFormButton||unsafeLink||financial.test(label)||
+            financial.test(formIdentity)||destructive.test(label)||destructive.test(formIdentity))
+            return 'DENIED_SENSITIVE';
           e.click();return 'DISPATCHED';})()
         """.replace("__SEL__", q(selector))
 
