@@ -37,6 +37,14 @@ class AccountLoginPolicyTests {
         }
     }
 
+    @Test fun lateCanceledAuthTabCannotInvalidateAnAlreadyCompletedOrSupersededLogin() {
+        assertTrue(AccountLoginPolicy.isCurrentLoginResult("generation-1", "generation-1", "generation-1"))
+        assertFalse(AccountLoginPolicy.isCurrentLoginResult(null, "generation-1", "generation-1"))
+        assertFalse(AccountLoginPolicy.isCurrentLoginResult("generation-1", "generation-1", null))
+        assertFalse(AccountLoginPolicy.isCurrentLoginResult("generation-1", "generation-2", "generation-2"))
+        assertFalse(AccountLoginPolicy.isCurrentLoginResult("generation-1", "generation-1", "generation-2"))
+    }
+
     @Test fun inAppLoginFallsBackToTheBrowserOnlyWithoutAWebView() {
         val callback = "${UOAAuthorization.CALLBACK}?state=s&code=c"
         assertEquals(Outcome.Callback(callback), AccountLoginPolicy.outcome(-1, callback))
