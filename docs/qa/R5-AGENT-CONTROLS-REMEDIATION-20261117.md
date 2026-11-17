@@ -10,7 +10,7 @@
 ## Changes
 1. Allow normal agent-directed buttons and HTML forms instead of blanket rejecting every button. Native script still rejects password, OTP and payment/card/bank-related click targets. Real user-supplied JavaScript is never evaluated.
 2. A click is **not** reported verified because JavaScript returned DISPATCHED: require either two stable changed native URL/document observations, or stable DOM/control-state fingerprint changes followed by fresh independent confirmation. A click with no observable effect is **UNCERTAIN**, never automatically retried.
-3. Add HTML SELECT by value/visible text and independently verify chosen option. Add bounded WAIT for document completion or visible CSS selector.
+3. Add HTML SELECT by value/visible text and independently verify chosen option. Add bounded WAIT for document completion or visible CSS selector. Add BACK/FORWARD with stable native URL/document observation; no automatic retry on uncertain navigation.
 4. Routine PUBLISH and IRREVERSIBLE_DELETE operation enums are no longer denied at admission solely due to their names. They remain unimplemented native commands; HTTP200 is not success. Agent controls whether to request ordinary actions. PAYMENT and EXPORT_CREDENTIALS remain denied.
 
 ## Security and behavior
@@ -22,9 +22,9 @@
 - No new USB ADB input, no bypass of consent, and no WordPress changes.
 
 ## Remaining blockers and release gate
-P0: OPEN_TAB, CLOSE_TAB, SWITCH_TAB, LIST_TABS command enum, BACK, FORWARD remain native-port incomplete; safe private-display ownership transition must be designed and tested instead of switching WebViews while a previous one is attached to the Presentation. Dedicated `agent-tabs` can list tabs.
+P0: OPEN_TAB, CLOSE_TAB, SWITCH_TAB, LIST_TABS command enum remain native-port incomplete; safe private-display ownership transition must be designed and tested instead of switching WebViews while a previous one is attached to the Presentation. Dedicated `agent-tabs` can list tabs.
 P0: Direct ChatGPT Kelpie connector returns FORBIDDEN despite healthy local tunnel. Need provider contract / connector mapping access and a versioned authenticated adapter. Do not enable legacy endpoints.
-P0: Android compile/ktlint, exact-head CI, hardware regression (buttons/SELECT/WAIT, ordinary form, STOP during click, same-document mutation, actual payment block), 24h Doze/battery and signing remain pending.
+P0: Android compile/ktlint, exact-head CI, hardware regression (buttons/SELECT/WAIT/BACK/FORWARD, ordinary form, STOP during click, same-document mutation, actual payment block), 24h Doze/battery and signing remain pending.
 P1: Shadow DOM, cross-origin iframe, true native/IME input, file input/upload, downloads, network request observation, accessibility tree, coordinate-based click, full-page visual capture, job orchestration need scoped designs.
 P1: Cloud-browser/TinyFish anti-bot infrastructure, hosted session profiles, parallel scaling and managed CAPTCHA cannot be honestly considered implemented by a private on-device WebView.
 
