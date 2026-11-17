@@ -2,7 +2,6 @@ package com.kelpie.browser.account
 
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import androidx.activity.ComponentActivity
 import com.kelpie.browser.browser.BookmarkStore
 import com.kelpie.browser.storage.SecretStore
@@ -139,19 +138,8 @@ object UOAAccount {
     private fun openInBrowser(requestedUrl: String? = null) {
         val pending = attempt ?: return
         val url = requestedUrl ?: pending.authorization.url(pending.clientId)
-        if (!AccountLoginPolicy.isAuthorizeUrl(url)) {
-            fail("Could not open login. Please try again.")
-            return
-        }
-        val intent =
-            Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                .addCategory(Intent.CATEGORY_BROWSABLE)
         val activity = liveHost() ?: return fail("Could not open login. Please try again.")
-        try {
-            activity.startActivity(intent)
-        } catch (_: android.content.ActivityNotFoundException) {
-            fail("Could not open login. Please try again.")
-        } catch (_: SecurityException) {
+        if (!UOAExternalAuthLauncher.launch(activity, url)) {
             fail("Could not open login. Please try again.")
         }
     }

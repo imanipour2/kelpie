@@ -8,7 +8,9 @@ Every user-facing feature is described here. When adding or changing a feature, 
 ## Android K1 supported browser OAuth and owner handoff — draft QA only
 
 In [draft PR #50](https://github.com/imanipour2/kelpie/pull/50), app-owned UOA OAuth
-launches in an external Android browser via ACTION_VIEW, rather than loading
+checks a Custom Tabs provider from AndroidX Browser 1.8.0 (compileSdk 34) and launches
+app-owned UOA OAuth in that supported external browser, with a system ACTION_VIEW
+fallback if no compatible provider is available, rather than loading
 Google sign-in inside the app's WebView. The existing S256 PKCE challenge, random
 state, exact callback and one-use authorization code exchange remain required.
 An unavailable external browser causes a visible error, not a WebView fallback.
@@ -22,7 +24,7 @@ interception, nor is it a Chrome-cookie import. The owner must confirm; URLs
 with unsafe schemes, malformed syntax or embedded credentials are refused.
 
 This **does not** make an unrelated website's Google sign-in work inside the
-embedded Kelpie WebView. AndroidX Auth Tab / Custom Tabs, Google IdP automatic
+embedded Kelpie WebView. AndroidX Auth Tab 1.9 (SDK36/AGP migration), Google IdP automatic
 handoff UX, process-recreation handling and live device verification remain
 follow-on K1 tasks. Never copy Google account tokens, passwords, OTPs or
 other apps' cookies. Draft only: no installation, merge or public release.

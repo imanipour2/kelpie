@@ -55,6 +55,24 @@ class UOAAuthorizationSecurityTest {
     }
 
     @Test
+    fun authorizeUrlAllowsOnlyExactExternalUoaEndpoint() {
+        val legitimate = UOAAuthorization().url("qa-client")
+        assertTrue(AccountLoginPolicy.isAuthorizeUrl(legitimate))
+        listOf(
+            "http://authentication.unlikeotherai.com/oauth/authorize?state=x",
+            "https://authentication.unlikeotherai.com.evil.test/oauth/authorize?state=x",
+            "https://other.example/oauth/authorize?state=x",
+            "https://user@authentication.unlikeotherai.com/oauth/authorize?state=x",
+            "https://authentication.unlikeotherai.com:443/oauth/authorize?state=x",
+            "https://authentication.unlikeotherai.com/oauth/authorize/extra?state=x",
+            "https://authentication.unlikeotherai.com/oauth/authorize?state=x#fragment",
+            "javascript:alert(1)",
+        ).forEach { url ->
+            assertFalse("Must not dispatch a non-UOA OAuth URL: $url", AccountLoginPolicy.isAuthorizeUrl(url))
+        }
+    }
+
+    @Test
     fun distinctAttemptsUseIndependentStateAndVerifier() {
         val a = UOAAuthorization()
         val b = UOAAuthorization()
