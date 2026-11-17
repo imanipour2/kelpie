@@ -11,10 +11,11 @@ internal object R5AgentDeliveryGuard {
     fun requiresGrant(
         method: String,
         body: Map<String, Any?>,
-    ): Boolean =
-        method in setOf("agent-command", "agent-tabs", "agent-runtime-status", "agent-capture-capabilities") ||
-            (method == "mcp" && (body["method"] as? String) == "tools/call" &&
-                !R5PrivateMcpContract.isGrantExempt(body))
+    ): Boolean {
+        val direct = method in setOf("agent-command", "agent-tabs", "agent-runtime-status", "agent-capture-capabilities")
+        val mcpCall = method == "mcp" && body["method"] == "tools/call"
+        return direct || (mcpCall && !R5PrivateMcpContract.isGrantExempt(body))
+    }
 
     fun expectedGeneration(
         method: String,
