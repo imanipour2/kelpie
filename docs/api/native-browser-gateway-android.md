@@ -46,6 +46,18 @@ route-denial gates. The R5 QA catalog has only two tools:
   credential export, cross-app/lock-screen capture and raw JS remain absent
   from this QA MCP tool catalog.
 
+**Physical-device root-cause correction (2026-11-17).** A PR41 QA APK
+installed on Samsung SM-S928B, Android 17, returned HTTP 400
+`BAD_REQUEST: Unsupported MCP protocol version` to correctly framed modern
+`server/discover` and `tools/list` requests, while legacy headerless tool
+discovery succeeded. This rejection occurred in `AuthMiddleware` *before*
+`R5McpWireAdmission`, because the former allowed only 2025-03-26 and
+2025-06-18. Draft PR42 updates the authenticated outer header allowlist to
+also recognize 2025-11-25 and 2026-07-28 while retaining bearer, Origin,
+single-valued-header, Content-Length and downstream R5 metadata/STOP checks.
+A proper modern wire-contract retest requires reinstalling an exact-head PR42
+QA APK; green CI of PR42 or historical PR41 tests cannot substitute.
+
 R5 responds to `server/discover`, `tools/list`, and `tools/call` for
 MCP `2026-07-28`, while temporarily admitting `2025-11-25` initialization
 for explicit older-client interoperability. For modern HTTP requests,
