@@ -178,7 +178,9 @@ class TabStore(
                 settings.useWideViewPort = true
                 settings.setSupportMultipleWindows(false)
                 settings.mediaPlaybackRequiresUserGesture = false
-                settings.userAgentString = BROWSER_USER_AGENT
+                // Keep Android System WebView's real, version-matched user-agent.
+                // A fabricated Chrome/Pixel identity neither fixes Google OAuth
+                // nor correctly describes the embedded rendering engine.
                 addJavascriptInterface(JsBridge(handlerContext), JS_BRIDGE_NAME)
                 WebSocketHandler.installBridge(this)
             }
