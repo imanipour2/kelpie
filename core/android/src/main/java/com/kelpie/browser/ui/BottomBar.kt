@@ -73,7 +73,7 @@ fun BottomBar(
     var editing by remember { mutableStateOf(false) }
     var more by remember { mutableStateOf(false) }
     val compact = isCollapsed && !editing && !more
-    val height by animateDpAsState(if (compact) 34.dp else 62.dp, tween(250), label = "Toolbar height")
+    val height by animateDpAsState(if (compact) 34.dp else 64.dp, tween(250), label = "Toolbar height")
     val focus = LocalFocusManager.current
     val density = LocalDensity.current.density
     Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f), shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)) {
@@ -85,8 +85,11 @@ fun BottomBar(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 if (!compact && !editing) {
-                    ChromeButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", canGoBack, onBack)
-                    ChromeButton(Icons.AutoMirrored.Filled.ArrowForward, "Forward", canGoForward, onForward)
+                    // Keep history controls together and the address field dominant.
+                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        ChromeButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", canGoBack, onBack)
+                        ChromeButton(Icons.AutoMirrored.Filled.ArrowForward, "Forward", canGoForward, onForward)
+                    }
                 }
                 if (compact) Spacer(Modifier.weight(1f))
                 Box(
@@ -123,7 +126,7 @@ fun BottomBar(
                                 editing = false
                                 onNavigate(it)
                             },
-                            Modifier.widthIn(max = 620.dp).fillMaxWidth().height(44.dp),
+                            Modifier.widthIn(max = 620.dp).fillMaxWidth().height(48.dp),
                             shape = CircleShape,
                             textStyle = MaterialTheme.typography.bodySmall,
                             onEditingChanged = {
@@ -132,7 +135,7 @@ fun BottomBar(
                             },
                             trailingIcon = {
                                 if (!editing) {
-                                    IconButton(onClick = onReload, modifier = Modifier.size(40.dp)) {
+                                    IconButton(onClick = onReload, modifier = Modifier.size(48.dp)) {
                                         Icon(
                                             if (isLoading) Icons.Default.Close else Icons.Default.Refresh,
                                             if (isLoading) "Stop loading" else "Reload",
@@ -184,7 +187,7 @@ internal fun ChromeButton(
     enabled: Boolean = true,
     action: () -> Unit,
 ) {
-    IconButton(onClick = action, enabled = enabled, modifier = Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f), CircleShape)) {
+    IconButton(onClick = action, enabled = enabled, modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f), CircleShape)) {
         Icon(icon, label, Modifier.size(20.dp))
     }
 }
