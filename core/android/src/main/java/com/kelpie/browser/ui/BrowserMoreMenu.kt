@@ -14,6 +14,7 @@ internal fun BrowserMoreMenu(
     onAddTab: () -> Unit,
     tabCount: Int,
     onShare: () -> Unit,
+    onOpenInSupportedBrowser: () -> Unit,
     onWelcome: () -> Unit,
     onSettings: () -> Unit,
     onBookmarks: () -> Unit,
@@ -42,6 +43,7 @@ internal fun BrowserMoreMenu(
     item("New tab", onAddTab)
     item("Bookmarks", onBookmarks)
     item("Share page", onShare)
+    item("Open in supported browser", onOpenInSupportedBrowser)
     HorizontalDivider()
     item("History", onHistory)
     item("AI", onAI)
