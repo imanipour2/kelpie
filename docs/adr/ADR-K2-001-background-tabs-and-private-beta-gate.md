@@ -28,3 +28,11 @@ Browser Use operates Chrome/Chromium CDP browser targets and explicitly distingu
 ## UX micro-fix in this PR
 
 Address editing now shows a 48dp accessible `Clear address` button only when there is editable text. This changes the buffer only, preserves keyboard focus, and does not navigate. While not editing, Reload/Stop remains visible. Back/Forward stay grouped and address takes remaining horizontal space, with 48dp touch controls. No agent or browser-session privileges are changed by this UX patch.
+
+## P0 typed-operation defense in depth
+
+The reviewed R5 policy previously allowed typed PUBLISH and IRREVERSIBLE_DELETE with ordinary browser consent, although PAYMENT and EXPORT_CREDENTIALS were denied. This QA patch adds PUBLISH and IRREVERSIBLE_DELETE to the explicit sensitive-action gate, returning `SENSITIVE_ACTION_REQUIRES_APPROVAL` unless a separately reviewed owner-approved transaction workflow is implemented. Unit assertions now cover all four. This is not complete semantic protection: a normal CLICK can still trigger a site-owned destructive JavaScript action. Independent click/form semantics and sensitive-origin restrictions remain open P0 release gates.
+
+## iOS mirror (same PR)
+
+The iOS bottom and URL bar now expose the same focused, non-empty address clear button, keep editing focus and never navigate upon clearing. Android uses 48dp and iOS uses its native 44pt accessible hit target. An iOS UI test exercises this behavior. No agent-session or capture permissions change.

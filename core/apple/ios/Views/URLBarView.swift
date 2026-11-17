@@ -89,6 +89,23 @@ struct URLBarView: View {
                 .focused($isURLFieldFocused)
                 .accessibilityIdentifier("browser.url.field")
                 .onSubmit { navigate() }
+                .padding(.trailing, isURLFieldFocused && !urlText.isEmpty ? 40 : 0)
+        }
+        .overlay(alignment: .trailing) {
+            if isURLFieldFocused && !urlText.isEmpty {
+                Button {
+                    urlText = ""
+                    isURLFieldFocused = true
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 17))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear address")
+                .accessibilityIdentifier("browser.url.clear")
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
