@@ -165,7 +165,13 @@ internal class R5PrivateMcpBridge(
             return toolResult(
                 id,
                 mapOf(
-                    "setup" to "Open Kelpie's native startup prompt. After an authenticated paired MCP call, the owner can approve agent + background locally with one tap. No remote approval. Use a fresh generation.",
+                    "setup" to
+                        (
+                            "Open Kelpie's native startup prompt. " +
+                                "After an authenticated paired MCP call, " +
+                                "the owner can approve agent + background locally with one tap. " +
+                                "No remote approval. Use a fresh generation."
+                        ),
                     "restrictions" to "Private R5 QA only: no remote credential access, cross-app capture, or automatic STOP renewal.",
                 ),
             )
