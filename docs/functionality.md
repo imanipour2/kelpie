@@ -21,7 +21,10 @@ Unsafe URL schemes, financial/credential actions and unreviewed POST form
 actions are blocked by conservative native and script checks. These heuristics
 do not replace a real action-risk review; uncertain writes are never replayed
 without a new observation. Native tab creation/switch/close and direct MCP
-tool routing remain beta blockers. A subsequent draft PR #39 adds a private
+tool routing remain beta blockers. The separate source-only draft PR #40 now generates
+bounded unique CSS selector paths for visible interactive elements that do not
+have IDs. These paths are not durable element references: agents must re-observe
+after SPA updates and independently verify any action on the real WebView. A subsequent draft PR #39 adds a private
 QA-only MCP read adapter and two native-session tools, routing authenticated
 read requests exclusively to existing `agent-*` endpoints with fresh grant,
 tab/document IDs and monotonic sequence. This does not prove real ChatGPT
