@@ -2,13 +2,31 @@ package com.kelpie.browser.agent.execution
 
 /** Explicit write-tool dispatch; native admission independently validates the live owner and target. */
 internal object R5PrivateMcpActions {
-    val methods = listOf("tab.goto", "tab.click", "tab.fill", "tab.select", "tab.wait", "tab.back", "tab.forward", "page.scroll")
+    val methods =
+        listOf(
+            "tabs.new",
+            "tabs.close",
+            "tabs.select",
+            "tab.goto",
+            "tab.click",
+            "tab.fill",
+            "tab.type",
+            "tab.select",
+            "tab.wait",
+            "tab.back",
+            "tab.forward",
+            "page.scroll",
+        )
 
     fun operation(method: String): String? =
         when (method) {
+            "tabs.new" -> "OPEN_TAB"
+            "tabs.close" -> "CLOSE_TAB"
+            "tabs.select" -> "SWITCH_TAB"
             "tab.goto" -> "NAVIGATE"
             "tab.click" -> "CLICK"
             "tab.fill" -> "FILL"
+            "tab.type" -> "TYPE"
             "tab.select" -> "SELECT"
             "tab.wait" -> "WAIT"
             "tab.back" -> "BACK"
@@ -22,6 +40,16 @@ internal object R5PrivateMcpActions {
         params: Map<*, *>,
     ): Map<String, Any?>? {
         if (method !in methods) return null
+        if (method == "tabs.new") {
+            val url = params["url"] as? String ?: return null
+            if (url.isBlank() || url.length > 2048) return null
+            return mapOf("url" to url)
+        }
+        if (method == "tabs.close" || method == "tabs.select") {
+            val target = params["targetTabId"] as? String ?: return null
+            if (target.isBlank() || target.length > 256 || target.any(Char::isISOControl)) return null
+            return mapOf("targetTabId" to target)
+        }
         if (method == "tab.back" || method == "tab.forward") return emptyMap()
         if (method == "tab.wait") {
             val selector = params["selector"] ?: return emptyMap()

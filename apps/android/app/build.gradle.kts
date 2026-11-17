@@ -17,8 +17,9 @@ val existingP4Qa = providers.gradleProperty("kelpiePrivateCaptureQaProfile").orN
 val anyP4Qa = parallelP4Qa || existingP4Qa
 val r5SourceQa = providers.gradleProperty("kelpieR5SourceQaProfile").orNull == "true"
 val r5AgentQa = providers.gradleProperty("kelpieR5BackgroundAgentQaProfile").orNull == "true"
-val anyIsolatedQa = anyP4Qa || r5SourceQa || r5AgentQa
-require(listOf(parallelP4Qa, existingP4Qa, r5SourceQa, r5AgentQa).count { it } <= 1) {
+val r5PrivateBetaQa = providers.gradleProperty("kelpieR5PrivateBetaQaProfile").orNull == "true"
+val anyIsolatedQa = anyP4Qa || r5SourceQa || r5AgentQa || r5PrivateBetaQa
+require(listOf(parallelP4Qa, existingP4Qa, r5SourceQa, r5AgentQa, r5PrivateBetaQa).count { it } <= 1) {
     "Isolated Android QA profiles are mutually exclusive"
 }
 
@@ -45,6 +46,9 @@ android {
         } else if (r5AgentQa) {
             versionCode = 33
             versionName = "0.2.13-r5-agent-qa"
+        } else if (r5PrivateBetaQa) {
+            versionCode = 34
+            versionName = "0.2.14-r5-private-beta-qa"
         }
         buildConfigField("int", "LOCAL_HTTP_PORT", "8420")
         buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")
@@ -57,7 +61,7 @@ android {
         getByName("debug") {
             if (anyP4Qa) {
                 manifest.srcFile("src/privateCaptureQa/AndroidManifest.xml")
-            } else if (r5SourceQa || r5AgentQa) {
+            } else if (r5SourceQa || r5AgentQa || r5PrivateBetaQa) {
                 manifest.srcFile("src/r5SourceQa/AndroidManifest.xml")
             }
         }
@@ -87,6 +91,13 @@ android {
             } else if (r5AgentQa) {
                 applicationIdSuffix = ".r5fullverify"
                 buildConfigField("int", "LOCAL_HTTP_PORT", "18460")
+                buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")
+                buildConfigField("boolean", "R5_NATIVE_CONSENT_QA_ENABLED", "true")
+                buildConfigField("boolean", "R5_BACKGROUND_AGENT_QA_ENABLED", "true")
+            } else if (r5PrivateBetaQa) {
+                // Separate owner-only beta identity: never wipe a working R5 login.
+                applicationIdSuffix = ".r5betaverify"
+                buildConfigField("int", "LOCAL_HTTP_PORT", "18461")
                 buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")
                 buildConfigField("boolean", "R5_NATIVE_CONSENT_QA_ENABLED", "true")
                 buildConfigField("boolean", "R5_BACKGROUND_AGENT_QA_ENABLED", "true")

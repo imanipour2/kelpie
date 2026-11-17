@@ -5,10 +5,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -89,7 +94,18 @@ fun HistoryAutocompleteField(
                         maxLines = 1,
                     )
                 }
-                trailingIcon?.invoke()
+                // Editing-only clear button: no selection gymnastics, and never
+                // changes the loaded page until the user submits a new address.
+                if (isFocused && urlText.isNotEmpty()) {
+                    IconButton(
+                        onClick = { urlText = "" },
+                        modifier = Modifier.size(48.dp),
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Clear address or search text", modifier = Modifier.size(18.dp))
+                    }
+                } else {
+                    trailingIcon?.invoke()
+                }
             }
         },
         modifier =

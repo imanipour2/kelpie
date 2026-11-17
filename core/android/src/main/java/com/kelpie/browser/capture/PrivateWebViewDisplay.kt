@@ -174,6 +174,51 @@ class PrivateWebViewDisplay(
         }
 
     /**
+     * Rehost a different Kelpie tab on the EXISTING private virtual display.
+     * Never start an Activity, capture the Android screen, or adopt a foreign View.
+     * The old tab remains alive but detached; no page state is copied across tabs.
+     */
+    suspend fun switchPrivateWebView(next: WebView): Boolean =
+        withContext(Dispatchers.Main.immediate) {
+            val old = view ?: return@withContext false
+            if (stateFlow.value != State.PRIVATE_DISPLAY ||
+                !active ||
+                activityVisible ||
+                isLocked() ||
+                next === old ||
+                next.parent != null
+            ) {
+                return@withContext false
+            }
+            val proof = nativeFrameProof ?: return@withContext false
+            active = false
+            pendingImage.getAndSet(null)?.result?.close()
+            val swapped = proof.swapWebView(old, next)
+            if (!swapped) {
+                active = old.isAttachedToWindow && !isLocked()
+                return@withContext false
+            }
+            val attached =
+                withTimeoutOrNull(2_000L) {
+                    while (!next.isAttachedToWindow) delay(40)
+                    true
+                } ?: false
+            if (!attached || isLocked()) {
+                proof.swapWebView(next, old)
+                active = old.isAttachedToWindow && !isLocked()
+                return@withContext false
+            }
+            view = next
+            previousScrollX = next.scrollX
+            previousScrollY = next.scrollY
+            val css = withTimeoutOrNull(1_200L) { readCssScroll(next) }
+            previousCssScrollX = css?.first ?: 0.0
+            previousCssScrollY = css?.second ?: 0.0
+            active = !isLocked()
+            active
+        }
+
+    /**
      * Capture exactly one newly rendered frame while the browser is hidden.
      * No last-frame cache fallback: timeout, keyguard, foreground or STOP fails.
      * Caller owns an authenticated, valid and already-consumed frame lease.

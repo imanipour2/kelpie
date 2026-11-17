@@ -12,6 +12,8 @@ object AgentAdmissionPolicy {
     private val sensitive =
         setOf(
             Operation.PAYMENT,
+            Operation.PUBLISH,
+            Operation.IRREVERSIBLE_DELETE,
             Operation.EXPORT_CREDENTIALS,
         )
     private val tabNeutral = setOf(Operation.LIST_TABS, Operation.OPEN_TAB)

@@ -36,7 +36,7 @@ internal fun AccountButton(activity: Activity) {
     Box {
         IconButton(onClick = {
             if (account.profile == null && !account.signingIn) UOAAccount.signIn() else menu = true
-        }, modifier = Modifier.size(44.dp)) {
+        }, modifier = Modifier.size(48.dp)) {
             val avatar = remember(account.avatar) { account.avatar?.let { decodeAvatar(it) } }
             val label = if (account.profile == null) "Login/register" else "Account"
             if (avatar != null) {

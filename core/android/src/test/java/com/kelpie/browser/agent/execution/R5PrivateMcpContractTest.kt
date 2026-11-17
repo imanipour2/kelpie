@@ -72,7 +72,7 @@ class R5PrivateMcpContractTest {
             assertFalse(R5AgentDeliveryGuard.requiresGrant("mcp", body))
             assertEquals(method, R5PrivateMcpContract.toolArguments(body)?.get("method"))
         }
-        for (method in listOf("tabs.list", "tab.snapshot", "tab.screenshot", "tab.goto")) {
+        for (method in listOf("tabs.list", "tabs.new", "tabs.close", "tabs.select", "tab.snapshot", "tab.screenshot", "tab.goto", "tab.click")) {
             val body = wrappedBrowserCall(method)
             assertFalse(R5PrivateMcpContract.isGrantExempt(body))
             assertTrue(R5AgentDeliveryGuard.requiresGrant("mcp", body))

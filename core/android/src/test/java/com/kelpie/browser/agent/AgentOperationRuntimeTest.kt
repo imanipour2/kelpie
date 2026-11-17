@@ -94,6 +94,50 @@ class AgentOperationRuntimeTest {
         return Fixture(state, grant, adapter, AgentOperationRuntime(state, adapter))
     }
 
+    @Test
+    fun tabMutationSharesTheNormalCommandReplayAndConsentLease() =
+        runBlocking {
+            val f = fixture()
+            var created = 0
+            val cmd = f.cmd("new-tab", Operation.OPEN_TAB, url = "https://example.com/")
+            val observed = suspend { ObservedTarget("t1", "v1") }
+            val performed =
+                suspend {
+                    created++
+                    true
+                }
+            val verified = suspend { created == 1 }
+            val first = f.runtime.dispatchTabMutation(cmd, "paired", observed, performed, verified)
+            assertEquals(ExecutionStatus.EXECUTED, first.status)
+            assertEquals(ExecutionCode.VERIFIED_EFFECT, first.code)
+            assertEquals(1, created)
+            val replay = f.runtime.dispatchTabMutation(cmd.copy(clientSequence = 2), "paired", observed, performed, verified)
+            assertEquals(ExecutionCode.DUPLICATE_COMMAND, replay.code)
+            assertEquals(1, created)
+            val normal = f.runtime.dispatch(f.cmd("regular", Operation.READ_DOM), "paired")
+            assertEquals(ExecutionStatus.EXECUTED, normal.status)
+        }
+
+    @Test
+    fun revokeDuringTabMutationNeverProducesVerifiedSuccess() =
+        runBlocking {
+            val f = fixture()
+            val cmd = f.cmd("revoked-new-tab", Operation.OPEN_TAB, url = "https://example.org/")
+            val result =
+                f.runtime.dispatchTabMutation(
+                    cmd,
+                    "paired",
+                    observe = { ObservedTarget("t1", "v1") },
+                    mutate = {
+                        f.session.stop()
+                        true
+                    },
+                    verify = { true },
+                )
+            assertEquals(ExecutionStatus.UNCERTAIN, result.status)
+            assertEquals(ExecutionCode.SESSION_REVOKED, result.code)
+        }
+
     @Test fun requestIdentityNotDerivedFromClientJson() =
         runBlocking {
             val f = fixture()
@@ -108,6 +152,8 @@ class AgentOperationRuntimeTest {
             f.adapter.epoch = "v2"
             assertEquals(AdmissionCode.STALE_DOCUMENT, f.runtime.dispatch(f.cmd("stale", Operation.CLICK), "paired").admission)
             assertEquals(AdmissionCode.SENSITIVE_ACTION_REQUIRES_APPROVAL, f.runtime.dispatch(f.cmd("purchase", Operation.PAYMENT, "v2"), "paired").admission)
+            assertEquals(AdmissionCode.SENSITIVE_ACTION_REQUIRES_APPROVAL, f.runtime.dispatch(f.cmd("publish", Operation.PUBLISH, "v2"), "paired").admission)
+            assertEquals(AdmissionCode.SENSITIVE_ACTION_REQUIRES_APPROVAL, f.runtime.dispatch(f.cmd("erase", Operation.IRREVERSIBLE_DELETE, "v2"), "paired").admission)
             assertEquals(0, f.adapter.performCount)
         }
 

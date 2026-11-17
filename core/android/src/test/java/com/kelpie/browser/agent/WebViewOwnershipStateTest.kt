@@ -40,6 +40,24 @@ class WebViewOwnershipStateTest {
     }
 
     @Test
+    fun privateHostSwitchRevokesOldWebViewWithoutNewConsentOrActivity() {
+        val owner = WebViewOwnershipState()
+        assertTrue(owner.bindForeground("generation", "webview-A"))
+        val ticket = owner.moveToPrivate("generation")!!
+        assertTrue(owner.completePrivate(ticket))
+        val beforeEpoch = owner.transitionEpoch()
+        assertFalse(owner.switchPrivate("foreign", "webview-A", "webview-B"))
+        assertFalse(owner.switchPrivate("generation", "wrong-current", "webview-B"))
+        assertFalse(owner.switchPrivate("generation", "webview-A", "webview-A"))
+        assertTrue(owner.switchPrivate("generation", "webview-A", "webview-B"))
+        assertTrue(owner.transitionEpoch() > beforeEpoch)
+        assertFalse(owner.mayExecuteWebOperation("generation", "webview-A"))
+        assertTrue(owner.mayExecuteWebOperation("generation", "webview-B"))
+        owner.lockDevice()
+        assertFalse(owner.switchPrivate("generation", "webview-B", "webview-C"))
+    }
+
+    @Test
     fun stopAlwaysRevokesRendererOwnership() {
         val owner = WebViewOwnershipState()
         assertTrue(owner.bindForeground("local", "renderer-1"))

@@ -82,6 +82,30 @@ class WebViewOwnershipState {
         return true
     }
 
+    /**
+     * One authorized private-host WebView swap; no Activity is activated. The
+     * old renderer becomes invalid immediately, including its pending proofs.
+     */
+    @Synchronized
+    fun switchPrivate(
+        sessionGeneration: String,
+        oldRendererIdentity: String,
+        newRendererIdentity: String,
+    ): Boolean {
+        if (host != Host.PRIVATE ||
+            generation != sessionGeneration ||
+            identity != oldRendererIdentity ||
+            newRendererIdentity.isBlank() ||
+            newRendererIdentity == identity
+        ) {
+            return false
+        }
+        currentTicket = null
+        identity = newRendererIdentity
+        ownershipEpoch++
+        return true
+    }
+
     /** A lock demands that the native adapter release its private Surface immediately. */
     @Synchronized
     fun lockDevice() {

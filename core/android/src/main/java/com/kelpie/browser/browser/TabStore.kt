@@ -96,6 +96,28 @@ class TabStore(
         return tab
     }
 
+    /**
+     * Agent-only creation does not change selected tab or start an Activity.
+     * The WebView stays app-owned but unmounted until the owner or agent selects it.
+     */
+    fun addBackgroundTab(url: String): BrowserTab? {
+        if (_tabs.value.size >= MAX_AGENT_TABS) return null
+        val tab = createTab(isStartPage = false)
+        _tabs.value = _tabs.value + tab
+        tab.currentUrl = url
+        tab.webView.loadUrl(url)
+        persistSession()
+        return tab
+    }
+
+    /** Selection occurs only after R5 rehosts the exact target WebView. */
+    fun selectTabAsAgent(id: String): Boolean {
+        if (_tabs.value.none { it.id == id }) return false
+        _activeTabId.value = id
+        persistSession()
+        return true
+    }
+
     fun closeTab(id: String) {
         if (id == _activeTabId.value) {
             com.kelpie.browser.connect.NessieConnection
@@ -215,6 +237,7 @@ class TabStore(
     }
 
     companion object {
+        private const val MAX_AGENT_TABS = 40
         private const val PREFS_NAME = "kelpie_prefs"
         private const val KEY_HIDE_WELCOME = "hide_welcome_card"
         private const val JS_BRIDGE_NAME = "KelpieBridge"
