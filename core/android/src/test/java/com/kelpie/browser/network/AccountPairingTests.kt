@@ -128,7 +128,6 @@ class AccountPairingTests {
             }
         }
 
-
     @Test
     fun r5QaModernMcpHeadersWorkOnlyOnTheScopedPrivateEndpoint() =
         runBlocking {
@@ -145,7 +144,11 @@ class AccountPairingTests {
                     { _, _, _, _ -> System.currentTimeMillis() + 60_000 },
                     r5PrivateMcpQa = true,
                 )
-            fun mcp(version: String, path: String = "/mcp"): ParsedRequest =
+
+            fun mcp(
+                version: String,
+                path: String = "/mcp",
+            ): ParsedRequest =
                 request(token).copy(
                     path = path,
                     headers = request(token).headers + ("mcp-protocol-version" to listOf(version)),
