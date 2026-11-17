@@ -170,6 +170,20 @@ struct BottomBarView<MoreContent: View>: View {
                 .focused($addressFocused)
                 .accessibilityIdentifier("browser.url.field")
                 .onSubmit(navigate)
+            if addressFocused && !urlText.isEmpty {
+                Button {
+                    urlText = ""
+                    addressFocused = true
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 17))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear address")
+                .accessibilityIdentifier("browser.url.clear")
+            }
             if !addressFocused {
                 Button(action: onReload) {
                     Image(systemName: browserState.isLoading ? "xmark" : "arrow.clockwise")

@@ -9,9 +9,12 @@ import java.net.URI
 
 /** Pure authorization check; execution must revalidate immediately before acting. */
 object AgentAdmissionPolicy {
+    // A general browsing consent never authorizes financial, public or irreversible acts.
     private val sensitive =
         setOf(
             Operation.PAYMENT,
+            Operation.PUBLISH,
+            Operation.IRREVERSIBLE_DELETE,
             Operation.EXPORT_CREDENTIALS,
         )
     private val tabNeutral = setOf(Operation.LIST_TABS, Operation.OPEN_TAB)
@@ -75,8 +78,8 @@ object AgentAdmissionPolicy {
         ) {
             return AdmissionResult(AdmissionCode.INVALID_TARGET)
         }
-        // Owner-authorized ordinary agent operations (including publishing/deletion)
-        // are not automatically denied here; keep payments and secrets protected.
+        // No ordinary agent grant may approve a high-impact action. A distinct,
+        // native owner-approved action-scoped workflow is required before enabling one.
         if (command.operation in sensitive) {
             return AdmissionResult(AdmissionCode.SENSITIVE_ACTION_REQUIRES_APPROVAL)
         }

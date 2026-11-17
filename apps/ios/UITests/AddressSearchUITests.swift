@@ -2,6 +2,22 @@ import XCTest
 
 final class AddressSearchUITests: XCTestCase {
     @MainActor
+    func testClearAddressKeepsEditingWithoutNavigation() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-hideWelcomeCard", "YES", "-sessionTabURLs", "()", "-homeURL", "about:blank"]
+        app.launch()
+        let field = app.textFields["browser.url.field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 15))
+        field.tap()
+        field.typeText("example.org")
+        let clear = app.buttons["browser.url.clear"]
+        XCTAssertTrue(clear.waitForExistence(timeout: 5))
+        clear.tap()
+        XCTAssertTrue((field.value as? String ?? "").isEmpty)
+        XCTAssertTrue(app.keyboards.firstMatch.exists)
+    }
+    @MainActor
     func testBareWordOpensGoogleSearch() {
         continueAfterFailure = false
         let app = XCUIApplication()

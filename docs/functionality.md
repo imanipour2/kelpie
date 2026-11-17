@@ -29,6 +29,11 @@ handoff UX, process-recreation handling and live device verification remain
 follow-on K1 tasks. Never copy Google account tokens, passwords, OTPs or
 other apps' cookies. Draft only: no installation, merge or public release.
 
+
+**R5 beta native safety contract:** General agent consent cannot approve PAYMENTS, PUBLISH, IRREVERSIBLE_DELETE or EXPORT_CREDENTIALS operations; the admission layer returns SENSITIVE_ACTION_REQUIRES_APPROVAL. Site-specific click side effects also need deeper independent semantics checks before beta.
+
+**Android address-bar usability (R5 QA candidate, not a release):** When the URL/search field is being edited and contains text, a 48dp accessible **Clear address** control appears inside the field. It clears the editable buffer without navigating or changing the current page, then retains input focus; when not editing, the existing Reload/Stop control remains. The bottom toolbar groups Back and Forward together, keeps the address field flexible, and uses 48dp touch targets. This does not grant any agent or background privilege.
+
 ## Android R5 private agent QA — not released
 
 The source-only draft PR #41 adds a separate, explicitly write-capable

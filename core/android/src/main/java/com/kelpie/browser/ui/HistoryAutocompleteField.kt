@@ -5,10 +5,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -20,6 +25,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.TextStyle
@@ -42,6 +49,7 @@ fun HistoryAutocompleteField(
     val historyEntries by HistoryStore.entries.collectAsState()
     var urlText by remember { mutableStateOf(currentUrl) }
     var isFocused by remember { mutableStateOf(false) }
+    val addressFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(currentUrl, isFocused) {
         if (!isFocused) {
@@ -89,11 +97,22 @@ fun HistoryAutocompleteField(
                         maxLines = 1,
                     )
                 }
+                if (isFocused && urlText.isNotEmpty()) {
+                    IconButton(
+                        onClick = {
+                            urlText = ""
+                            addressFocusRequester.requestFocus()
+                        },
+                        modifier = Modifier.size(48.dp),
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Clear address", modifier = Modifier.size(20.dp))
+                    }
+                }
                 trailingIcon?.invoke()
             }
         },
         modifier =
-            modifier.onFocusChanged {
+            modifier.focusRequester(addressFocusRequester).onFocusChanged {
                 isFocused = it.isFocused
                 onEditingChanged(it.isFocused)
             },
