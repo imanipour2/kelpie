@@ -26,6 +26,17 @@ class R5WebViewActionScriptsTest {
     }
 
     @Test
+    fun observationExposesHumanChallengeHintButNoCaptchaToken() {
+        val snapshot = R5WebViewActionScripts.SNAPSHOT
+        assertTrue(snapshot.contains("humanChallengeDetected"))
+        assertTrue(snapshot.contains("recaptcha"))
+        assertTrue(snapshot.contains("hcaptcha"))
+        assertTrue(snapshot.contains("turnstile"))
+        assertFalse(snapshot.contains("g-recaptcha-response"))
+        assertFalse(snapshot.contains("cf-turnstile-response"))
+    }
+
+    @Test
     fun selectAndWaitAreFixedScriptsWithQuotedArguments() {
         val choose = R5WebViewActionScripts.select("#grade", "PRO 25")
         val verify = R5WebViewActionScripts.verifySelect("#grade", "PRO 25")
