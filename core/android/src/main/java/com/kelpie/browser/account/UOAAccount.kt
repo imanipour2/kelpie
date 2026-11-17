@@ -119,10 +119,17 @@ object UOAAccount {
      * into the Kelpie WebView profile.
      */
     private fun openPendingLogin() {
-        if (pendingUrl == null || liveHost() == null) return
+        val url = pendingUrl ?: return
+        if (liveHost() == null) return
         pendingUrl = null
-        loginOpen = false
-        openInBrowser()
+        val launch = openLogin
+        if (launch == null) {
+            loginOpen = false
+            openInBrowser()
+            return
+        }
+        loginOpen = true
+        launch(url, generation.toString())
     }
 
     fun finishLogin(
@@ -130,7 +137,10 @@ object UOAAccount {
         callback: String?,
         nonce: String?,
     ) {
-        if (nonce != generation.toString()) return
+        // A browser fallback may complete through AccountCallbackActivity before
+        // the Auth Tab launcher later reports CANCELED. Never invalidate a
+        // completed or superseded login attempt.
+        if (nonce != generation.toString() || attempt?.id != generation) return
         loginOpen = false
         when (val outcome = AccountLoginPolicy.outcome(resultCode, callback)) {
             is AccountLoginPolicy.Outcome.Callback -> receiveCallback(outcome.url)
