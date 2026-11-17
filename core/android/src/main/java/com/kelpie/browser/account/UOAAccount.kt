@@ -3,8 +3,8 @@ package com.kelpie.browser.account
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import androidx.browser.customtabs.CustomTabsIntent
 import androidx.activity.ComponentActivity
+import androidx.browser.customtabs.CustomTabsIntent
 import com.kelpie.browser.browser.BookmarkStore
 import com.kelpie.browser.storage.SecretStore
 import kotlinx.coroutines.CoroutineScope
