@@ -33,8 +33,8 @@ internal object R5McpWireAdmission {
             return null
         }
         if (declared != MODERN) return Failure(-32600, "Modern MCP metadata version mismatch", declared)
-        val identity = metadata["io.modelcontextprotocol/clientInfo"] as? Map<*, *>
-        val capability = metadata["io.modelcontextprotocol/clientCapabilities"] as? Map<*, *>
+        val identity = metadata?.get("io.modelcontextprotocol/clientInfo") as? Map<*, *>
+        val capability = metadata?.get("io.modelcontextprotocol/clientCapabilities") as? Map<*, *>
         if ((identity?.get("name") as? String).isNullOrBlank() ||
             (identity?.get("version") as? String).isNullOrBlank() ||
             capability == null
