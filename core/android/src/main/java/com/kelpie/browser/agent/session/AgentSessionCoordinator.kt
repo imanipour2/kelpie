@@ -43,11 +43,9 @@ class AgentSessionCoordinator(
         if (fullAgentQa && !closed) verifiedPresence.observeAuthenticated(principalId)
     }
 
-    fun principalName(principalId: String): String =
-        principalLabel(principalId).take(MAX_VISIBLE_NAME_LENGTH).ifBlank { principalId.take(MAX_VISIBLE_NAME_LENGTH) }
+    fun principalName(principalId: String): String = principalLabel(principalId).take(MAX_VISIBLE_NAME_LENGTH).ifBlank { principalId.take(MAX_VISIBLE_NAME_LENGTH) }
 
-    fun isVerifiedPrincipalFresh(principalId: String): Boolean =
-        fullAgentQa && !closed && verifiedPresence.isFreshAndPaired(principalId)
+    fun isVerifiedPrincipalFresh(principalId: String): Boolean = fullAgentQa && !closed && verifiedPresence.isFreshAndPaired(principalId)
 
     /**
      * One affirmative on-device tap starts a session only for a principal recently
