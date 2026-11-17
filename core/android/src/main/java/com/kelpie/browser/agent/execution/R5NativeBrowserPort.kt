@@ -130,8 +130,9 @@ internal class R5NativeBrowserPort(
                         val selector = command.selector ?: return@withContext AdapterOutcome.Failed
                         val previousUrl = view.url.orEmpty()
                         val previousEpoch = tab.documentVersion
-                        val previousFingerprint = evaluate(view, R5WebViewActionScripts.DOCUMENT_FINGERPRINT)
-                            ?: return@withContext AdapterOutcome.Failed
+                        val previousFingerprint =
+                            evaluate(view, R5WebViewActionScripts.DOCUMENT_FINGERPRINT)
+                                ?: return@withContext AdapterOutcome.Failed
                         val outcome = evaluate(view, R5WebViewActionScripts.click(selector))
                         if (outcome != "\"DISPATCHED\"") return@withContext AdapterOutcome.Failed
                         // The agent controls ordinary clicks; never infer success from JS dispatch.
@@ -259,11 +260,10 @@ internal class R5NativeBrowserPort(
                     live.webView.url != recorded.expected || before.documentEpoch != after.documentEpoch
                 Operation.CLICK -> {
                     val oldFingerprint = recorded.payload["preFingerprint"] as? String
+                    val freshFingerprint = evaluate(live.webView, R5WebViewActionScripts.DOCUMENT_FINGERPRINT)
+                    val contentChanged = oldFingerprint != null && freshFingerprint != null && freshFingerprint != oldFingerprint
                     live.webView.url != recorded.expected ||
-                        before.documentEpoch != after.documentEpoch ||
-                        (oldFingerprint != null &&
-                            evaluate(live.webView, R5WebViewActionScripts.DOCUMENT_FINGERPRINT)
-                            ?.let { it != oldFingerprint } == true)
+                        before.documentEpoch != after.documentEpoch || contentChanged
                 }
                 Operation.SELECT -> {
                     val selector = command.selector ?: return@withContext false
