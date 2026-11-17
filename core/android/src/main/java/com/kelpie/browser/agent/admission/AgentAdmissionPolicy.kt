@@ -12,8 +12,6 @@ object AgentAdmissionPolicy {
     private val sensitive =
         setOf(
             Operation.PAYMENT,
-            Operation.PUBLISH,
-            Operation.IRREVERSIBLE_DELETE,
             Operation.EXPORT_CREDENTIALS,
         )
     private val tabNeutral = setOf(Operation.LIST_TABS, Operation.OPEN_TAB)
@@ -62,7 +60,7 @@ object AgentAdmissionPolicy {
                 return AdmissionResult(AdmissionCode.INVALID_TARGET)
             }
         }
-        if (command.operation in setOf(Operation.TYPE, Operation.FILL)) {
+        if (command.operation in setOf(Operation.TYPE, Operation.FILL, Operation.SELECT)) {
             if (command.inputText == null || command.inputText.length > 4_096) {
                 return AdmissionResult(AdmissionCode.INVALID_TARGET)
             }
@@ -77,6 +75,8 @@ object AgentAdmissionPolicy {
         ) {
             return AdmissionResult(AdmissionCode.INVALID_TARGET)
         }
+        // Owner-authorized ordinary agent operations (including publishing/deletion)
+        // are not automatically denied here; keep payments and secrets protected.
         if (command.operation in sensitive) {
             return AdmissionResult(AdmissionCode.SENSITIVE_ACTION_REQUIRES_APPROVAL)
         }
