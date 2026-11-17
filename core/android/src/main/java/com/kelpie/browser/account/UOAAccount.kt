@@ -112,13 +112,17 @@ object UOAAccount {
         }
     }
 
-    /** The in-app login shares the tabs' WebView profile, so the Google session reaches every tab. */
+    /**
+     * Native OAuth must run in a supported external user-agent (RFC 8252).
+     * Never embed Google authentication in a WebView. The OAuth code callback
+     * returns through AccountCallbackActivity; Chrome cookies are not copied
+     * into the Kelpie WebView profile.
+     */
     private fun openPendingLogin() {
-        val url = pendingUrl ?: return
-        if (liveHost() == null) return
+        if (pendingUrl == null || liveHost() == null) return
         pendingUrl = null
-        loginOpen = true
-        openLogin?.invoke(url, generation.toString())
+        loginOpen = false
+        openInBrowser()
     }
 
     fun finishLogin(
@@ -135,7 +139,7 @@ object UOAAccount {
         }
     }
 
-    /** Last resort when no WebView can be created; the callback returns via [AccountCallbackActivity]. */
+    /** Open the owner-visible system browser. Callback is handled by [AccountCallbackActivity]. */
     private fun openInBrowser() {
         val pending = attempt ?: return
         val intent =
