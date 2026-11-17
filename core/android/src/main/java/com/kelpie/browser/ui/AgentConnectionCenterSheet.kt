@@ -103,6 +103,18 @@ internal fun AgentConnectionCenterSheet(
             modifier = Modifier.fillMaxWidth(),
         ) { Text("Copy setup instructions") }
         TextButton(
+            enabled = instructions != null,
+            onClick = {
+                if (instructions != null) {
+                    val send = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, instructions)
+                    }
+                    context.startActivity(Intent.createChooser(send, "Share Kelpie setup"))
+                }
+            },
+        ) { Text("Share setup through Android") }
+        TextButton(
             onClick = {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(provider.helpUrl))
                 if (intent.resolveActivity(context.packageManager) != null) {
