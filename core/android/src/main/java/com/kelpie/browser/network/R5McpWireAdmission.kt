@@ -49,13 +49,15 @@ internal object R5McpWireAdmission {
             return null
         }
         if (declared != MODERN) return Failure(-32600, "Modern MCP metadata version mismatch", declared)
+        val infoSupplied = metadata?.containsKey("io.modelcontextprotocol/clientInfo") == true
         val identity = metadata?.get("io.modelcontextprotocol/clientInfo") as? Map<*, *>
         val capability = metadata?.get("io.modelcontextprotocol/clientCapabilities") as? Map<*, *>
-        if ((identity?.get("name") as? String).isNullOrBlank() ||
-            (identity?.get("version") as? String).isNullOrBlank() ||
-            capability == null
-        ) {
-            return Failure(-32600, "Modern MCP client metadata incomplete", declared)
+        val badIdentity =
+            infoSupplied &&
+                ((identity?.get("name") as? String).isNullOrBlank() ||
+                    (identity?.get("version") as? String).isNullOrBlank())
+        if (capability == null || badIdentity) {
+            return Failure(-32602, "Modern MCP client metadata invalid or incomplete", declared)
         }
         if (body["method"] != httpMethod) return Failure(-32600, "Mcp-Method disagrees with JSON-RPC method", declared)
         if (body["method"] == "tools/call" && params?.get("name") != httpName) {
