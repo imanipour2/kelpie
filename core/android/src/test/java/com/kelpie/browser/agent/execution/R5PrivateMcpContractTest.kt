@@ -124,6 +124,24 @@ class R5PrivateMcpContractTest {
     }
 
     @Test
+    fun installedBrowserOnlyConnectorCanRequestOrStopButNeverApprove() {
+        for (method in listOf("session.request", "session.status", "session.stop")) {
+            val body = wrappedBrowserCall(method)
+            assertTrue(R5PrivateMcpContract.isGrantExempt(body))
+            assertFalse(R5AgentDeliveryGuard.requiresGrant("mcp", body))
+            assertNull(R5PrivateMcpContract.expectedGeneration(body))
+        }
+        for (method in listOf("session.approve", "session.grant", "session.unlock")) {
+            val body = wrappedBrowserCall(method)
+            assertFalse(R5PrivateMcpContract.isGrantExempt(body))
+            assertTrue(R5AgentDeliveryGuard.requiresGrant("mcp", body))
+        }
+        val wrongTool = wrappedBrowserCall("session.request", name = R5PrivateMcpContract.ACTION_TOOL)
+        assertFalse(R5PrivateMcpContract.isGrantExempt(wrongTool))
+        assertTrue(R5AgentDeliveryGuard.requiresGrant("mcp", wrongTool))
+    }
+
+    @Test
     fun nativeSessionMethodsRemainPairedClientOnlyInTheRouter() {
         for (method in listOf("request", "status", "stop")) {
             val envelope =
