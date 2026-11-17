@@ -12,7 +12,10 @@ internal object R5McpWireAdmission {
         val requested: String?,
     )
 
-    fun errorBody(id: Any?, failure: Failure): Map<String, Any?> =
+    fun errorBody(
+        id: Any?,
+        failure: Failure,
+    ): Map<String, Any?> =
         mapOf(
             "jsonrpc" to "2.0",
             "id" to id,
