@@ -16,6 +16,18 @@ unsigned outputs and failed signatures stop the Android job; there is no unsigne
 or debug signing fallback. Existing isolated debug APKs are test artifacts only.
 Signing ownership must be approved before creating or replacing a release identity.
 
+## Physical R5 QA version compatibility fix (draft PR42)
+
+The QA-only private `/mcp` bridge advertises `2025-11-25` and
+`2026-07-28`. The standard Android `AuthMiddleware` historically rejected
+these HTTP MCP version headers before routing, producing HTTP400
+`BAD_REQUEST Unsupported MCP protocol version` on the real S24. PR42
+threads `router.backgroundAgentQa` to version admission and selects the
+private two-version allowlist **only for /mcp when the QA flag is set**.
+The normal Android MCP version allowlist, every `/v1/mcp` route,
+authenticated principal, Origin and native process consent are unchanged.
+Exact-head CI and physical retest are required.
+
 ## Isolated R5 native-consent QA MCP adapter (draft; not a release)
 
 The normal Android browser gateway described above is unchanged on `main`.

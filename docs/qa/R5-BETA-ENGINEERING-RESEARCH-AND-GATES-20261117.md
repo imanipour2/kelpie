@@ -85,6 +85,28 @@ real Android hardware action QA, security review and provider-specific
 write-tool authorization remain release blockers. Native tab transfer
 OPEN/SWITCH/CLOSE, external cloud and CAPTCHA handling are not introduced.
 
+## 2026-11-17 | PR42 physical Android MCP version admission root-cause
+
+Real owner-approved private APK PR41 source `a5ff22b46a1b8a00d9d02c262061d2f8b4de1b9a`
+was clean installed with independently matched SHA on SM-S928B Android17.
+The exact pinned device package and original runbook passed package/ABI/16KiB
+and the 18-point fail-closed negative suite. Direct loopback `POST /mcp`
+without a protocol header returned HTTP200 `tools/list` with the expected
+three R5 QA tools; however modern `MCP-Protocol-Version: 2026-07-28` calls
+returned HTTP400 `BAD_REQUEST Unsupported MCP protocol version` before
+the private MCP bridge. Source RCA found `AuthMiddleware.evaluate` allowed
+only `2025-03-26`/`2025-06-18` for all MCP paths, while
+`R5McpWireAdmission.SUPPORTED` correctly declared `2025-11-25` and
+`2026-07-28`. PR42 introduces a flag passed from
+`HTTPServer.router.backgroundAgentQa` through the pairing wrapper and into
+`AuthMiddleware`, selecting the private version set **only at /mcp in an
+R5 QA process**, while normal routes and `/v1/mcp` retain original
+allowlists. Auth bearer/host/origin, duplicate-header, native owner consent,
+STOP/lock/epoch checks remain untouched; Kotlin JVM tests prove
+both acceptance and rejection. This source-only patch must pass exact-head
+CI, package SHA preflight, reinstallation and real S24 positive and negative
+MCP header tests before claiming bridge functionality.
+
 ## Beta gates and no-go decisions
 
 **G-B0 source/control**: identify exact owner-approved scope, PR stack and branch; no Android/iOS parity exception yet. Full benchmark spreadsheet unnecessary; this document is the component matrix.
