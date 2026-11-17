@@ -263,7 +263,8 @@ internal class R5NativeBrowserPort(
                     val freshFingerprint = evaluate(live.webView, R5WebViewActionScripts.DOCUMENT_FINGERPRINT)
                     val contentChanged = oldFingerprint != null && freshFingerprint != null && freshFingerprint != oldFingerprint
                     live.webView.url != recorded.expected ||
-                        before.documentEpoch != after.documentEpoch || contentChanged
+                        before.documentEpoch != after.documentEpoch ||
+                        contentChanged
                 }
                 Operation.SELECT -> {
                     val selector = command.selector ?: return@withContext false
