@@ -41,6 +41,8 @@
         </activity>
 
 
+        <activity android:name="com.kelpie.browser.account.AccountAuthTabActivity" android:exported="false" android:theme="@style/Theme.Kelpie" />
+
         <activity android:name="com.kelpie.browser.account.AccountCallbackActivity" android:exported="true" android:theme="@android:style/Theme.NoDisplay">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
