@@ -13,16 +13,15 @@ internal object R5AgentDeliveryGuard {
         body: Map<String, Any?>,
     ): Boolean =
         method in setOf("agent-command", "agent-tabs", "agent-runtime-status", "agent-capture-capabilities") ||
-            (method == "mcp" && (body["method"] as? String) == "tools/call")
+            (method == "mcp" && (body["method"] as? String) == "tools/call" &&
+                !R5PrivateMcpContract.isGrantExempt(body))
 
     fun expectedGeneration(
         method: String,
         body: Map<String, Any?>,
     ): String? {
         if (method != "mcp") return body["consentGeneration"] as? String
-        val params = body["params"] as? Map<*, *> ?: return null
-        val args = params["arguments"] as? Map<*, *> ?: return null
-        return args["consentGeneration"] as? String
+        return R5PrivateMcpContract.expectedGeneration(body)
     }
 
     fun permits(

@@ -121,6 +121,10 @@ class R5AgentCoordinator(
 
     fun isReady(): Boolean = !closed && ready
 
+    fun registerPrivateMcp(router: Router) {
+        R5PrivateMcpBridge(::isReady).register(router)
+    }
+
     /** A single authenticated command ingress for HTTP and validated MCP envelopes. */
     fun register(router: Router) {
         router.register("agent-runtime-status") { body ->

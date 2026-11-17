@@ -111,6 +111,36 @@ class R5BackgroundAgentSecurityTest {
             )
         assertTrue(R5AgentDeliveryGuard.requiresGrant("mcp", mcp))
         assertEquals(first.generation, R5AgentDeliveryGuard.expectedGeneration("mcp", mcp))
+        val nested =
+            mapOf<String, Any?>(
+                "method" to "tools/call",
+                "params" to
+                    mapOf(
+                        "name" to "kelpie_browser_control",
+                        "arguments" to mapOf("method" to "tabs.list", "params" to mapOf("consentGeneration" to first.generation)),
+                    ),
+            )
+        assertTrue(R5AgentDeliveryGuard.requiresGrant("mcp", nested))
+        assertEquals(first.generation, R5AgentDeliveryGuard.expectedGeneration("mcp", nested))
+        val capabilities =
+            mapOf<String, Any?>(
+                "method" to "tools/call",
+                "params" to mapOf("name" to "kelpie_browser_control", "arguments" to mapOf("method" to "capabilities")),
+            )
+        assertFalse(R5AgentDeliveryGuard.requiresGrant("mcp", capabilities))
+        val request =
+            mapOf<String, Any?>(
+                "method" to "tools/call",
+                "params" to mapOf("name" to "kelpie_agent_session", "arguments" to mapOf("method" to "request")),
+            )
+        assertFalse(R5AgentDeliveryGuard.requiresGrant("mcp", request))
+        val unsafe =
+            mapOf<String, Any?>(
+                "method" to "tools/call",
+                "params" to mapOf("name" to "kelpie_browser_control", "arguments" to mapOf("method" to "tab.screenshot")),
+            )
+        assertTrue(R5AgentDeliveryGuard.requiresGrant("mcp", unsafe))
+        assertEquals(null, R5AgentDeliveryGuard.expectedGeneration("mcp", unsafe))
         consent.setDeviceLocked(true)
         assertFalse(R5AgentDeliveryGuard.permits("owner", first.generation, consent.snapshot()))
         consent.stop()
