@@ -54,9 +54,11 @@ internal class R5PrivateMcpBridge(
                         "resultType" to "complete",
                         "supportedVersions" to listOf("2026-07-28", "2025-11-25"),
                         "capabilities" to mapOf("tools" to emptyMap<String, Any>()),
-                        "_meta" to mapOf(
-                            "io.modelcontextprotocol/serverInfo" to mapOf("name" to "kelpie-r5-private-qa", "version" to "0.1.0"),
-                        ),
+                        "_meta" to
+                            mapOf(
+                                "io.modelcontextprotocol/serverInfo" to
+                                    mapOf("name" to "kelpie-r5-private-qa", "version" to "0.1.0"),
+                            ),
                         "ttlMs" to 0,
                         "cacheScope" to "private",
                     ),
@@ -162,7 +164,7 @@ internal class R5PrivateMcpBridge(
         if (action == "tabs.list") {
             val (status, outcome) =
                 router.handle(
-                        "agent-tabs",
+                    "agent-tabs",
                     mapOf("consentGeneration" to generation),
                     fromGateway = true,
                 )
@@ -223,14 +225,12 @@ internal class R5PrivateMcpBridge(
         id: Any,
         value: Map<String, Any?>,
         isError: Boolean = false,
-    ): Map<String, Any?> =
-        rpcResult(id, complete(listOf(mapOf("type" to "text", "text" to stringify(value))), isError))
+    ): Map<String, Any?> = rpcResult(id, complete(listOf(mapOf("type" to "text", "text" to stringify(value))), isError))
 
     private fun complete(
         content: List<Map<String, Any?>>,
         isError: Boolean,
-    ): Map<String, Any?> =
-        mapOf("resultType" to "complete", "content" to content, "isError" to isError)
+    ): Map<String, Any?> = mapOf("resultType" to "complete", "content" to content, "isError" to isError)
 
     private fun rpcResult(
         id: Any,
@@ -241,8 +241,7 @@ internal class R5PrivateMcpBridge(
         id: Any?,
         code: Int,
         message: String,
-    ): Map<String, Any?> =
-        mapOf("jsonrpc" to "2.0", "id" to id, "error" to mapOf("code" to code, "message" to message))
+    ): Map<String, Any?> = mapOf("jsonrpc" to "2.0", "id" to id, "error" to mapOf("code" to code, "message" to message))
 
     private fun stringify(value: Any?): String =
         when (value) {
