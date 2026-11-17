@@ -3,6 +3,7 @@ package com.kelpie.browser.account
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.activity.ComponentActivity
 import com.kelpie.browser.browser.BookmarkStore
 import com.kelpie.browser.storage.SecretStore
@@ -147,9 +148,16 @@ object UOAAccount {
                 .addCategory(Intent.CATEGORY_BROWSABLE)
         val activity = liveHost() ?: return fail("Could not open login. Please try again.")
         try {
-            activity.startActivity(intent)
+            // A real browser surface is required for Google OAuth (RFC 8252);
+            // Custom Tabs uses the chosen browser's own cookies, never WebView.
+            CustomTabsIntent.Builder().build().launchUrl(activity, intent.data!!)
         } catch (_: android.content.ActivityNotFoundException) {
-            fail("Could not open login. Please try again.")
+            // Preserve the supported external browser fallback, never WebView.
+            try {
+                activity.startActivity(intent)
+            } catch (_: android.content.ActivityNotFoundException) {
+                fail("Could not open login. Please try again.")
+            }
         }
     }
 
