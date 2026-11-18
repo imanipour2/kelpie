@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -43,8 +44,10 @@ internal fun AgentConnectionCenterSheet(
     val clipboard = LocalClipboardManager.current
     val session by coordinator.active.collectAsState()
     val pending by coordinator.pending.collectAsState()
+    val observedClients by coordinator.observedAgents.collectAsState()
+    var requestError by remember { mutableStateOf(false) }
     var provider by remember { mutableStateOf(R5AgentProvider.CHATGPT) }
-    var chatGptTunnel by remember { mutableStateOf(false) }
+    var chatGptTunnel by remember { mutableStateOf(true) }
     var endpoint by remember { mutableStateOf("") }
     val validUrl = R5AgentConnectionSetup.safeEndpoint(endpoint)
     val instructions =
@@ -73,13 +76,40 @@ internal fun AgentConnectionCenterSheet(
             },
         )
         if (session != null) {
-            TextButton(onClick = coordinator::stopFromNativeUi) { Text("STOP browser control") }
+            Button(
+                onClick = coordinator::stopFromNativeUi,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            ) { Text("STOP browser control") }
+        } else if (pending != null) {
+            Text("A native approval request is pending. Review the separate consent dialog on this phone.")
         } else {
-            Text(
-                "To start: keep Kelpie visible, then ask your paired AI client to call " +
-                    "kelpie_agent_session.request (or browser-control session.request where exposed). " +
-                    "Only a real tap on the native approval dialog can authorize a session.",
-            )
+            when (observedClients.size) {
+                0 -> Text(
+                    "No uniquely paired agent was recently verified. Ask your AI assistant to " +
+                        "check Kelpie capabilities, or finish pairing first.",
+                )
+                1 -> {
+                    Text("Recently verified agent ID: " + observedClients.single().take(8) + "...")
+                    Button(
+                        onClick = {
+                            requestError = !coordinator.requestFromNativeUi()
+                            if (!requestError) onDismiss()
+                        },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    ) { Text("Request owner approval") }
+                    Text(
+                        "This button only opens a separate native consent prompt. " +
+                            "No browser access is granted until you tap Approve.",
+                    )
+                }
+                else -> Text(
+                    "Multiple paired agents are active. For safety, request a session " +
+                        "explicitly from the intended AI client; Kelpie will not choose for you.",
+                )
+            }
+            if (requestError) {
+                Text("No current verified agent or Kelpie is locked. Recheck the connection and try again.")
+            }
         }
         HorizontalDivider()
         Text("1. Choose an MCP client")
