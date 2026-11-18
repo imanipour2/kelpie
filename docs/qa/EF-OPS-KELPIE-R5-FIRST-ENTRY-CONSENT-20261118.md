@@ -30,3 +30,8 @@ This isolated v0.2.16 patch adds a *pre-construction* owner choice in the standa
 - Android FGS: https://developer.android.com/develop/background-work/services/fgs/launch
 - Android 13+ notification consent: https://developer.android.com/develop/ui/compose/notifications/notification-permission
 - Android native QA source and PR56/57/58 (GitHub).
+
+
+### R5 0.2.17 loopback signed-computer bearer correction
+
+Device evidence: both /health on 18461 and tunnel /readyz on 8080 returned HTTP200 while authenticated MCP browser tools returned FORBIDDEN. The native PeerApprovalQueue previously returned generic localhost before checking an actual Ed25519-signed computer bearer. The revised logic first validates the bearer against durable trusted computer key hashes (including revocation), then falls back to generic localhost for unauthenticated loopback; R5 principal eligibility still denies localhost. New 0.2.17 private QA build restores distinct trusted-agent presence after a signed owner-approved pairing, without altering normal non-R5 local access. Tested via C++ test_peer_trust with valid, invalid and revoked bearer cases; Python OpenSSL helper tests use a fake local pairing server. This is a source candidate until exact-head CI, Android install, native approval and real tabs/screenshot QA succeed. Official tunnel-client keys are extra_headers and discovery_extra_headers (underscores), not extra-headers. See https://github.com/openai/tunnel-client/blob/master/docs/configuration.md .

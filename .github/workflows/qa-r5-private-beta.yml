@@ -49,6 +49,89 @@ jobs:
           python3 -m py_compile scripts/qa/r5-s24-background-acceptance.py
           python3 scripts/qa/r5-s24-background-acceptance.py --help > /dev/null
           python3 scripts/qa/r5-s24-acceptance.py --help > /dev/null
+      - name: Native owner-pairing helper tests (stdlib + OpenSSL, no phone)
+        run: |
+          python3 -m unittest discover -s scripts/qa/tests -p test_r5_owner_pair.py -v
+      - name: Native C++ signed-bearer loopback priority and revocation tests
+        run: |
+          cmake -S core/native -B /tmp/kelpie-r5-peer-cmake -DCMAKE_BUILD_TYPE=Debug -DKELPIE_BUILD_DESKTOP_ENGINES=OFF
+          cmake --build /tmp/kelpie-r5-peer-cmake --target test_peer_trust --parallel 2
+          ctest --test-dir /tmp/kelpie-r5-peer-cmake --output-on-failure -R '^test_peer_trust
+        working-directory: apps/android
+        run: |
+          ./gradlew --no-daemon \
+            -PkelpieR5PrivateBetaQaProfile=true \
+            :kelpie-browser:ktlintCheck \
+            :kelpie-browser:testDebugUnitTest \
+            :app:assembleDebug
+      - name: Android Lint for R5 browser and isolated app
+        working-directory: apps/android
+        run: |
+          ./gradlew --no-daemon \
+            -PkelpieR5PrivateBetaQaProfile=true \
+            :kelpie-browser:lintDebug \
+            :app:lintDebug
+      - name: Verify both BuildConfig ports, unique identity, signature and native binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=apps/android/app/build/outputs/apk/debug/app-debug.apk
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          SIGN="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          CORE=core/android/build/generated/source/buildConfig/debug/com/kelpie/browser/BuildConfig.java
+          APP=apps/android/app/build/generated/source/buildConfig/debug/com/unlikeotherai/kelpie/app/BuildConfig.java
+          test -s "$CORE" && test -s "$APP" && test -s "$APK"
+          grep -Eq 'LOCAL_HTTP_PORT[[:space:]]*=[[:space:]]*18461;' "$CORE"
+          grep -Eq 'LOCAL_HTTP_PORT[[:space:]]*=[[:space:]]*18461;' "$APP"
+          grep -Eq 'PRIVATE_CAPTURE_QA_ENABLED[[:space:]]*=[[:space:]]*false;' "$APP"
+          grep -Eq 'R5_NATIVE_CONSENT_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
+          "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.browser.r5betaverify'"
+          "$AAPT" dump badging "$APK" | grep -F "versionCode='37' versionName='0.2.17-r5-loopback-pair-qa'"
+          "$SIGN" verify --verbose --print-certs "$APK"
+          ! "$AAPT" dump permissions "$APK" | grep -F 'android.permission.RECORD_AUDIO'
+          native_count=0
+          while IFS= read -r member; do
+            native_count=$((native_count + 1))
+            unzip -p "$APK" "$member" > /tmp/kelpie-r5-source-native.so
+            while IFS= read -r alignment; do
+              if (( alignment < 16384 )); then
+                echo "::error::Unaligned native segment in $member ($alignment)"
+                exit 1
+              fi
+            done < <(readelf -lW /tmp/kelpie-r5-source-native.so | awk '$1 == "LOAD" {print $NF}')
+          done < <(unzip -Z1 "$APK" | grep -E '^lib/(arm64-v8a|x86_64)/.*[.]so$')
+          test "$native_count" -gt 0
+          # Native principal-bound runtime is present; old unsafe routes stay gated.
+          grep -F 'R5AgentCoordinator(activity, handlerContext)' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
+          grep -F 'backgroundAgentQa = agentBackgroundQaEnabled' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
+          grep -F 'useNativeFrameProof = true' core/android/src/main/java/com/kelpie/browser/agent/execution/R5AgentCoordinator.kt
+          grep -F 'AgentOperationRuntime(consent' core/android/src/main/java/com/kelpie/browser/agent/execution/R5AgentCoordinator.kt
+          grep -Eq 'R5_BACKGROUND_AGENT_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
+          grep -F 'requireR5FirstEntryConsent()' core/android/src/main/java/com/kelpie/browser/KelpieBrowserActivity.kt
+          grep -F 'launchBrowserIfAllowed()' core/android/src/main/java/com/kelpie/browser/KelpieBrowserActivity.kt
+          grep -F 'AI agent not yet paired' core/android/src/main/java/com/kelpie/browser/ui/R5AgentConnectShortcut.kt
+          sha256sum "$APK" > apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
+          {
+            echo "source_commit=$(git rev-parse HEAD)"
+            echo "package=com.kelpie.browser.r5betaverify"
+            echo "version=0.2.17-r5-loopback-pair-qa"
+            echo "versionCode=37"
+            echo "port=18461"
+            echo "agent_routes=OWNER_GATED_R5_PRIVATE_BETA_TAB_OPERATIONS"
+            echo "signature=debug-only"
+            echo "install=OWNER_PRIVATE_BETA_AFTER_SIGNER_AND_HARDWARE_PREFLIGHT"
+            echo "artifact_sha256=$(sha256sum "$APK" | awk '{print $1}')"
+          } > apps/android/app/build/outputs/apk/debug/provenance.txt
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: kelpie-r5-private-beta-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            apps/android/app/build/outputs/apk/debug/app-debug.apk
+            apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
+            apps/android/app/build/outputs/apk/debug/provenance.txt
+          if-no-files-found: error
+          retention-days: 14
+
       - name: KtLint, agent JVM tests and private-display R5 private beta QA APK
         working-directory: apps/android
         run: |
@@ -79,7 +162,7 @@ jobs:
           grep -Eq 'PRIVATE_CAPTURE_QA_ENABLED[[:space:]]*=[[:space:]]*false;' "$APP"
           grep -Eq 'R5_NATIVE_CONSENT_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
           "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.browser.r5betaverify'"
-          "$AAPT" dump badging "$APK" | grep -F "versionCode='36' versionName='0.2.16-r5-first-entry-qa'"
+          "$AAPT" dump badging "$APK" | grep -F "versionCode='37' versionName='0.2.17-r5-loopback-pair-qa'"
           "$SIGN" verify --verbose --print-certs "$APK"
           ! "$AAPT" dump permissions "$APK" | grep -F 'android.permission.RECORD_AUDIO'
           native_count=0
@@ -107,8 +190,8 @@ jobs:
           {
             echo "source_commit=$(git rev-parse HEAD)"
             echo "package=com.kelpie.browser.r5betaverify"
-            echo "version=0.2.16-r5-first-entry-qa"
-            echo "versionCode=36"
+            echo "version=0.2.17-r5-loopback-pair-qa"
+            echo "versionCode=37"
             echo "port=18461"
             echo "agent_routes=OWNER_GATED_R5_PRIVATE_BETA_TAB_OPERATIONS"
             echo "signature=debug-only"
