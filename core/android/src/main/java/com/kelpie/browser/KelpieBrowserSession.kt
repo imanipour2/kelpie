@@ -68,6 +68,7 @@ class KelpieBrowserSession(
     privateCaptureQaEnabled: Boolean = false,
     private val agentConsentQaEnabled: Boolean = false,
     private val agentBackgroundQaEnabled: Boolean = false,
+    private val motherMcpR5RendererQaEnabled: Boolean = false,
 ) {
     private val browserContext get() = KelpieEnvironment.context(activity)
     private val applicationContext get() = KelpieEnvironment.app
@@ -134,6 +135,12 @@ class KelpieBrowserSession(
 
     init {
         agentSessionCoordinator?.runtimeReady = { r5AgentCoordinator?.isReady() == true }
+        require(!motherMcpR5RendererQaEnabled || (agentBackgroundQaEnabled && agentConsentQaEnabled)) {
+            "Mother MCP private renderer QA requires native owner consent and R5 renderer"
+        }
+        if (motherMcpR5RendererQaEnabled) {
+            r5AgentCoordinator?.attachMotherMcpScreenshot()
+        }
         require(!agentBackgroundQaEnabled || agentConsentQaEnabled) {
             "R5 remote control requires native device consent"
         }
@@ -212,8 +219,9 @@ class KelpieBrowserSession(
     }
 
     private fun registerHandlers(deviceInfo: DeviceInfo) {
-        router.consentOnlyQa = agentConsentQaEnabled
-        router.backgroundAgentQa = agentBackgroundQaEnabled
+        router.consentOnlyQa = agentConsentQaEnabled && !motherMcpR5RendererQaEnabled
+        router.backgroundAgentQa = agentBackgroundQaEnabled && !motherMcpR5RendererQaEnabled
+        router.motherR5BackgroundQa = motherMcpR5RendererQaEnabled
         router.handlerContext = handlerContext
         router.scriptPlaybackState = scriptPlaybackState
         handlerContext.scriptPlaybackState = scriptPlaybackState
@@ -296,7 +304,7 @@ class KelpieBrowserSession(
             .register()
         // Isolated native-consent QA replaces only the private /mcp envelope.
         // Legacy browser methods remain blocked by Router.consentOnlyQa.
-        r5AgentCoordinator?.registerPrivateMcp(router)
+        if (!motherMcpR5RendererQaEnabled) r5AgentCoordinator?.registerPrivateMcp(router)
     }
 
     private fun startServer(deviceInfo: DeviceInfo) {
