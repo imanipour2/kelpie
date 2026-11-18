@@ -30,6 +30,18 @@ class TunnelReadinessSnapshotTest {
     }
 
     @Test
+    fun mcpEvidenceIsNotInferredFromNullOrInvalidAge() {
+        assertEquals("No authenticated request observed in this process", mcpActivityLabel(null))
+        assertEquals("No authenticated request observed in this process", mcpActivityLabel(-1L))
+    }
+
+    @Test
+    fun mcpEvidenceExpiresWithoutClaimingToolControl() {
+        assertTrue(mcpActivityLabel(0L).contains("not an agent-control proof"))
+        assertTrue(mcpActivityLabel(120_001L).contains("stale"))
+    }
+
+    @Test
     fun healthFailureOverridesReadinessStatus() {
         val state = TunnelReadinessSnapshot(healthStatus = 500, readyStatus = 200)
         assertFalse(state.readyOk)
