@@ -84,10 +84,12 @@ internal fun AgentConnectionCenterSheet(
             Text("A native approval request is pending. Review the separate consent dialog on this phone.")
         } else {
             when (observedClients.size) {
-                0 -> Text(
-                    "No uniquely paired agent was recently verified. Ask your AI assistant to " +
-                        "check Kelpie capabilities, or finish pairing first.",
-                )
+                0 -> {
+                    Text(
+                        "No uniquely paired agent was recently verified. Ask your AI assistant to " +
+                            "check Kelpie capabilities, or finish pairing first.",
+                    )
+                }
                 1 -> {
                     Text("Recently verified agent ID: " + observedClients.single().take(8) + "...")
                     Button(
@@ -102,10 +104,12 @@ internal fun AgentConnectionCenterSheet(
                             "No browser access is granted until you tap Approve.",
                     )
                 }
-                else -> Text(
-                    "Multiple paired agents are active. For safety, request a session " +
-                        "explicitly from the intended AI client; Kelpie will not choose for you.",
-                )
+                else -> {
+                    Text(
+                        "Multiple paired agents are active. For safety, request a session " +
+                            "explicitly from the intended AI client; Kelpie will not choose for you.",
+                    )
+                }
             }
             if (requestError) {
                 Text("No current verified agent or Kelpie is locked. Recheck the connection and try again.")
