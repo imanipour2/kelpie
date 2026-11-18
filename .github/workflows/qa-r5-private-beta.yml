@@ -56,7 +56,8 @@ jobs:
         run: |
           cmake -S core/native -B /tmp/kelpie-r5-peer-cmake -DCMAKE_BUILD_TYPE=Debug -DKELPIE_BUILD_DESKTOP_ENGINES=OFF
           cmake --build /tmp/kelpie-r5-peer-cmake --target test_peer_trust --parallel 2
-          ctest --test-dir /tmp/kelpie-r5-peer-cmake --output-on-failure -R '^test_peer_trust
+          ctest --test-dir /tmp/kelpie-r5-peer-cmake --output-on-failure -R test_peer_trust
+      - name: KtLint, agent JVM tests and private-display R5 private beta QA APK
         working-directory: apps/android
         run: |
           ./gradlew --no-daemon \
