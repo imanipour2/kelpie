@@ -4,14 +4,16 @@ fun annotationElementsScript(): String =
     """
     (function() {
         ${elementSelectorBuilderScript()}
+        ${observationPrivacyScript()}
         var els = document.querySelectorAll('a,button,input,select,textarea,[role=button]');
         return Array.from(els).map(function(el) {
             var r = el.getBoundingClientRect();
-            if (r.width <= 0 || r.height <= 0) return null;
+            if (r.width <= 0 || r.height <= 0 || kelpieHiddenElement(el)) return null;
             return {
-                role: el.getAttribute('role') || el.tagName.toLowerCase(),
-                name: (el.textContent || el.value || el.placeholder || '').trim().substring(0, 50),
-                selector: kelpieBuildSelector(el),
+                role: kelpieSafeRole(el),
+                name: kelpieSafeName(el).substring(0, 50),
+                value: null, sensitivity: kelpiePrivateElement(el) ? 'private' : 'public',
+                selector: kelpieSafeSelector(el),
                 rect: {x: r.x, y: r.y, width: r.width, height: r.height}
             };
         }).filter(Boolean).slice(0, 50).map(function(item, index) {
@@ -29,34 +31,26 @@ fun selectorActivationScript(selector: String): String {
             var selector = '$escaped';
             var el = null;
             try { el = document.querySelector(selector); } catch (_) {}
-            if (el) return el;
+            if (el) return document.querySelectorAll(selector).length === 1 ? el : {error: 'ambiguous_target'};
             var normalized = selector.trim().toLowerCase();
             if (!normalized) return null;
             var tags = 'a,button,input,select,textarea,' +
                 '[role=button],[role=link],[role=menuitem]';
             var candidates = Array.from(document.querySelectorAll(tags));
             var textFor = function(node) {
-                return ((node.textContent || node.value || node.placeholder
-                    || node.getAttribute('aria-label') || '') + '')
-                    .trim().toLowerCase();
+                return kelpieSafeName(node).trim().toLowerCase();
             };
-            el = candidates.find(function(node) {
-                return textFor(node) === normalized;
-            }) || candidates.find(function(node) {
-                return textFor(node).indexOf(normalized) >= 0;
-            });
-            return el || null;
+            var matches = candidates.filter(function(node) { return textFor(node) === normalized; });
+            if (matches.length > 1) return {error: 'ambiguous_target'};
+            return matches.length === 1 ? matches[0] : null;
         })()
         """.trimIndent()
     return activationScript(resolver = resolver, selector = selector)
 }
 
+@Suppress("UNUSED_PARAMETER")
 fun annotationActivationScript(index: Int): String =
-    activationScript(
-        resolver = "(function() { return (${annotationElementsScript()}).find(function(item) { return item.index === $index; }); })()",
-        annotationIndex = index,
-        usingAnnotation = true,
-    )
+    "({error:'STALE_OBSERVATION',reason:'OBSERVATION_REQUIRED'})"
 
 fun fillElementScript(
     selector: String,
@@ -69,16 +63,45 @@ fun fillElementScript(
         ${formControlMutationScript()}
         var selector = '${JSEscape.string(selector)}';
         var value = '${JSEscape.string(value)}';
-        var el = document.querySelector(selector);
+        var targets = document.querySelectorAll(selector);
+        if (targets.length > 1) return {error: 'ambiguous_target'};
+        var el = targets.length === 1 ? targets[0] : null;
         if (!el) {
             return {error: 'not_found', diagnostics: kelpieNotFoundDiagnostics(selector, null)};
         }
         var tag = el.tagName ? el.tagName.toLowerCase() : '';
         var editable = ['input', 'textarea', 'select'].includes(tag) || !!el.isContentEditable;
-        if (!editable || !!el.disabled || !!el.readOnly) {
+        if (!editable || el.matches(':disabled') || el.closest('[inert]') || el.getAttribute('aria-disabled') === 'true' || !!el.readOnly) {
             return {error: 'not_editable', diagnostics: kelpieEditableDiagnostics(el, selector, null)};
         }
+        if (kelpieSensitiveAction(el)) return {error: 'needs_human'};
+        kelpieRememberSecret(value);
+        var expectedRole = el.getAttribute('role'), expectedType = el.type;
+        var expectedName = el.getAttribute('name'), expectedLabel = el.getAttribute('aria-label');
+        var expectedPlaceholder = el.getAttribute('placeholder'), expectedTag = el.tagName;
+        var beforeRect = el.getBoundingClientRect();
+        function actionableRect() {
+            var r = el.getBoundingClientRect();
+            if (r.width <= 0 || r.height <= 0 || kelpieHiddenElement(el)) return false;
+            var x = r.left + r.width / 2, y = r.top + r.height / 2;
+            if (x < 0 || y < 0 || x >= window.innerWidth || y >= window.innerHeight) return false;
+            var hit = document.elementFromPoint(x, y);
+            return !!hit && (hit === el || el.contains(hit));
+        }
+        if (!actionableRect()) return {error: 'not_visible'};
         el.focus();
+        var afterTargets = document.querySelectorAll(selector), afterRect = el.getBoundingClientRect();
+        if (!el.isConnected || afterTargets.length !== 1 || afterTargets[0] !== el ||
+            el.getAttribute('role') !== expectedRole || el.type !== expectedType || el.tagName !== expectedTag ||
+            el.getAttribute('name') !== expectedName || el.getAttribute('aria-label') !== expectedLabel ||
+            el.getAttribute('placeholder') !== expectedPlaceholder || el.matches(':disabled') || el.closest('[inert]') ||
+            el.getAttribute('aria-disabled') === 'true' || el.readOnly ||
+            Math.abs(afterRect.x - beforeRect.x) > 0.5 || Math.abs(afterRect.y - beforeRect.y) > 0.5 ||
+            Math.abs(afterRect.width - beforeRect.width) > 0.5 || Math.abs(afterRect.height - beforeRect.height) > 0.5) {
+            return {error: 'stale_element'};
+        }
+        if (kelpieSensitiveAction(el)) return {error: 'needs_human'};
+        if (!actionableRect()) return {error: 'not_visible'};
         if (el.isContentEditable) {
             el.textContent = value;
         } else {
@@ -87,59 +110,23 @@ fun fillElementScript(
         kelpieDispatchFormControlInput(el);
         kelpieDispatchFormControlChange(el);
         return {
-            selector: selector,
-            value: value,
+            selector: kelpieSafeSelector(el),
+            value: null,
+            sensitivity: 'private',
             element: kelpieElementSummary(el)
         };
     })()
     """.trimIndent()
 
+@Suppress("UNUSED_PARAMETER")
 fun fillAnnotationScript(
     index: Int,
     value: String,
-): String =
-    """
-    (function() {
-        ${elementSelectorBuilderScript()}
-        ${interactionHelpersScript()}
-        ${formControlMutationScript()}
-        var annotationIndex = $index;
-        var value = '${JSEscape.string(value)}';
-        var annotation = (${annotationElementsScript()}).find(function(item) { return item.index === annotationIndex; });
-        if (!annotation) {
-            return {error: 'not_found', diagnostics: kelpieBaseDiagnostics(null, annotationIndex)};
-        }
-        var matches = Array.from(document.querySelectorAll('a,button,input,select,textarea,[role=button]')).filter(function(node) {
-            var rect = node.getBoundingClientRect();
-            return rect.width > 0 && rect.height > 0;
-        });
-        var el = matches[annotation.index];
-        if (!el) {
-            return {error: 'not_found', diagnostics: kelpieNotFoundDiagnostics(annotation.selector || null, annotationIndex)};
-        }
-        var tag = el.tagName ? el.tagName.toLowerCase() : '';
-        var editable = ['input', 'textarea', 'select'].includes(tag) || !!el.isContentEditable;
-        if (!editable || !!el.disabled || !!el.readOnly) {
-            return {error: 'not_editable', diagnostics: kelpieEditableDiagnostics(el, annotation.selector || null, annotationIndex)};
-        }
-        el.focus();
-        if (el.isContentEditable) {
-            el.textContent = value;
-        } else {
-            kelpieWriteFormControlValue(el, value);
-        }
-        kelpieDispatchFormControlInput(el);
-        kelpieDispatchFormControlChange(el);
-        return {
-            role: el.getAttribute('role') || el.tagName.toLowerCase(),
-            name: (el.placeholder || el.name || '').trim(),
-            selector: kelpieBuildSelector(el)
-        };
-    })()
-    """.trimIndent()
+): String = "({error:'STALE_OBSERVATION',reason:'OBSERVATION_REQUIRED'})"
 
 fun interactionHelpersScript(): String =
     """
+    ${observationPrivacyScript()}
     function kelpieRectJSON(rect) {
         return {x: rect.x, y: rect.y, width: rect.width, height: rect.height};
     }
@@ -156,15 +143,16 @@ fun interactionHelpersScript(): String =
             : {x: 0, y: 0, width: 0, height: 0};
         return {
             tag: node.tagName ? node.tagName.toLowerCase() : null,
-            role: node.getAttribute ? (node.getAttribute('role') || (node.tagName ? node.tagName.toLowerCase() : null)) : null,
-            text: ((node.innerText || node.textContent || node.value || node.placeholder || '') + '').trim().substring(0, 100),
-            selector: node.tagName ? kelpieBuildSelector(node) : null,
+            role: kelpieSafeRole(node),
+            text: kelpieSafeName(node).substring(0, 100),
+            sensitivity: kelpiePrivateElement(node) ? 'private' : 'public',
+            selector: node.tagName ? kelpieSafeSelector(node) : null,
             rect: kelpieRectJSON(rect)
         };
     }
     function kelpieBaseDiagnostics(selector, annotationIndex) {
         var diagnostics = kelpieViewportDiagnostics();
-        if (selector) diagnostics.selector = selector;
+        if (selector) diagnostics.selector = kelpieSafeText(selector) === selector ? selector : null;
         if (annotationIndex !== null && annotationIndex !== undefined) diagnostics.annotationIndex = annotationIndex;
         return diagnostics;
     }
@@ -185,17 +173,7 @@ fun interactionHelpersScript(): String =
         return Array.from(document.querySelectorAll('a,button,input,select,textarea,[role=button]')).map(function(node) {
             var rect = node.getBoundingClientRect();
             if (rect.width <= 0 || rect.height <= 0) return null;
-            var haystack = [
-                node.id || '',
-                node.getAttribute('name') || '',
-                node.getAttribute('aria-label') || '',
-                node.getAttribute('placeholder') || '',
-                typeof node.className === 'string' ? node.className : '',
-                node.innerText || '',
-                node.textContent || '',
-                node.value || '',
-                node.tagName || ''
-            ].join(' ').toLowerCase();
+            var haystack = kelpieSafeName(node).toLowerCase();
             var score = tokens.reduce(function(total, token) {
                 return total + (haystack.indexOf(token) >= 0 ? 1 : 0);
             }, 0);
@@ -244,40 +222,30 @@ fun interactionHelpersScript(): String =
 private fun activationScript(
     resolver: String,
     selector: String? = null,
-    annotationIndex: Int? = null,
-    usingAnnotation: Boolean = false,
 ): String {
     val selectorLiteral = selector?.let { "'${JSEscape.string(it)}'" } ?: "null"
-    val annotationLiteral = annotationIndex?.toString() ?: "null"
     val elementLookup =
-        if (usingAnnotation) {
-            """
-            var annotation = $resolver;
-            if (!annotation) return {error: 'not_found', diagnostics: kelpieBaseDiagnostics(null, requestedAnnotationIndex)};
-            var matches = Array.from(document.querySelectorAll('a,button,input,select,textarea,[role=button]')).filter(function(node) {
-                var rect = node.getBoundingClientRect();
-                return rect.width > 0 && rect.height > 0;
-            });
-            var el = matches[annotation.index];
-            if (!el) return {error: 'not_found', diagnostics: kelpieNotFoundDiagnostics(annotation.selector || null, requestedAnnotationIndex)};
-            """.trimIndent()
-        } else {
-            """
-            var el = $resolver;
-            if (!el) return {error: 'not_found', diagnostics: kelpieNotFoundDiagnostics(requestedSelector, requestedAnnotationIndex)};
-            """.trimIndent()
-        }
+        """
+        var el = $resolver;
+        if (el && el.error) return el;
+        if (!el) return {error: 'not_found', diagnostics: kelpieNotFoundDiagnostics(requestedSelector, null)};
+        if (kelpieSensitiveAction(el)) return {error: 'needs_human'};
+        if (el.matches(':disabled') || el.closest('[inert]') || el.getAttribute('aria-disabled') === 'true') return {error: 'not_visible'};
+        """.trimIndent()
 
     return """
         |(function() {
         |    ${elementSelectorBuilderScript().prependIndent("    ").trimStart()}
         |    ${interactionHelpersScript().prependIndent("    ").trimStart()}
         |    var requestedSelector = $selectorLiteral;
-        |    var requestedAnnotationIndex = $annotationLiteral;
+        |    var requestedAnnotationIndex = null;
         |    $elementLookup
+        |    var expectedRole = el.getAttribute('role'), expectedName = kelpieSafeName(el);
+        |    var expectedType = el.type, expectedTag = el.tagName, expectedHref = el.getAttribute('href');
         |    el.scrollIntoView({block: 'center', inline: 'center'});
+        |    if (!el.isConnected || ($resolver) !== el) return {error: 'stale_element'};
         |    var rect = el.getBoundingClientRect();
-        |    if (rect.width <= 0 || rect.height <= 0) {
+        |    if (rect.width <= 0 || rect.height <= 0 || kelpieHiddenElement(el)) {
         |        var diagnostics = kelpieBaseDiagnostics(requestedSelector, requestedAnnotationIndex);
         |        diagnostics.targetRect = kelpieRectJSON(rect);
         |        return {error: 'not_visible', diagnostics: diagnostics};
@@ -291,7 +259,7 @@ private fun activationScript(
         |        diagnostics.targetCenter = {x: centerX, y: centerY};
         |        return {error: 'not_visible', diagnostics: diagnostics};
         |    }
-        |    if (!(hit === el || el.contains(hit) || hit.contains(el))) {
+        |    if (!(hit === el || el.contains(hit))) {
         |        var diagnostics = kelpieBaseDiagnostics(requestedSelector, requestedAnnotationIndex);
         |        diagnostics.targetRect = kelpieRectJSON(rect);
         |        diagnostics.targetCenter = {x: centerX, y: centerY};
@@ -302,54 +270,33 @@ private fun activationScript(
         |    if (typeof hit.focus === 'function') {
         |        try { hit.focus({preventScroll: true}); } catch (error) { try { hit.focus(); } catch (focusError) {} }
         |    }
-        |    function dispatchPointer(type, button, buttons) {
-        |        if (typeof window.PointerEvent !== 'function') return;
-        |        hit.dispatchEvent(new PointerEvent(type, {
-        |            bubbles: true,
-        |            cancelable: true,
-        |            composed: true,
-        |            clientX: centerX,
-        |            clientY: centerY,
-        |            screenX: centerX,
-        |            screenY: centerY,
-        |            pointerId: 1,
-        |            pointerType: 'touch',
-        |            isPrimary: true,
-        |            button: button,
-        |            buttons: buttons
-        |        }));
+        |    var currentRect = el.getBoundingClientRect();
+        |    if (!el.isConnected || !hit.isConnected || ($resolver) !== el ||
+        |        el.getAttribute('role') !== expectedRole || kelpieSafeName(el) !== expectedName ||
+        |        el.type !== expectedType || el.tagName !== expectedTag || el.getAttribute('href') !== expectedHref ||
+        |        Math.abs(currentRect.x - rect.x) > 0.5 || Math.abs(currentRect.y - rect.y) > 0.5 ||
+        |        Math.abs(currentRect.width - rect.width) > 0.5 || Math.abs(currentRect.height - rect.height) > 0.5) {
+        |        return {error: 'stale_element'};
         |    }
-        |    function dispatchMouse(type, button, buttons) {
-        |        hit.dispatchEvent(new MouseEvent(type, {
-        |            bubbles: true,
-        |            cancelable: true,
-        |            composed: true,
-        |            clientX: centerX,
-        |            clientY: centerY,
-        |            screenX: centerX,
-        |            screenY: centerY,
-        |            detail: type === 'click' ? 1 : 0,
-        |            button: button,
-        |            buttons: buttons
+        |    if (kelpieSensitiveAction(el) || kelpieSensitiveAction(hit)) return {error: 'needs_human'};
+        |    if (el.matches(':disabled') || el.closest('[inert]') || el.getAttribute('aria-disabled') === 'true' || kelpieHiddenElement(el) ||
+        |        document.elementFromPoint(centerX, centerY) !== hit) return {error: 'not_visible'};
+        |    // A single click prevents duplicate side effects from synthetic down/up/click chains.
+        |    try {
+        |        if (typeof hit.click === 'function') hit.click();
+        |        else hit.dispatchEvent(new MouseEvent('click', {
+        |            bubbles: true, cancelable: true, composed: true,
+        |            clientX: centerX, clientY: centerY, button: 0, buttons: 0, detail: 1
         |        }));
-        |    }
-        |    dispatchPointer('pointermove', 0, 0);
-        |    dispatchMouse('mousemove', 0, 0);
-        |    dispatchPointer('pointerdown', 0, 1);
-        |    dispatchMouse('mousedown', 0, 1);
-        |    dispatchPointer('pointerup', 0, 0);
-        |    dispatchMouse('mouseup', 0, 0);
-        |    if (typeof hit.click === 'function') {
-        |        hit.click();
-        |    } else {
-        |        dispatchMouse('click', 0, 0);
+        |    } catch (_) {
+        |        return {error: 'uncertain', diagnostics: {mayHaveCompleted: true, status: 'UNCERTAIN'}};
         |    }
         |    return {
         |        tag: el.tagName.toLowerCase(),
-        |        role: el.getAttribute('role') || el.tagName.toLowerCase(),
-        |        name: (el.textContent || el.value || el.placeholder || '').trim().substring(0, 50),
-        |        selector: kelpieBuildSelector(el),
-        |        text: (el.textContent || '').trim().substring(0, 100),
+        |        role: kelpieSafeRole(el),
+        |        name: kelpieSafeName(el).substring(0, 50),
+        |        selector: kelpieSafeSelector(el),
+        |        text: kelpieSafeNodeText(el).substring(0, 100),
         |        rect: {x: rect.x, y: rect.y, width: rect.width, height: rect.height},
         |        center: {x: centerX, y: centerY}
         |    };

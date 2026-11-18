@@ -281,13 +281,13 @@ Response:
 ## Screenshots
 
 ### `screenshot`
-Capture a screenshot of the current viewport. When `fullPage: true`, captures the entire scrollable page. Full-page capture is supported on iOS, Android, and macOS, each using its renderer's native mechanism:
+Capture support depends on the native binding. The legacy parameters remain registered:
 
 - **iOS:** scroll-and-stitch — scrolls the page viewport-by-viewport and stitches each `WKWebView.takeSnapshot` into one image (WebKit's snapshot is viewport-clipped, so a single pass cannot capture beyond the visible viewport).
-- **Android:** scroll-and-stitch — scrolls the `WebView` viewport-by-viewport, drawing each band into one bitmap, with a height cap (`MAX_FULL_PAGE_PX`, plus a heap-derived bound) so very tall pages degrade gracefully rather than risk `OutOfMemoryError` (no CDP).
+- **Android KAI branch:** all ordinary image exports return `NEEDS_HUMAN`, including plain, diagnostic and annotated paths. A debug flag and the native WebView's exact reserved URL `https://kai-fixture.invalid/` allow synthetic fixture capture only. Full-page capture always refuses; no real-page privacy or background freshness guarantee is claimed.
 - **macOS:** scroll-and-stitch — scrolls the page viewport-by-viewport and stitches each snapshot into one image. This path is renderer-agnostic and works for both the WebKit and Chromium (CEF) renderers, since both are viewport-clipped at the snapshot layer.
 
-All three platforms now use scroll-and-stitch and may show minor seam artifacts on pages with sticky/animated elements; the full-page response adds a `contentHeight` field and a page-relative `imageScaleY` so image pixels map back to CSS coordinates across the whole page.
+Permitted full-page paths may show seams on sticky/animated pages. Android's fixture path reuses Bitmap/Canvas, has bounded allocations and reports independent image scales. Its labels are display-only. See [KAI contracts and QA](../qa/kai-reuse-exec-20261119/contracts-and-qa.md); the success example below is not an ordinary Android response.
 
 > **CLI/MCP note:** The HTTP API always returns base64. The CLI wraps this — it auto-saves to a file and returns the file path instead, so LLMs never handle raw base64 in conversation. The CLI MCP server also saves `resolution: "native"` screenshots to a temp file and returns compact metadata plus a file resource link, preventing large native images from being streamed as tool text. See [cli.md](../cli.md) for `--output` and `--base64` flags.
 
@@ -317,14 +317,14 @@ Response:
 }
 ```
 
-`resolution: "viewport"` returns a CSS-pixel/non-retina image that lines up with the interaction coordinate system more directly and keeps image payloads smaller for LLM use. `resolution: "native"` preserves the renderer's native output detail. The extra metadata is additive: older clients can ignore it, and newer clients should use it when converting image pixels back into viewport tap coordinates.
+For permitted capture, `resolution:"viewport"` uses CSS-sized output and `"native"` preserves native detail. Map coordinates with that image's `imageScaleX`/`imageScaleY`, visual offset and crop. DPR alone is insufficient. Android refuses unsupported zoom/offset geometry and does not accept unbound screenshot-space taps.
 
 ---
 
 ## DOM Access
 
 ### `getDOM`
-Get the full DOM tree or a subtree.
+Read the DOM or a subtree. Android returns sanitized detached HTML with `redacted:true`; private values/metadata are omitted, so this is not a lossless DOM export.
 
 ```json
 POST /v1/get-dom
@@ -436,7 +436,7 @@ Response:
 ### `click`
 Click an element by selector. Prefer this over raw coordinate taps whenever you can identify the target semantically.
 
-Selectors returned from `find-element`, `find-button`, `find-link`, `find-input`, `screenshot-annotated`, and related LLM endpoints are meant to be fed back into this endpoint directly.
+Selectors returned from semantic `find-*` endpoints can be used here within the binding's checks. Android annotation labels are display-only; for agent reference actions, use a fresh canonical `tab.snapshot` and `tab.click`.
 
 The `selector` field also accepts visible text content. Kelpie tries CSS selector resolution first; if that throws or finds nothing, it falls back to matching interactive elements by trimmed text content case-insensitively, then by partial text match.
 
@@ -460,27 +460,27 @@ Response:
 }
 ```
 
-Kelpie now resolves the rendered hit target at the element center and dispatches coordinate-bearing pointer and mouse events there. If the selector matches an element whose center is hidden or covered, the endpoint fails with `ELEMENT_NOT_VISIBLE` instead of silently activating the wrong target.
+Selector activation resolves the rendered hit target at the center and uses synthetic events. Android refuses ambiguous, sensitive, disabled or occluded targets with explicit errors; it rechecks identity after focus. A dispatch acknowledgement does not verify a Sort/Filter result or native touch delivery.
 
-Selectors returned by `find-element`, `find-button`, `find-link`, `find-input`, `get-form-state`, and `screenshot-annotated` are intended to be fed back into `click` directly.
+Returned structural selectors are current descriptions, not durable element identity. Android blind annotation mutation returns `STALE_OBSERVATION`.
 
 ### `tap`
-Tap at specific coordinates as a last resort. Prefer `click` or `click-annotation` first whenever you can. If the app has saved tap calibration offsets, they are applied automatically before the event sequence is dispatched.
+Tap at viewport coordinates as a last resort. Prefer canonical observed references or a validated selector. Existing calibration offsets do not establish screenshot identity or owner consent.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `x` | number | **required** | X coordinate |
 | `y` | number | **required** | Y coordinate |
-| `coordinateSpace` | string | `"viewport"` | `"viewport"` for CSS viewport pixels, `"screenshot"` for screenshot image pixels (auto-converted via devicePixelRatio) |
+| `coordinateSpace` | string | `"viewport"` | CSS viewport pixels; Android rejects `"screenshot"` with `STALE_OBSERVATION` because no verified image transform is bound |
 
-When using coordinates read from a screenshot image, pass `"coordinateSpace": "screenshot"` so Kelpie converts from image pixels to viewport CSS pixels automatically. Without this, taps will miss on Retina/high-DPI displays because screenshot images have more pixels than the CSS viewport.
+Do not divide screenshot coordinates by DPR or retry a refused screenshot-space tap as viewport input. Android accepts finite nonnegative viewport coordinates and checks the actual hit target; other bindings retain their documented legacy behavior.
 
 ```json
 POST /v1/tap
 {
   "x": 195,
   "y": 420,
-  "coordinateSpace": "screenshot"
+  "coordinateSpace": "viewport"
 }
 
 Response:

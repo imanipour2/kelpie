@@ -11,21 +11,21 @@ fun elementSelectorBuilderScript(): String =
     function kelpieEscapeAttribute(value) {
         return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     }
-    function kelpieBuildSelector(node) {
+    function kelpieBuildSelector(node, structuralOnly) {
         if (!node || node.nodeType !== 1) return null;
-        if (node.id) return '#' + kelpieEscapeIdentifier(node.id);
+        if (!structuralOnly && node.id) return '#' + kelpieEscapeIdentifier(node.id);
         var segments = [];
         var current = node;
         while (current && current.nodeType === 1) {
             var tag = current.tagName.toLowerCase();
             var segment = tag;
-            if (current.id) {
+            if (!structuralOnly && current.id) {
                 segment += '#' + kelpieEscapeIdentifier(current.id);
                 segments.unshift(segment);
                 return segments.join(' > ');
             }
             var name = current.getAttribute && current.getAttribute('name');
-            if (name) {
+            if (!structuralOnly && name) {
                 var named = tag + '[name="' + kelpieEscapeAttribute(name) + '"]';
                 try {
                     if (document.querySelectorAll(named).length === 1) {

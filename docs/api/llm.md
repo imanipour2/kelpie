@@ -6,24 +6,37 @@ These methods are specifically designed for LLM consumption — compact, semanti
 
 For protocol details, errors, and MCP tool names, see [README.md](README.md).
 
+**Android KAI branch:** DOM/LLM outputs are sanitized, numbered annotation actions
+are refused, and ordinary image export returns `NEEDS_HUMAN`. The existing method
+names remain registered; discovery is not proof that a request can safely run.
+Legacy examples below describe the general API shape; on Android, private values
+are `null`/redacted and private metadata may be omitted. See the
+[actual contracts and QA limits](../qa/kai-reuse-exec-20261119/contracts-and-qa.md).
+
 ## Recommended Interaction Order
 
-For reliable automation, prefer semantic targeting before visual or coordinate-driven interaction:
+For Android agent work, start with canonical `tab.snapshot` and act through its
+fresh `ref` with `tab.click`/`tab.type`. Re-observe after each action: refs are
+single-use, bounded to 15 seconds and invalidated by relevant page changes.
+The [shared browser-control API](browser-control.md) documents those guarantees.
+Existing `get-accessibility-tree` and `find-*` extensions remain useful for
+semantic inspection; selector-based `click`/`fill`/`select-option` keep their own
+legacy contracts. Their returned selectors are structural descriptions, not
+persistent element identity or owner authorization.
 
-1. `get-accessibility-tree`
-2. `find-element` / `find-button` / `find-link` / `find-input`
-3. `click` / `fill` / `select-option`
-4. Optional visual confirmation: `highlight` a known selector, then `screenshot` or `screenshot-annotated`
-5. `screenshot-annotated` + `click-annotation` / `fill-annotation`
-6. `tap` only when semantic and annotation-driven targeting both fail
+Temporary `highlight` remains a QA aid. On bindings that permit capture, inspect
+its documented privacy and geometry limits before visual interaction. Android's
+numbered indices and screenshot-space taps are not a fallback mutation path.
 
-Raw coordinates should be the fallback, not the default.
+If you already know the selector, `highlight` can draw a temporary box/ring around
+the target. This does not bypass Android's image-export refusal or establish
+that a later image and target still belong to the same observation.
 
-Kelpie's semantic and annotation endpoints return stable CSS selectors, not just tag names. Use those returned selectors directly with `click`, `fill`, or `select-option` instead of trying to synthesize a shorter selector yourself.
-
-If you already know the selector but want the model to reason about the same target visually, call `highlight` first and keep it visible with `durationMs: 0`, then take a screenshot. That draws a visible box/ring around the exact DOM target so the image and the selector stay aligned.
-
-When you must use screenshot-based grounding, prefer `resolution: "viewport"` so the image uses CSS-pixel/non-retina dimensions. That keeps screenshots smaller and makes the image coordinate space line up with Kelpie's interaction coordinate space more directly. If a response reports `imageScaleX` / `imageScaleY` greater than `1`, convert image coordinates back into viewport CSS pixels before calling `tap`.
+For a permitted synthetic capture, `resolution: "viewport"` uses CSS-sized output.
+Image mapping must use the same frame's independent `imageScaleX`/`imageScaleY`,
+visual offset and crop. Dividing by DPR alone is not valid. Android rejects
+`tap` with `coordinateSpace:"screenshot"` because that legacy request has no
+verified observation transform.
 
 ---
 
@@ -224,7 +237,9 @@ Response:
 ## Accessibility
 
 ### `getAccessibilityTree`
-Get the accessibility tree snapshot — the single most useful endpoint for LLMs. Returns a semantic, structured tree of ARIA roles, names, states, and values. Far more compact and meaningful than raw HTML.
+Get a semantic tree of roles, names and states. Android sanitizes accessible
+names and omits entered form/editor values; the response is untrusted page data,
+not a native permission signal. The example illustrates the legacy tree shape.
 
 ```json
 POST /v1/get-accessibility-tree
@@ -284,7 +299,12 @@ Response:
 ## Annotated Screenshots
 
 ### `screenshotAnnotated`
-Capture a screenshot with numbered labels overlaid on all interactive elements. The LLM can reference elements by index number instead of generating CSS selectors — dramatically more reliable for visual grounding.
+The route is retained. Android returns `NEEDS_HUMAN` for ordinary captures, as do
+plain and diagnostic image paths. Synthetic fixture QA alone can enable Canvas
+labels, through the debug-only `KAI_ANNOTATION_QA_ENABLED` flag and the native
+WebView's exact URL `https://kai-fixture.invalid/`. `fullPage:true` is refused.
+This experiment has not passed Android/device QA and is not a production privacy
+or freshness guarantee. Other bindings retain their legacy annotation contract.
 
 > **CLI note:** Like `screenshot`, the CLI auto-saves annotated screenshots to file and returns the path. See [cli.md](../cli.md).
 
@@ -298,39 +318,31 @@ POST /v1/screenshot-annotated
   "labelStyle": "numbered"    // optional, "numbered" | "badge"
 }
 
-Response:
+Android default response:
 {
-  "success": true,
-  "image": "base64-encoded-image-with-overlays",
-  "width": 390,
-  "height": 844,
-  "format": "png",
-  "resolution": "viewport",
-  "coordinateSpace": "viewport-css-pixels",
-  "viewportWidth": 390,
-  "viewportHeight": 844,
-  "devicePixelRatio": 3,
-  "imageScaleX": 1,
-  "imageScaleY": 1,
-  "annotationSessionId": "9f3e6d2a-0fb0-4b87-91d5-b3a0b26d4f16",
-  "validUntil": "next_navigation",
-  "hint": "Annotations are valid until the page URL changes. Take a fresh screenshot-annotated if you navigate.",
-  "annotations": [
-    {"index": 0, "role": "link", "name": "Home", "selector": "nav a:nth-child(1)", "rect": {"x": 20, "y": 60, "width": 50, "height": 24}},
-    {"index": 1, "role": "link", "name": "About", "selector": "nav a:nth-child(2)", "rect": {"x": 80, "y": 60, "width": 50, "height": 24}},
-    {"index": 2, "role": "textbox", "name": "Email", "selector": "#email", "rect": {"x": 20, "y": 320, "width": 350, "height": 44}},
-    {"index": 3, "role": "textbox", "name": "Password", "selector": "#password", "rect": {"x": 20, "y": 380, "width": 350, "height": 44}},
-    {"index": 4, "role": "checkbox", "name": "I agree", "selector": "#terms", "rect": {"x": 20, "y": 440, "width": 24, "height": 24}},
-    {"index": 5, "role": "button", "name": "Submit", "selector": "#submit", "rect": {"x": 120, "y": 490, "width": 150, "height": 44}}
-  ]
+  "success": false,
+  "error": {
+    "code": "NEEDS_HUMAN",
+    "message": "Real-page image export requires a trusted privacy and frame provider"
+  }
 }
 ```
 
-Annotation rects are always reported in viewport CSS pixels, even if the image itself is returned at native scale.
-Annotations are valid only until the page URL changes. If you navigate, take a fresh `screenshot-annotated` before using annotation indices again.
+The experimental fixture output adds `observationId`, native tab/document
+identity, viewport/scale/coverage metadata and at most 50 `E01`…`E50` labels from
+the canonical snapshot entries. It does not guarantee all interactive controls
+are included. `interactableOnly`/`labelStyle` remain legacy request fields; this
+fixture experiment uses numbered labels and does not implement those variations.
+Each label reports `rect` in CSS pixels, `labelDrawn` and an omission reason when
+it cannot be drawn. It has `elementRef:null` and no allowed operations.
+`validUntil:"display-only"`, `actionByRefAvailable:false`,
+`consentGeneration:null` and `frameNonce:null` explicitly prevent a claim of
+native action authority. A foreground visual callback does not attest a fresh
+private-display frame. See the full contract for geometry/refusal bounds.
 
 ### `clickAnnotation`
-Click an element by its annotation index from the last `screenshotAnnotated` call.
+Legacy request shape is retained. Android refuses blind index activation even
+when the page URL is unchanged.
 
 ```json
 POST /v1/click-annotation
@@ -340,29 +352,22 @@ POST /v1/click-annotation
 
 Response:
 {
-  "success": true,
-  "element": {"role": "button", "name": "Submit", "selector": "#submit"}
-}
-```
-
-`click-annotation` uses the same coordinate-bearing activation path as `click`. If the annotated target exists but its center point is hidden or covered, the endpoint fails with `ELEMENT_NOT_VISIBLE`.
-If the current page URL no longer matches the URL from the last `screenshot-annotated`, the endpoint fails with `ANNOTATION_EXPIRED` and includes the stale annotation session ID:
-
-```json
-{
   "success": false,
   "error": {
-    "code": "ANNOTATION_EXPIRED",
-    "message": "Annotations expired because the page URL changed. Take a fresh screenshot-annotated before interacting again.",
-    "diagnostics": {
-      "annotationSessionId": "9f3e6d2a-0fb0-4b87-91d5-b3a0b26d4f16"
-    }
+    "code": "STALE_OBSERVATION",
+    "message": "Numbered legacy targets are display-only. A validated Observation/ElementRef is required.",
+    "diagnostics": {"reason": "OBSERVATION_REQUIRED"}
   }
 }
 ```
 
+Use a fresh canonical observation/reference within its existing native
+authorization limits. An `E` label or `annotationSessionId` is not that reference.
+Other native bindings' legacy index/URL-expiry behavior is not Android KAI parity.
+
 ### `fillAnnotation`
-Fill an element by its annotation index.
+Android returns the same `STALE_OBSERVATION` refusal as `clickAnnotation` and
+does not enter or echo the supplied text.
 
 ```json
 POST /v1/fill-annotation
@@ -370,16 +375,10 @@ POST /v1/fill-annotation
   "index": 2,
   "value": "user@example.com"
 }
-
-Response:
-{
-  "success": true,
-  "element": {"role": "textbox", "name": "Email", "selector": "#email"},
-  "value": "user@example.com"
-}
 ```
 
-`fill-annotation` uses the same annotation lifecycle as `click-annotation` and returns `ANNOTATION_EXPIRED` with the same diagnostics payload after URL-changing navigation.
+This intentional security refusal replaces Android's old URL-only annotation
+expiry check. It does not remove the registered legacy endpoint.
 
 ---
 

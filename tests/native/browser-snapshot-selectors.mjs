@@ -19,7 +19,7 @@ try {
     <button id="odd:escaped.id">Escaped action</button>
     <input value="INPUT_SECRET"><textarea>TEXTAREA_SECRET</textarea>
     <div contenteditable="true">EDITABLE_SECRET</div>
-    <button aria-label="Public label">Public action</button>
+    <button id="DOM_IDENTIFIER_FIXTURE" name="DOM_NAME_FIXTURE" aria-label="Public label">Public action</button>
   </body></html>`);
   // Exercise the actual shared builder, including roots absent from body * readers.
   const roots = await page.evaluate(`(() => {${builder}
@@ -30,7 +30,7 @@ try {
   assert.ok(roots.length >= 8);
   assert.ok(roots.every(({ selector, exact }) => selector && selector.length <= 2000 && exact));
   const snapshot = await page.evaluate(expression);
-  for (const secret of ["INPUT_SECRET", "TEXTAREA_SECRET", "EDITABLE_SECRET"]) {
+  for (const secret of ["INPUT_SECRET", "TEXTAREA_SECRET", "EDITABLE_SECRET", "DOM_IDENTIFIER_FIXTURE", "DOM_NAME_FIXTURE"]) {
     assert.ok(!JSON.stringify(snapshot).includes(secret));
   }
   for (const label of ["First action", "Second action", "Escaped action", "Public label"]) {
@@ -41,12 +41,20 @@ try {
       return { count: nodes.length, label: nodes[0]?.getAttribute("aria-label") || nodes[0]?.textContent.trim() };
     }, element);
     assert.deepEqual(observed, { count: 1, label });
-    assert.ok(!Object.hasOwn(element, "ref"));
+    assert.equal(typeof element.ref, "string");
+    assert.equal(typeof element.rect.width, "number");
+    assert.equal(element.value, null);
+    assert.equal(element.sensitivity, "PUBLIC");
+    assert.ok(!element.selector.includes("#") && !element.selector.includes("[name="));
   }
+  assert.equal(snapshot.coverage.observed, snapshot.elements.length);
+  assert.equal(snapshot.coverage.status, "UNKNOWN");
+  assert.equal(snapshot.screenshotBlocked, true);
   assert.equal(await page.evaluate(() => Object.keys(window).some((key) => key.startsWith("__kelpieBrowserControlRefs"))), false);
   if (process.env.KELPIE_TEST_ARTIFACT_DIR) {
     await mkdir(process.env.KELPIE_TEST_ARTIFACT_DIR, { recursive: true });
-    await page.screenshot({ path: join(process.env.KELPIE_TEST_ARTIFACT_DIR, "selector-fixture.png") });
+    // This suite verifies selectors, not the protected Android image exporter.
+    // Do not publish an unredacted raw screenshot of its sensitive fixture.
     await writeFile(join(process.env.KELPIE_TEST_ARTIFACT_DIR, "selector-snapshot.json"), JSON.stringify(snapshot, null, 2));
   }
   console.log("Native selector snapshot DOM conformance passed.");

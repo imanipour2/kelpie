@@ -23,6 +23,8 @@ android {
         minSdk = 28
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("int", "LOCAL_HTTP_PORT", "8420")
+        // Experimental drawing only; not owner consent, background readiness or release approval.
+        buildConfigField("boolean", "KAI_ANNOTATION_QA_ENABLED", "false")
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
 
         externalNativeBuild {
@@ -34,6 +36,7 @@ android {
 
     buildTypes {
         debug {
+            buildConfigField("boolean", "KAI_ANNOTATION_QA_ENABLED", (providers.gradleProperty("kelpieKaiAnnotationQa").orNull == "true").toString())
             if (providers.gradleProperty("kelpieEmbeddingVerificationProfile").orNull == "true") {
                 buildConfigField("int", "LOCAL_HTTP_PORT", "18431")
             } else if (providers.gradleProperty("kelpieVerificationProfile").orNull == "true") {
