@@ -1,0 +1,79 @@
+name: QA R5 Mother Sidecar Android (Signer-safe, No Auto Install)
+
+on:
+  pull_request:
+    paths:
+      - 'apps/android/**'
+      - 'core/android/**'
+      - '.github/workflows/qa-r5-mother-sidecar.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-mother-sidecar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6.0.3
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: ./.github/actions/browser-contract
+      - uses: actions/setup-java@v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4.0.3
+      - name: Install SDK tools
+        run: sdkmanager "platforms;android-34" "build-tools;35.0.0"
+      - name: Build isolated sidecar APK and Kotlin tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd apps/android
+          ./gradlew --no-daemon -PkelpieR5MotherNextQaProfile=true \
+            :kelpie-browser:ktlintCheck \
+            :kelpie-browser:testDebugUnitTest \
+            :app:assembleDebug
+      - name: Verify independent identity, standard mother MCP, native consent, port and signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=apps/android/app/build/outputs/apk/debug/app-debug.apk
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          SIGN="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          CORE=core/android/build/generated/source/buildConfig/debug/com/kelpie/browser/BuildConfig.java
+          APP=apps/android/app/build/generated/source/buildConfig/debug/com/unlikeotherai/kelpie/app/BuildConfig.java
+          test -s "$CORE" && test -s "$APP" && test -s "$APK"
+          grep -Eq 'LOCAL_HTTP_PORT[[:space:]]*=[[:space:]]*18463;' "$CORE"
+          grep -Eq 'LOCAL_HTTP_PORT[[:space:]]*=[[:space:]]*18463;' "$APP"
+          grep -Eq 'R5_NATIVE_CONSENT_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
+          grep -Eq 'R5_BACKGROUND_AGENT_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
+          grep -Eq 'R5_MOTHER_MCP_BACKGROUND_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
+          "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.browser.r5mothernextverify'"
+          "$AAPT" dump badging "$APK" | grep -F "versionCode='39' versionName='0.2.19-r5-mother-background-sidecar-qa'"
+          "$SIGN" verify --verbose --print-certs "$APK"
+          grep -F '.BrowserGatewayBinding(router, handlerContext)' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
+          grep -F 'if (!motherMcpR5RendererQaEnabled && r5AgentCoordinator != null)' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
+          sha256sum "$APK" > apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
+          {
+            echo "source_commit=$(git rev-parse HEAD)"
+            echo "package=com.kelpie.browser.r5mothernextverify"
+            echo "version=0.2.19-r5-mother-background-sidecar-qa"
+            echo "versionCode=39"
+            echo "port=18463"
+            echo "connection=STANDARD_MOTHER_MCP_AND_OWNER_CONSENTED_R5_RENDERER"
+            echo "signature=debug-only"
+            echo "install=SIDE_BY_SIDE_AFTER_HASH_AND_SIGNER_VERIFY"
+            echo "artifact_sha256=$(sha256sum "$APK" | awk '{print $1}')"
+          } > apps/android/app/build/outputs/apk/debug/provenance.txt
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: kelpie-mother-r5-sidecar-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            apps/android/app/build/outputs/apk/debug/app-debug.apk
+            apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
+            apps/android/app/build/outputs/apk/debug/provenance.txt
+          if-no-files-found: error
+          retention-days: 14
