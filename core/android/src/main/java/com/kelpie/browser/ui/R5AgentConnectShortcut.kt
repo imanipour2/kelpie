@@ -38,24 +38,22 @@ internal fun R5AgentConnectShortcut(
             text =
                 when (clients.size) {
                     0 -> "AI agent not yet paired"
-                    1 -> "Verified AI agent ready"
+                    1 -> "Verified agent " + clients.single().take(8) + "... ready"
                     else -> "Choose a verified agent"
                 },
             style = MaterialTheme.typography.labelMedium,
         )
-        TextButton(
-            onClick = {
-                if (clients.size != 1 || !coordinator.requestFromNativeUi()) onOpenCenter()
-            },
-            modifier = Modifier.heightIn(min = 48.dp),
-        ) {
-            Text(
-                when (clients.size) {
-                    0 -> "Pair / Connect"
-                    1 -> "Connect"
-                    else -> "Choose"
-                },
-            )
+        if (clients.size == 1) {
+            // The single owner gesture begins and approves this process session.
+            // Multiple clients never use the one-tap shortcut.
+            R5OneTapConsentAction(coordinator, clients.single(), compact = true)
+        } else {
+            TextButton(
+                onClick = onOpenCenter,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) {
+                Text(if (clients.isEmpty()) "Pair / Connect" else "Choose")
+            }
         }
     }
 }
