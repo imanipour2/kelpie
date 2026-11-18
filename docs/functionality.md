@@ -922,3 +922,31 @@ Security and release evidence:
 and [Issue #98](https://github.com/imanipour2/enerfoam-website/issues/98).
 Android/iOS platform parity or a scoped approved exception remains a
 separate pre-merge gate.
+
+
+### Private QA: one-time background startup choice (source candidate, 2026-11-18)
+
+In opt-in Android R5 QA builds **that actually enable** native R5 background
+agent features, the owner sees the first-entry "Allow Kelpie background
+activity?" decision at most once per install unless the startup choice is reset.
+The decision is saved in app-private Android preferences only after an explicit
+positive tap; it is **not** a remote agent grant, does **not** approve pairing,
+and cannot authorize browser actions. A failure to save the decision continues
+to require an owner decision; declining closes the QA browser.
+
+Actual remote-agent authority remains process-memory-only, native-owner-
+approved, principal-bound and immediately revocable through STOP/unpair.
+Android lock suspends browser operations while preserving the approved process
+session so it can resume after owner unlock without another approval. HOME
+alone does not revoke an approved session. Process death still ends the grant.
+An existing app instance does not silently gain privileges from enabling the
+preference; notification and keyguard requirements still apply.
+
+**Important:** the currently installed `com.kelpie.browser.r5motherverify`
+comparison profile on port `18462` explicitly has
+`R5_BACKGROUND_AGENT_QA_ENABLED=false` and
+`R5_NATIVE_CONSENT_QA_ENABLED=false`. Consequently, this standalone
+startup-choice improvement does NOT turn on its private background renderer,
+does NOT fix blank gray background screenshots, and has not been installed
+or verified on the owner's phone. Retaining upstream standard MCP without
+overriding it with `R5PrivateMcpBridge` remains a separate integration task.
