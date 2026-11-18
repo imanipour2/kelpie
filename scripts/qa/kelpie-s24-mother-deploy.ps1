@@ -32,18 +32,18 @@ function DetectPhone {
     throw 'Connect exactly one authorized phone and allow USB debugging.'
   }
   $script:serial=($ok[0] -split '\s+')[0]
-  $model=AdbCall @('shell','getprop','ro.product.model')
-  $version=AdbCall @('shell','getprop','ro.build.version.release')
+  $model=AdbCall -items @('shell','getprop','ro.product.model')
+  $version=AdbCall -items @('shell','getprop','ro.build.version.release')
   if ($model -notmatch '^SM-S928') { throw "Unexpected device: $model" }
   Write-Host "Connected Samsung $model Android $version, serial $script:serial"
 }
 function Installed([string]$pkg) {
-  return ((AdbCall @('shell','pm','path',$pkg)) -match '(?m)^package:')
+  return ((AdbCall -items @('shell','pm','path',$pkg)) -match '(?m)^package:')
 }
 function ShowApps {
   foreach ($pkg in @($newPkg,$oldPkg)) {
     if (Installed $pkg) {
-      $ds=AdbCall @('shell','dumpsys','package',$pkg)
+      $ds=AdbCall -items @('shell','dumpsys','package',$pkg)
       $v=[regex]::Match($ds,'versionName=\S+').Value
       Write-Host "$pkg INSTALLED $v"
     } else { Write-Host "$pkg NOT_INSTALLED" }
@@ -79,7 +79,7 @@ function VerifiedApk {
   }
   $signer=BuildTool 'apksigner.bat'
   $sig=(& $signer verify --verbose --print-certs $file 2>&1 | Out-String)
-  if ($LASTEXITCODE -ne 0 -or $sig -notmatch 'Verified using v2 scheme') {
+  if ($LASTEXITCODE -ne 0 -or $sig -notmatch 'Verified using v2 scheme[^\r\n]*:\s*true') {
     throw 'APK signature invalid; refusing installation.'
   }
   $digest=[regex]::Match($sig,'Signer #1 certificate SHA-256 digest:\s*([0-9a-fA-F]{64})')
@@ -113,13 +113,14 @@ switch ($Phase) {
     if (-not (Installed $oldPkg)) { Write-Host 'Old QA app absent.'; break }
     $root=Join-Path (Get-Location) ("old-kelpie-apk-"+(Get-Date -Format 'yyyyMMdd-HHmmss'))
     New-Item -ItemType Directory -Path $root -Force | Out-Null
-    $remote=AdbCall @('shell','pm','path',$oldPkg)
+    $remote=AdbCall -items @('shell','pm','path',$oldPkg)
     $paths=@(($remote -split '\r?\n') | Where-Object { $_ -match '^package:' })
     $counter=0
     foreach ($line in $paths) {
       $counter++
       $destination=Join-Path $root "old-$counter.apk"
-      $output=& $script:Adb -s $script:serial pull $line.Substring(8).Trim() $destination 2>&1
+      $remotePath=$line.Substring(8).Trim()
+      $output=& $script:Adb -s $script:serial pull $remotePath $destination 2>&1
       if ($LASTEXITCODE -ne 0) { throw "Old APK archive failed: $($output | Out-String)" }
       Write-Host "Saved code APK $counter SHA256 $((Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash)"
     }
@@ -129,9 +130,9 @@ switch ($Phase) {
   'Install' {
     $file=VerifiedApk
     Write-Host 'Installing new isolated package; old app preserved.'
-    $result=AdbCall @('install','-r','-t',$file)
+    $result=AdbCall -items @('install','-r','-t',$file)
     if ($result -notmatch 'Success') { throw "Install did not succeed: $result" }
-    $null=AdbCall @('shell','am','start','-n',"$newPkg/com.kelpie.browser.MainActivity")
+    $null=AdbCall -items @('shell','am','start','-n',"$newPkg/com.kelpie.browser.MainActivity")
     Start-Sleep -Seconds 2
     CheckHealth
     ShowApps
@@ -154,7 +155,7 @@ switch ($Phase) {
     Write-Warning "ADB uninstall removes Android private data of $oldPkg. Old credentials cannot be recovered."
     $typed=Read-Host "Type DELETE $oldPkg to confirm"
     if ($typed -cne "DELETE $oldPkg") { throw 'Owner declined uninstall.' }
-    $result=AdbCall @('uninstall',$oldPkg)
+    $result=AdbCall -items @('uninstall',$oldPkg)
     if ($result -notmatch 'Success') { throw 'Uninstall failed.' }
     if (Installed $oldPkg) { throw 'Old app still present; check Android user profiles.' }
     Write-Host 'Old QA package removed from installed apps. Check work/secondary profiles separately.'
