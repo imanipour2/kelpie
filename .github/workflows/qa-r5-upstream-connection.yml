@@ -52,23 +52,26 @@ jobs:
           test -s "$CORE" && test -s "$APP" && test -s "$APK"
           grep -Eq 'LOCAL_HTTP_PORT[[:space:]]*=[[:space:]]*18462;' "$CORE"
           grep -Eq 'LOCAL_HTTP_PORT[[:space:]]*=[[:space:]]*18462;' "$APP"
-          grep -Eq 'R5_NATIVE_CONSENT_QA_ENABLED[[:space:]]*=[[:space:]]*false;' "$APP"
-          grep -Eq 'R5_BACKGROUND_AGENT_QA_ENABLED[[:space:]]*=[[:space:]]*false;' "$APP"
+          grep -Eq 'R5_NATIVE_CONSENT_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
+          grep -Eq 'R5_BACKGROUND_AGENT_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
           grep -Eq 'PRIVATE_CAPTURE_QA_ENABLED[[:space:]]*=[[:space:]]*false;' "$APP"
           "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.browser.r5motherverify'"
-          "$AAPT" dump badging "$APK" | grep -F "versionCode='38' versionName='0.2.18-r5-mother-connection-qa'"
+          "$AAPT" dump badging "$APK" | grep -F "versionCode='38' versionName='0.2.19-r5-mother-background-qa'"
           "$SIGN" verify --verbose --print-certs "$APK"
           grep -F 'if (!agentConsentQaEnabled) {' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
           grep -F '.BrowserGatewayBinding(router, handlerContext)' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
+          grep -F 'if (!motherMcpR5RendererQaEnabled) r5AgentCoordinator?.registerPrivateMcp(router)' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
+          grep -F 'router.motherR5BackgroundQa = motherMcpR5RendererQaEnabled' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
+          grep -Eq 'R5_MOTHER_MCP_BACKGROUND_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
           sha256sum "$APK" > apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
           {
             echo "source_commit=$(git rev-parse HEAD)"
             echo "package=com.kelpie.browser.r5motherverify"
             echo "version=0.2.18-r5-mother-connection-qa"
-            echo "versionCode=38"
+            echo "versionCode=39"
             echo "port=18462"
-            echo "connection=UPSTREAM_BROWSER_GATEWAY_ED25519_QA"
-            echo "r5_agent_session=DISABLED"
+            echo "connection=UPSTREAM_BROWSER_GATEWAY_WITH_R5_PRIVATE_RENDERER_QA"
+            echo "r5_agent_session=OWNER_NATIVE_CONSENT_REQUIRED"
             echo "signature=debug-only"
             echo "install=NO_AUTO_INSTALL_OWNER_READBACK_REQUIRED"
             echo "artifact_sha256=$(sha256sum "$APK" | awk '{print $1}')"
