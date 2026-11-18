@@ -57,6 +57,38 @@ class R5ObservedAgentClientsTest {
     }
 
     @Test
+    fun visibleUiRefreshRemovesExpiredSightingWithoutAConnectTap() {
+        var now = 25_000L
+        val clients = RecentVerifiedAgentClients({ now })
+        clients.noteVerified("paired-client-1")
+        assertEquals(listOf("paired-client-1"), clients.observed.value)
+
+        now += 119_999L
+        clients.refreshExpired()
+        assertEquals(listOf("paired-client-1"), clients.observed.value)
+
+        now += 2L
+        clients.refreshExpired()
+        assertTrue(clients.observed.value.isEmpty())
+        assertNull(clients.soleRecentPrincipal())
+    }
+
+    @Test
+    fun reobservationExtendsExpiryEvenWhenStateListIsUnchanged() {
+        var now = 10_000L
+        val clients = RecentVerifiedAgentClients({ now })
+        clients.noteVerified("paired-client-1")
+        now += 100_000L
+        clients.noteVerified("paired-client-1")
+        now += 30_000L
+        clients.refreshExpired()
+        assertEquals(listOf("paired-client-1"), clients.observed.value)
+        now += 90_001L
+        clients.refreshExpired()
+        assertTrue(clients.observed.value.isEmpty())
+    }
+
+    @Test
     fun backwardsTimeCannotResurrectAnOldClient() {
         var now = 1_000L
         val clients = RecentVerifiedAgentClients({ now })
