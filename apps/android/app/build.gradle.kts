@@ -47,8 +47,8 @@ android {
             versionCode = 33
             versionName = "0.2.13-r5-agent-qa"
         } else if (r5PrivateBetaQa) {
-            versionCode = 35
-            versionName = "0.2.15-r5-easyconnect-qa"
+            versionCode = 36
+            versionName = "0.2.16-r5-first-entry-qa"
         }
         buildConfigField("int", "LOCAL_HTTP_PORT", "8420")
         buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")

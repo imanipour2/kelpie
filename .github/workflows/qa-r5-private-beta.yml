@@ -79,7 +79,7 @@ jobs:
           grep -Eq 'PRIVATE_CAPTURE_QA_ENABLED[[:space:]]*=[[:space:]]*false;' "$APP"
           grep -Eq 'R5_NATIVE_CONSENT_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
           "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.browser.r5betaverify'"
-          "$AAPT" dump badging "$APK" | grep -F "versionCode='35' versionName='0.2.15-r5-easyconnect-qa'"
+          "$AAPT" dump badging "$APK" | grep -F "versionCode='36' versionName='0.2.16-r5-first-entry-qa'"
           "$SIGN" verify --verbose --print-certs "$APK"
           ! "$AAPT" dump permissions "$APK" | grep -F 'android.permission.RECORD_AUDIO'
           native_count=0
@@ -100,12 +100,15 @@ jobs:
           grep -F 'useNativeFrameProof = true' core/android/src/main/java/com/kelpie/browser/agent/execution/R5AgentCoordinator.kt
           grep -F 'AgentOperationRuntime(consent' core/android/src/main/java/com/kelpie/browser/agent/execution/R5AgentCoordinator.kt
           grep -Eq 'R5_BACKGROUND_AGENT_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
+          grep -F 'requireR5FirstEntryConsent()' core/android/src/main/java/com/kelpie/browser/KelpieBrowserActivity.kt
+          grep -F 'launchBrowserIfAllowed()' core/android/src/main/java/com/kelpie/browser/KelpieBrowserActivity.kt
+          grep -F 'AI agent not yet paired' core/android/src/main/java/com/kelpie/browser/ui/R5AgentConnectShortcut.kt
           sha256sum "$APK" > apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
           {
             echo "source_commit=$(git rev-parse HEAD)"
             echo "package=com.kelpie.browser.r5betaverify"
-            echo "version=0.2.15-r5-easyconnect-qa"
-            echo "versionCode=35"
+            echo "version=0.2.16-r5-first-entry-qa"
+            echo "versionCode=36"
             echo "port=18461"
             echo "agent_routes=OWNER_GATED_R5_PRIVATE_BETA_TAB_OPERATIONS"
             echo "signature=debug-only"

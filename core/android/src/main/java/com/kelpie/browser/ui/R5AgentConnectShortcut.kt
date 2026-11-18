@@ -26,7 +26,7 @@ internal fun R5AgentConnectShortcut(
     val clients by coordinator.observedAgents.collectAsState()
     val pending by coordinator.pending.collectAsState()
     val active by coordinator.active.collectAsState()
-    if (active != null || pending != null || clients.size != 1) return
+    if (active != null || pending != null) return
 
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
@@ -34,14 +34,27 @@ internal fun R5AgentConnectShortcut(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "Verified AI agent ready",
+            text =
+                when (clients.size) {
+                    0 -> "AI agent not yet paired"
+                    1 -> "Verified AI agent ready"
+                    else -> "Choose a verified agent"
+                },
             style = MaterialTheme.typography.labelMedium,
         )
         TextButton(
             onClick = {
-                if (!coordinator.requestFromNativeUi()) onOpenCenter()
+                if (clients.size != 1 || !coordinator.requestFromNativeUi()) onOpenCenter()
             },
             modifier = Modifier.heightIn(min = 48.dp),
-        ) { Text("Connect") }
+        ) {
+            Text(
+                when (clients.size) {
+                    0 -> "Pair / Connect"
+                    1 -> "Connect"
+                    else -> "Choose"
+                },
+            )
+        }
     }
 }
