@@ -52,7 +52,7 @@ jobs:
           grep -Eq 'R5_BACKGROUND_AGENT_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
           grep -Eq 'R5_MOTHER_MCP_BACKGROUND_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
           "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.browser.r5mothernextverify'"
-          "$AAPT" dump badging "$APK" | grep -F "versionCode='39' versionName='0.2.19-r5-mother-background-sidecar-qa'"
+          "$AAPT" dump badging "$APK" | grep -F "versionCode='40' versionName='0.2.20-r5-mother-viewport-sidecar-qa'"
           "$SIGN" verify --verbose --print-certs "$APK"
           grep -F '.BrowserGatewayBinding(router, handlerContext)' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
           grep -F 'if (!motherMcpR5RendererQaEnabled && r5AgentCoordinator != null)' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
@@ -60,8 +60,8 @@ jobs:
           {
             echo "source_commit=$(git rev-parse HEAD)"
             echo "package=com.kelpie.browser.r5mothernextverify"
-            echo "version=0.2.19-r5-mother-background-sidecar-qa"
-            echo "versionCode=39"
+            echo "version=0.2.20-r5-mother-viewport-sidecar-qa"
+            echo "versionCode=40"
             echo "port=18463"
             echo "connection=STANDARD_MOTHER_MCP_AND_OWNER_CONSENTED_R5_RENDERER"
             echo "signature=debug-only"
