@@ -319,7 +319,33 @@ export async function runPrivacyConformance(page) {
   await page.evaluate(() => { window.clickCount = 0; document.addEventListener('click', () => { window.clickCount++; }); });
   assert.equal((await tapField()).error, 'INVALID_TARGET', 'A noninteractive hit must not be activated as a fallback');
   assert.equal(await page.evaluate(() => window.clickCount), 0);
-  return { groups: 24, status: "PASS", scope: "ephemeral-script DOM semantics; not Android hardware or PNG" };
+
+  for (const controlType of ['checkbox', 'radio', 'button', 'submit', 'reset', 'image']) {
+    await page.setContent(`<input type="${controlType}" value="on"><button id="field" type="button">Sort price</button>`);
+    await page.evaluate(() => {
+      window.clickCount = 0;
+      document.querySelector('#field').addEventListener('click', () => { window.clickCount++; });
+    });
+    assert.equal((await page.evaluate(activate('#field'))).error, undefined, `A non-text control value must not block an unrelated action (${controlType})`);
+    assert.equal(await page.evaluate(() => window.clickCount), 1);
+    assert.equal(await page.evaluate(`(() => {${privacy} return kelpieSafeNodeText(document.querySelector('#field')) === 'Sort price';})()`), true);
+  }
+  await page.setContent('<input type="checkbox" checked data-private><span id="copy"></span>');
+  await page.evaluate(() => {
+    const secret = 'private-' + Math.random().toString(36).slice(2) + '<>&"\'';
+    window.markedPrivateValue = secret;
+    document.querySelector('input').value = secret;
+    document.querySelector('#copy').textContent = secret;
+  });
+  const privateControl = await page.evaluate(`(() => {${privacy}
+    const html = kelpieSafeHTML(document.body);
+    const decoded = document.createElement('div'); decoded.innerHTML = html;
+    return {leaked:kelpieSafeNodeText(document.body).includes(window.markedPrivateValue) || decoded.textContent.includes(window.markedPrivateValue),
+      checkedMetadataRetained:'checked' in kelpieSafeAttributes(document.querySelector('input'))};
+  })()`);
+  assert.equal(privateControl.leaked, false, 'Explicitly private control values remain protected');
+  assert.equal(privateControl.checkedMetadataRetained, true);
+  return { groups: 25, status: "PASS", scope: "ephemeral-script DOM semantics; not Android hardware or PNG" };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

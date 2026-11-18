@@ -33,14 +33,21 @@ fun observationPrivacyScript(): String =
             kelpieRememberSecret(url.password);
         } catch (_) {}
     }
+    function kelpieMayCarryPrivateValue(node) {
+        var nonTextTypes = ['checkbox','radio','button','submit','reset','image'];
+        return node.tagName !== 'INPUT' || nonTextTypes.indexOf(String(node.type).toLowerCase()) < 0 ||
+            !!node.closest('[data-sensitive],[data-private],[aria-secret]');
+    }
     var kelpiePrivateNodes = Array.from(document.querySelectorAll(kelpiePrivateSelector));
     if (kelpiePrivateNodes.length > 512) kelpiePrivacyBudgetExceeded = true;
     kelpiePrivateNodes.slice(0, 512).forEach(function(node) {
-        kelpieRememberSecret(node.value);
-        kelpieRememberSecret(node.getAttribute('value'));
+        if (kelpieMayCarryPrivateValue(node)) {
+            kelpieRememberSecret(node.value);
+            kelpieRememberSecret(node.getAttribute('value'));
+            if (node.tagName !== 'INPUT') kelpieRememberSecret(node.textContent);
+        }
         kelpieRememberSecret(node.getAttribute('aria-label'));
         kelpieRememberSecret(node.getAttribute('placeholder'));
-        if (node.tagName !== 'INPUT') kelpieRememberSecret(node.textContent);
     });
     kelpieRememberURLSecrets(location.href);
     var kelpieURLNodes = Array.from(document.querySelectorAll('[href],[src],[action]'));
@@ -127,6 +134,7 @@ fun observationPrivacyScript(): String =
         var sensitiveCredentials = /password|one-time|otp|cc-|credit.?card|card.?number|cvv|cvc|token|cookie|secret|pin(?:$|[\s_-])|captcha|رمز|گذرواژه|کارت|امنیتی/i;
         var sensitiveOperations = /checkout|payment|transfer|delete|erase|remove|publish|sign.?in|log.?in|پرداخت|انتقال|حذف|انتشار|ورود/i;
         var containsPrivateValue = kelpiePrivateNodes.some(function(field) {
+            if (!kelpieMayCarryPrivateValue(field)) return false;
             var value = field.value || (field.isContentEditable ? field.textContent : '');
             return value && hints.indexOf(String(value)) >= 0;
         });
