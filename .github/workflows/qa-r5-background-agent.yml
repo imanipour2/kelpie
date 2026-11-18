@@ -95,8 +95,8 @@ jobs:
           done < <(unzip -Z1 "$APK" | grep -E '^lib/(arm64-v8a|x86_64)/.*[.]so$')
           test "$native_count" -gt 0
           # Native principal-bound runtime is present; old unsafe routes stay gated.
-          grep -F 'R5AgentCoordinator(activity, handlerContext)' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
-          grep -F 'backgroundAgentQa = agentBackgroundQaEnabled' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
+          grep -F 'R5AgentCoordinator(activity, handlerContext, motherMcpR5RendererQaEnabled)' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
+          grep -F 'router.backgroundAgentQa = agentBackgroundQaEnabled && !motherMcpR5RendererQaEnabled' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
           grep -F 'useNativeFrameProof = true' core/android/src/main/java/com/kelpie/browser/agent/execution/R5AgentCoordinator.kt
           grep -F 'AgentOperationRuntime(consent' core/android/src/main/java/com/kelpie/browser/agent/execution/R5AgentCoordinator.kt
           grep -Eq 'R5_BACKGROUND_AGENT_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
