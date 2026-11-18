@@ -150,7 +150,7 @@ export async function runPrivacyConformance(page) {
   await page.setContent('<input id="field" type="password">');
   const sensitive = await page.evaluate(fill("#field", value));
   assert.equal(sensitive.error, "needs_human");
-  assert.equal(await page.evaluate(() => document.querySelector("#field").value), "");
+  assert.equal(await page.evaluate(() => document.querySelector("#field").value === ""), true);
   await page.setContent('<input class="duplicate"><input class="duplicate">');
   assert.equal((await page.evaluate(fill(".duplicate", value))).error, "ambiguous_target");
 
@@ -211,7 +211,7 @@ export async function runPrivacyConformance(page) {
   }
   await page.setContent('<form action="/payment"><label for="field">Amount</label><input id="field"></form>');
   assert.equal((await page.evaluate(fill("#field", value))).error, 'needs_human');
-  assert.equal(await page.evaluate(() => document.querySelector('#field').value), '');
+  assert.equal(await page.evaluate(() => document.querySelector('#field').value === ''), true);
   await page.setContent('<form action="/catalog"><button id="field" type="button">مرتب‌سازی قیمت</button></form>');
   assert.equal((await page.evaluate(activate("#field"))).error, undefined, "An ordinary non-submit sort control remains usable");
 
@@ -294,15 +294,15 @@ export async function runPrivacyConformance(page) {
   assert.equal((await tapField()).error, 'STALE_ELEMENT', 'A stable child must not hide repurposing of its actionable parent');
   assert.equal(await page.evaluate(() => window.clickCount), 0);
 
-  for (const html of [
-    '<button type="button" disabled><span id="field" tabindex="0">Continue</span></button>',
-    '<button type="button" aria-disabled="true"><span id="field" tabindex="0">Continue</span></button>',
-    '<fieldset disabled><button type="button"><span id="field" tabindex="0">Continue</span></button></fieldset>',
-    '<div inert><button type="button"><span id="field" tabindex="0">Continue</span></button></div>',
+  for (const [caseName, html] of [
+    ['disabled', '<button type="button" disabled><span id="field" tabindex="0">Continue</span></button>'],
+    ['aria-disabled', '<button type="button" aria-disabled="true"><span id="field" tabindex="0">Continue</span></button>'],
+    ['fieldset-disabled', '<fieldset disabled><button type="button"><span id="field" tabindex="0">Continue</span></button></fieldset>'],
+    ['inert', '<div inert><button type="button"><span id="field" tabindex="0">Continue</span></button></div>'],
   ]) {
     await page.setContent(html);
     await page.evaluate(() => { window.clickCount = 0; document.addEventListener('click', () => { window.clickCount++; }); });
-    assert.ok(['OCCLUDED', 'STALE_ELEMENT', 'INVALID_TARGET'].includes((await tapField()).error), 'Disabled actionable ancestors must block a child tap');
+    assert.ok(['OCCLUDED', 'STALE_ELEMENT', 'INVALID_TARGET'].includes((await tapField()).error), `Disabled actionable ancestors must block a child tap (${caseName})`);
     assert.equal(await page.evaluate(() => window.clickCount), 0);
   }
   await page.setContent('<button type="button"><span id="field" tabindex="0">Continue</span></button>');
@@ -314,7 +314,12 @@ export async function runPrivacyConformance(page) {
   });
   assert.ok(['OCCLUDED', 'STALE_ELEMENT', 'INVALID_TARGET'].includes((await tapField()).error), 'A parent disabled during focus must block dispatch');
   assert.equal(await page.evaluate(() => window.clickCount), 0);
-  return { groups: 23, status: "PASS", scope: "ephemeral-script DOM semantics; not Android hardware or PNG" };
+
+  await page.setContent('<div id="field" style="width:200px;height:100px">Page background</div>');
+  await page.evaluate(() => { window.clickCount = 0; document.addEventListener('click', () => { window.clickCount++; }); });
+  assert.equal((await tapField()).error, 'INVALID_TARGET', 'A noninteractive hit must not be activated as a fallback');
+  assert.equal(await page.evaluate(() => window.clickCount), 0);
+  return { groups: 24, status: "PASS", scope: "ephemeral-script DOM semantics; not Android hardware or PNG" };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

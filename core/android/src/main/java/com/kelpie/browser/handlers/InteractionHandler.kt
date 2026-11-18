@@ -361,6 +361,12 @@ class InteractionHandler(
                         kelpieSafeName(owner), owner.form ? owner.form.getAttribute('action') : null]));
             }
             var owner = ownerOf(eventTarget), expectedOwner = ownerSignature(owner), expectedForm = owner.form;
+            function supportedOwner() {
+                return owner.matches('button,input,select,textarea,a[href]') ||
+                    ['button','link','menuitem','menuitemcheckbox','menuitemradio','tab','checkbox','radio','switch','option']
+                        .includes(owner.getAttribute('role'));
+            }
+            if (!supportedOwner()) return {error:'INVALID_TARGET'};
             function ownerBlocked() {
                 return owner.disabled || owner.matches(':disabled') || owner.getAttribute('aria-disabled') === 'true' || owner.closest('[inert]');
             }
@@ -378,6 +384,7 @@ class InteractionHandler(
                 Math.abs(after.y-before.y) > 0.5 || Math.abs(after.width-before.width) > 0.5 ||
                 Math.abs(after.height-before.height) > 0.5) return {error:'STALE_ELEMENT'};
             if (kelpieSensitiveAction(eventTarget)) return {error:'NEEDS_HUMAN'};
+            if (!supportedOwner()) return {error:'INVALID_TARGET'};
             if (ownerBlocked() || kelpieHiddenElement(eventTarget) || !(hit === eventTarget || eventTarget.contains(hit))) return {error:'OCCLUDED'};
             try {
                 if (typeof eventTarget.click !== 'function') return {error:'INVALID_TARGET'};

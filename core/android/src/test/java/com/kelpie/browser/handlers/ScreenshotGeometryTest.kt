@@ -47,5 +47,4 @@ class ScreenshotGeometryTest {
         assertThrows(ScreenshotRefusal::class.java) { requireScreenshotAllocation(8192, 8192, 0L, 32L * 1024 * 1024) }
         assertThrows(ScreenshotRefusal::class.java) { requireScreenshotAllocation(Int.MAX_VALUE, Int.MAX_VALUE, 0L, Long.MAX_VALUE) }
     }
-
 }

@@ -280,7 +280,7 @@ ADB, public CDP or MediaProjection path is introduced.
 | E1 | Root `pnpm build` and `pnpm lint` | **PASS** for package build/lint; not Android build, Android KtLint or device execution |
 | E2 | Existing native `test_browser_gateway`, `test_mcp_registry`, `test_native_extensions`, compiled with g++ 14.2.0 / C++17 / assertions / `-Wall -Wextra` | **PASS**, no compiler warnings. Covers mocked native contracts, bounds, races and safe refusals; no WebView/native consent |
 | E3 | Generated selector reader from `browser_snapshot_fixture --snapshot`, evaluated in JSDOM with explicit deterministic geometry | **PASS** for structural selector/metadata/redaction cases. DOM-only test; no browser layout, PNG or device proof |
-| E4 | [`android-observation-privacy.mjs`](../../../tests/native/android-observation-privacy.mjs), extracting actual Kotlin-embedded scripts; JSDOM adapter | **PASS**, 23 fixture groups: privacy including HTML-escaped reflected values, blind-index refusal, diagnostic refusals, focus replacement/repurposing, one activation, sensitive/disabled/inert parent/child targets. Geometry is mocked |
+| E4 | [`android-observation-privacy.mjs`](../../../tests/native/android-observation-privacy.mjs), extracting actual Kotlin-embedded scripts; JSDOM adapter | **PASS**, 24 fixture groups: privacy including HTML-escaped reflected values, blind-index refusal, diagnostic refusals, focus replacement/repurposing, one activation, sensitive/disabled/inert parent/child targets and noninteractive background-hit refusal. Geometry is mocked |
 | E5 | Shared unit tests in root `pnpm test` | **PASS**, 7 suites / 94 tests |
 | E6 | Full root `pnpm test` | **FAIL** at this readback: CLI reports 50 suites, 661 passed tests and 2 failures (stream UTF-8 chunk handling, Windows stdio connection-closed), plus `networkInterfaces` EPERM. No baseline or regression cause is inferred |
 | E7 | Real Chromium/Playwright launch | **BLOCKED**, process launch fails `socket() Operation not permitted`; browser fixtures collected but not executed locally |
@@ -296,6 +296,29 @@ canonical contract, runs package and real-browser fixtures and compiles the
 existing gateway fixture with that pinned dependency. Its presence is not a
 successful run. Exact new-source CI links must be read after PR checks execute.
 Local C++ tests were not the complete CMake/Android/Apple integration build.
+
+### First CI readback and corrections
+
+- Source `f46a0075b118551fe2a2e5882f01c26c0af25c6a`:
+  [Android run 44409156757](https://github.com/imanipour2/kelpie/actions/runs/44409156757)
+  compiled Debug Kotlin and both native ABIs, then failed a test-source KtLint
+  blank-line rule. The blank line and an ambiguous local return label were fixed;
+  neither partial compilation nor this repair proves a complete Android build.
+- Source `4a4f391dd7eb91babfa021c0b51ee81b78239730`:
+  [KAI run 44409961421](https://github.com/imanipour2/kelpie/actions/runs/44409961421)
+  passed all 36 real Chromium shared cases, native gateway contracts, the
+  generated native reader in Chromium and all 94 shared unit tests. Android
+  script conformance failed on a disabled-ancestor/background hit; tap admission
+  now refuses noninteractive owners, with a zero-click regression.
+- That KAI run's full CLI suite passed 662 of 663 cases. The remaining test
+  incorrectly required server write boundaries to survive Fetch/TCP coalescing;
+  its old detector also rejected valid one-byte fragments in a deterministic
+  probe. Only the test changed: the existing `chunkBytes` is now checked through
+  controlled `ReadableStream` chunks, while HTTP content/UTF-8/comments/usage/end
+  assertions remain. The targeted local suite passed all 10 tests and ESLint.
+- Follow-up CI on the exact final source SHA is required. No failing gate is
+  bypassed: independent fixture steps continue to collect evidence, while any
+  failed step still fails the job. None of these CI results is S24 evidence.
 
 ### T01–T14 acceptance matrix
 

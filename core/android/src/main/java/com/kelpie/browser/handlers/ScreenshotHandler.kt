@@ -81,10 +81,10 @@ class ScreenshotHandler(
     private val ctx: HandlerContext,
 ) {
     fun register(router: Router) {
-        router.register("screenshot") { body ->
+        router.register("screenshot") capture@{ body ->
             try {
                 val resolution = ScreenshotResolution.parse(body["resolution"])
-                    ?: return@register errorResponse("INVALID_PARAMS", "Unknown screenshot resolution")
+                    ?: return@capture errorResponse("INVALID_PARAMS", "Unknown screenshot resolution")
                 if (body["fullPage"] == true) {
                     captureFullPagePayload("png", 80, resolution)
                 }
