@@ -42,6 +42,7 @@ internal fun AgentConnectionCenterSheet(
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val session by coordinator.active.collectAsState()
+    val pending by coordinator.pending.collectAsState()
     var provider by remember { mutableStateOf(R5AgentProvider.CHATGPT) }
     var chatGptTunnel by remember { mutableStateOf(false) }
     var endpoint by remember { mutableStateOf("") }
@@ -64,12 +65,21 @@ internal fun AgentConnectionCenterSheet(
         Text("Connect an AI agent")
         Text("The browser stays on this phone. Pairing and local consent are separate steps.")
         Text(
-            if (session == null) {
-                "Native browser-control session: OFF"
-            } else {
-                "Native browser-control session: authorized locally (remote connection not verified)"
+            when {
+                session != null -> "Native session: approved on this device; remote agent not yet verified"
+                pending != null -> "Native session: awaiting your on-device approval"
+                else -> "Native session: OFF; waiting for an authenticated agent request"
             },
         )
+        if (session != null) {
+            TextButton(onClick = coordinator::stopFromNativeUi) { Text("STOP browser control") }
+        } else {
+            Text(
+                "To start: keep Kelpie visible, then ask your paired AI client to call " +
+                    "kelpie_agent_session.request (or browser-control session.request where exposed). " +
+                    "Only a real tap on the native approval dialog can authorize a session.",
+            )
+        }
         HorizontalDivider()
         Text("1. Choose an MCP client")
         R5AgentProvider.entries.forEach { candidate ->
