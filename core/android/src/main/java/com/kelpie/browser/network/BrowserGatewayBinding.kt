@@ -96,12 +96,13 @@ class BrowserGatewayBinding(
         return gateway
     }
 
-    private fun authorize(
+    private suspend fun authorize(
         request: Map<String, Any?>,
         mutates: Boolean,
         allowActions: Boolean,
         pinned: String?,
     ): Boolean =
+        (ctx.motherPrivateAgentActive?.invoke() != true || ctx.motherGatewayAuthorization?.invoke() == true) &&
         PrivateCaptureOperationPolicy.permits(
             request["method"] as? String ?: "",
             ctx.privateCaptureRestricted?.invoke() == true,
@@ -148,6 +149,9 @@ class BrowserGatewayBinding(
         action: suspend () -> T,
     ): T =
         withBrowserGatewayLease(lock, ctx.browserRetirement) {
+            check(ctx.motherPrivateAgentActive?.invoke() != true || ctx.motherGatewayAuthorization?.invoke() == true) {
+                "Native owner authorization required for private WebView"
+            }
             check(PrivateCaptureOperationPolicy.permits(method, ctx.privateCaptureRestricted?.invoke() == true)) {
                 "Private WebView capture owns the browser"
             }
@@ -173,6 +177,9 @@ class BrowserGatewayBinding(
         pinned: String?,
     ): Map<String, Any?> =
         withContext(Dispatchers.Main.immediate) {
+            if (ctx.motherPrivateAgentActive?.invoke() == true && ctx.motherGatewayAuthorization?.invoke() != true) {
+                return@withContext errorResponse("PERMISSION_REQUIRED", "Private WebView needs live owner-authorized agent")
+            }
             if (!PrivateCaptureOperationPolicy.permits(method, ctx.privateCaptureRestricted?.invoke() == true)) {
                 return@withContext errorResponse("PERMISSION_REQUIRED", "Private WebView capture owns the browser")
             }
@@ -195,6 +202,9 @@ class BrowserGatewayBinding(
         method: String,
         params: Map<String, Any?>,
     ): Map<String, Any?> {
+        if (ctx.motherPrivateAgentActive?.invoke() == true && ctx.motherGatewayAuthorization?.invoke() != true) {
+            return errorResponse("PERMISSION_REQUIRED", "Private WebView needs live owner-authorized agent")
+        }
         if (!PrivateCaptureOperationPolicy.permits(method, ctx.privateCaptureRestricted?.invoke() == true)) {
             return errorResponse("PERMISSION_REQUIRED", "Private WebView capture owns the browser")
         }
