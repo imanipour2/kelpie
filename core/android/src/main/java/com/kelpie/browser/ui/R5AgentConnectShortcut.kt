@@ -26,6 +26,7 @@ internal fun R5AgentConnectShortcut(
     val clients by coordinator.observedAgents.collectAsState()
     val pending by coordinator.pending.collectAsState()
     val active by coordinator.active.collectAsState()
+    R5ObservedAgentExpiryEffect(coordinator, clients.isNotEmpty())
     if (active != null || pending != null) return
 
     Row(

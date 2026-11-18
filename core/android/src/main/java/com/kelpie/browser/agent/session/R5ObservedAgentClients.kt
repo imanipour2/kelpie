@@ -42,6 +42,16 @@ internal class RecentVerifiedAgentClients(
         publish()
     }
 
+    /**
+     * Reconcile time-based expiration with UI state while the connection surface
+     * is visible. Expiration is not a pairing revocation or native STOP.
+     */
+    @Synchronized
+    fun refreshExpired() {
+        expire(elapsedRealtimeMs())
+        publish()
+    }
+
     @Synchronized
     fun soleRecentPrincipal(): String? {
         expire(elapsedRealtimeMs())
