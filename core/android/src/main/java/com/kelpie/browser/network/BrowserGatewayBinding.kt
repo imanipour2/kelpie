@@ -103,10 +103,10 @@ class BrowserGatewayBinding(
         pinned: String?,
     ): Boolean =
         (ctx.motherPrivateAgentActive?.invoke() != true || ctx.motherGatewayAuthorization?.invoke() == true) &&
-        PrivateCaptureOperationPolicy.permits(
-            request["method"] as? String ?: "",
-            ctx.privateCaptureRestricted?.invoke() == true,
-        ) &&
+            PrivateCaptureOperationPolicy.permits(
+                request["method"] as? String ?: "",
+                ctx.privateCaptureRestricted?.invoke() == true,
+            ) &&
             ctx.scriptPlaybackState?.recordingError(request["method"] as? String ?: "browser-control") == null &&
             BrowserGatewayTabPolicy.permits(
                 request,
