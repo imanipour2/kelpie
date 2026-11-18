@@ -45,6 +45,7 @@ internal fun AgentConnectionCenterSheet(
     val session by coordinator.active.collectAsState()
     val pending by coordinator.pending.collectAsState()
     val observedClients by coordinator.observedAgents.collectAsState()
+    R5ObservedAgentExpiryEffect(coordinator, observedClients.isNotEmpty())
     var requestError by remember { mutableStateOf(false) }
     var provider by remember { mutableStateOf(R5AgentProvider.CHATGPT) }
     var chatGptTunnel by remember { mutableStateOf(true) }
