@@ -43,6 +43,12 @@ int main() {
   assert(first["status"] == "approved" && second["status"] == "approved");
   const auto token = first["token"].get<std::string>();
   assert(queue.Authorize("203.0.113.7", token) == computer.key);
+  // The private Android tunnel is local. Verified signing-key bearers must
+  // outrank generic localhost so the R5 owner-only gate can identify the client.
+  assert(queue.Authorize("127.0.0.1", token) == computer.key);
+  assert(queue.Authorize("::1", token) == computer.key);
+  assert(queue.Authorize("::ffff:127.0.0.1", token) == computer.key);
+  assert(queue.Authorize("127.0.0.1", "invalid") == "localhost");
   assert(queue.Authorize("192.0.2.1", second["token"]) == computer.key);
   assert(queue.Status("192.0.2.1", id)["status"] == "not_found");
   kelpie::PeerApprovalQueue restarted(path);
@@ -58,7 +64,9 @@ int main() {
   assert(restarted.Status("192.0.2.1", stranger)["status"] == "denied");
   assert(restarted.Start("198.51.100.8", other.Body()).status == 403); // Denial follows key too.
   restarted.store().Revoke(computer.key);
-  assert(!queue.Authorize("203.0.113.7", token)); // Even a pre-existing instance observes revocation.
+  assert(!queue.Authorize("203.0.113.7", token));
+  // After key revocation, old localhost bearer is no longer a verified R5 principal.
+  assert(queue.Authorize("127.0.0.1", token) == "localhost"); // Even a pre-existing instance observes revocation.
   const auto revoked = computer.Start(restarted, "203.0.113.7");
   assert(!restarted.Pending().is_null());
   assert(restarted.Status("203.0.113.7", revoked)["status"] == "pending");

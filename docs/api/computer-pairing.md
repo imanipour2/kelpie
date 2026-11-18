@@ -75,3 +75,8 @@ rejects browser Origin, cross-site fetches, unsafe Host headers, non-JSON POSTs
 and ambiguous framing before implicit permission. Headless desktop instances
 can reconnect trusted keys; unknown keys receive `APPROVAL_UNAVAILABLE` until
 the native UI is available.
+
+
+## R5 private MCP tunnel note (2026-11-18)
+
+For the isolated R5 Android QA MCP agent, an unauthenticated loopback socket is **not** an agent identity. A computer-key bearer obtained through this signed pairing protocol must take precedence over the legacy generic `localhost` label; invalid or revoked bearers remain only `localhost` and are ineligible for R5 agent-session consent. The owner must separately approve the native agent session even after the computer key is paired. Never paste bearer tokens or key material into ChatGPT or issue comments. The on-device OpenSSL/Python owner helper under `scripts/qa/r5-owner-pair-ubuntu.py` signs challenges and privately stores the header value; tunnel-client supports `mcp.extra_headers` and `mcp.discovery_extra_headers` with `file:` values (the YAML keys use underscores).

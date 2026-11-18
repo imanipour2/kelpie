@@ -17,8 +17,13 @@ void PeerApprovalQueue::SetAvailable(bool available) {
   if (!available) presented_request_id_.clear();
 }
 std::optional<std::string> PeerApprovalQueue::Authorize(const std::string& source, const std::string& token) const {
+  // R5 private MCP requires an actual bearer-authenticated principal even when
+  // the TLS tunnel's on-device socket arrives over 127.0.0.1. Keep legacy
+  // localhost access only if NO native-signed computer bearer validates.
+  // Revocation is re-read from durable trust storage on every request.
+  if (const auto verified = store_.Authorize(token)) return verified;
   if (IsLoopbackPeer(source)) return "localhost";
-  return store_.Authorize(token);
+  return std::nullopt;
 }
 void PeerApprovalQueue::Collect() {
   const auto now = clock_();

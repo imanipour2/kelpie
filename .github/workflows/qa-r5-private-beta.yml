@@ -49,6 +49,14 @@ jobs:
           python3 -m py_compile scripts/qa/r5-s24-background-acceptance.py
           python3 scripts/qa/r5-s24-background-acceptance.py --help > /dev/null
           python3 scripts/qa/r5-s24-acceptance.py --help > /dev/null
+      - name: Native owner-pairing helper tests (stdlib + OpenSSL, no phone)
+        run: |
+          python3 -m unittest discover -s scripts/qa/tests -p test_r5_owner_pair.py -v
+      - name: Native C++ signed-bearer loopback priority and revocation tests
+        run: |
+          cmake -S core/native -B /tmp/kelpie-r5-peer-cmake -DCMAKE_BUILD_TYPE=Debug -DKELPIE_BUILD_DESKTOP_ENGINES=OFF
+          cmake --build /tmp/kelpie-r5-peer-cmake --target test_peer_trust --parallel 2
+          ctest --test-dir /tmp/kelpie-r5-peer-cmake --output-on-failure -R test_peer_trust
       - name: KtLint, agent JVM tests and private-display R5 private beta QA APK
         working-directory: apps/android
         run: |
@@ -79,7 +87,7 @@ jobs:
           grep -Eq 'PRIVATE_CAPTURE_QA_ENABLED[[:space:]]*=[[:space:]]*false;' "$APP"
           grep -Eq 'R5_NATIVE_CONSENT_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
           "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.browser.r5betaverify'"
-          "$AAPT" dump badging "$APK" | grep -F "versionCode='35' versionName='0.2.15-r5-easyconnect-qa'"
+          "$AAPT" dump badging "$APK" | grep -F "versionCode='37' versionName='0.2.17-r5-loopback-pair-qa'"
           "$SIGN" verify --verbose --print-certs "$APK"
           ! "$AAPT" dump permissions "$APK" | grep -F 'android.permission.RECORD_AUDIO'
           native_count=0
@@ -100,12 +108,15 @@ jobs:
           grep -F 'useNativeFrameProof = true' core/android/src/main/java/com/kelpie/browser/agent/execution/R5AgentCoordinator.kt
           grep -F 'AgentOperationRuntime(consent' core/android/src/main/java/com/kelpie/browser/agent/execution/R5AgentCoordinator.kt
           grep -Eq 'R5_BACKGROUND_AGENT_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
+          grep -F 'requireR5FirstEntryConsent()' core/android/src/main/java/com/kelpie/browser/KelpieBrowserActivity.kt
+          grep -F 'launchBrowserIfAllowed()' core/android/src/main/java/com/kelpie/browser/KelpieBrowserActivity.kt
+          grep -F 'AI agent not yet paired' core/android/src/main/java/com/kelpie/browser/ui/R5AgentConnectShortcut.kt
           sha256sum "$APK" > apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
           {
             echo "source_commit=$(git rev-parse HEAD)"
             echo "package=com.kelpie.browser.r5betaverify"
-            echo "version=0.2.15-r5-easyconnect-qa"
-            echo "versionCode=35"
+            echo "version=0.2.17-r5-loopback-pair-qa"
+            echo "versionCode=37"
             echo "port=18461"
             echo "agent_routes=OWNER_GATED_R5_PRIVATE_BETA_TAB_OPERATIONS"
             echo "signature=debug-only"
@@ -121,3 +132,4 @@ jobs:
             apps/android/app/build/outputs/apk/debug/provenance.txt
           if-no-files-found: error
           retention-days: 14
+

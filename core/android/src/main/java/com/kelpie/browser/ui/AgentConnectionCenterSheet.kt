@@ -86,8 +86,10 @@ internal fun AgentConnectionCenterSheet(
             when (observedClients.size) {
                 0 -> {
                     Text(
-                        "No uniquely paired agent was recently verified. Ask your AI assistant to " +
-                            "check Kelpie capabilities, or finish pairing first.",
+                        "No authenticated paired AI client is active. A clean reinstall removes " +
+                            "earlier Kelpie pairings. Finish the approved MCP client pairing first, " +
+                            "then ask that client to check capabilities. No background control " +
+                            "is granted by this setup screen.",
                     )
                 }
                 1 -> {
