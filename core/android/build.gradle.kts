@@ -49,6 +49,8 @@ android {
                 buildConfigField("int", "LOCAL_HTTP_PORT", "18460")
             } else if (providers.gradleProperty("kelpieR5PrivateBetaQaProfile").orNull == "true") {
                 buildConfigField("int", "LOCAL_HTTP_PORT", "18461")
+            } else if (providers.gradleProperty("kelpieR5MotherConnectionQaProfile").orNull == "true") {
+                buildConfigField("int", "LOCAL_HTTP_PORT", "18462")
             }
         }
         release {
