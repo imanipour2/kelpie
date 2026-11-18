@@ -155,21 +155,21 @@ When an iPhone or iPad running Kelpie connects to an Apple TV via AirPlay, the a
 
 ## Screenshots
 
-Capture viewport or full-page screenshots on demand in PNG or JPEG. Full-page mode now works across iOS, Android, and macOS, each using its renderer's native mechanism: iOS takes an unclipped `WKWebView` snapshot of the full content, Android paints the whole document into a full-height bitmap via `WebView.draw`, and macOS scrolls-and-stitches the page viewport-by-viewport (covering both the WebKit and Chromium renderers). Quality is adjustable for JPEG. Screenshot responses now include explicit viewport-mapping metadata: viewport width and height, device pixel ratio, and computed image-to-viewport scale factors. That makes the coordinate space visible to LLMs instead of forcing them to guess from image size alone.
+Screenshot format and full-page support depend on the native binding. iOS and macOS retain their existing capture paths. On the Android KAI remediation branch, ordinary screenshot exports return `NEEDS_HUMAN`, including plain, diagnostic and annotated capture. Page-world DOM metadata cannot attest that real-account pixels are private-data free. Full-page Android capture is also refused. An experimental debug-only path permits synthetic fixtures at the native WebView's exact URL `https://kai-fixture.invalid/`; it is not accepted for real-page or background use. The existing WebView and Bitmap/Canvas path are reused. Its image metadata records actual independent `imageScaleX`/`imageScaleY`, viewport and DPR; DPR alone is not an image transform. See the [KAI contracts and QA ledger](qa/kai-reuse-exec-20261119/contracts-and-qa.md).
 
 ### Annotated Screenshots
 
-Take a screenshot with numbered labels overlaid on every interactive element (buttons, links, inputs). The LLM sees both the image and a structured list of what each number corresponds to, plus an annotation session ID and validity hint. Then it can say "click element 5" or "fill element 12 with hello@example.com" — visual-first automation without needing CSS selectors. For LLM use, Kelpie prefers CSS-pixel/non-retina annotated screenshots so the image payload is smaller and the coordinate system lines up with interaction APIs more directly. Annotation indices are valid until the page URL changes; after navigation, Kelpie returns `ANNOTATION_EXPIRED` and expects a fresh annotated screenshot.
+Android's experimental fixture capture draws `E01` to `E50` on a copy of the bitmap, with explicit partial coverage and label-collision omissions. Labels are display-only: `elementRef:null`, `allowedOperations:[]`, `actionByRefAvailable:false`. Android `click-annotation` and `fill-annotation` return `STALE_OBSERVATION` even if the URL has not changed; the old list index cannot safely identify a target after DOM changes. Canonical `tab.snapshot`/`tab.click`/`tab.type` reuse the existing observation registry with short-lived refs, mutation and hit-test checks. These safeguards do not supply the missing native R5 owner-consent or effect-verification runtime. Other bindings retain their legacy annotation contracts pending parity review.
 
 ## DOM Access and Queries
 
-Full read access to the page DOM. Query elements by CSS selector, get their text, attributes, bounding boxes, and visibility. Retrieve the full DOM tree from any root element with configurable depth. All queries return structured data, not raw HTML.
+Query page elements by CSS selector for text, attributes, bounding boxes and visibility. Android DOM/LLM reads sanitize existing output paths: form/editor values and sensitive metadata are omitted or redacted, and selectors use structural paths. Android `get-dom` returns sanitized detached HTML with `redacted:true`; it does not return an unmodified page copy. This reduces known disclosure paths but does not make hostile page content trustworthy.
 
 ## Element Interaction
 
-Click elements by selector or tap at specific coordinates. Fill form inputs, type text character-by-character (simulating human typing with per-character delays), select dropdown options, check/uncheck checkboxes. Every interaction shows a blue touch indicator animation on the device so you can see what happened.
+Click elements by selector or tap at viewport CSS coordinates. Existing extensions also fill inputs, append text, select options and check/uncheck controls. On Android, fill/type operate on one validated target in one script; typing no longer clears/re-queries between delayed characters. Sensitive targets and ambiguous or obscured targets refuse. Screenshot-space taps return `STALE_OBSERVATION` because the legacy request does not bind a verified image transform. Events remain synthetic JavaScript events, not Android native touch or proof of a completed business action.
 
-For LLM-driven automation, the intended order is semantic first: read the accessibility tree or use the smart find endpoints, then interact by selector. If the model needs to reason over an image after it already knows the selector, Kelpie can draw a visible highlight box/ring around that exact DOM element and then capture a screenshot, which keeps the visual target and the selector aligned. Annotated screenshots are the broader visual fallback when semantic targeting fails. Raw coordinate taps exist for edge cases and are intentionally the least-preferred option because they drift with viewport changes, scrolling, and overlays. Selector clicks and annotation clicks now dispatch coordinate-bearing pointer and mouse events at the rendered hit target instead of shortcutting through `el.click()`, so DOM-targeted automation exercises the same observable interaction path as raw taps and fails with a visibility error when the target center is obscured. When raw taps do drift, every shipped app build now includes a bundled local calibration page at `/debug/coordinate-calibration` that shows manual tap coordinates, previews requested versus applied automation taps, and persists additive X/Y offsets used by the raw `tap` endpoint.
+For Android agent work, prefer a fresh canonical snapshot and an observed reference; use existing semantic/selector extensions only within their documented guarantees. Temporary `highlight` remains available for QA, but it does not bypass the image-export gate. Raw coordinate taps can drift with viewport changes, scrolling and overlays. The bundled `/debug/coordinate-calibration` page and existing calibration settings remain diagnostic tools; they do not turn an unbound image coordinate or numbered label into an authorized target.
 
 Swipe gestures are first-class too: give Kelpie start and end viewport coordinates and it renders a visible swipe trail while dispatching synthetic pointer events to JS-driven touch listeners. For native scrolling, use the scroll endpoints instead.
 
@@ -346,10 +346,10 @@ Purpose-built methods that return semantic data instead of raw HTML:
 - **Accessibility tree** — ARIA roles, labels, states, and nesting. What a screen reader sees.
 - **Visible elements** — only what's currently in the viewport, optionally filtered to interactive elements only. Up to 200 elements with positions.
 - **Page text** — reader-mode text extraction: title, content, word count, language.
-- **Form state** — snapshot of every form on the page: fields, values, validation state, which required fields are empty.
+- **Form state** — form structure and validation state. Android returns `value:null` and redacts private field metadata rather than exporting entered values.
 - **Smart find** — find a button, link, input, or any element by its visible text or label. No selectors needed.
 
-When those semantic methods are not enough, Kelpie also provides an annotated screenshot workflow: the app returns a screenshot plus numbered interactive elements, and the LLM can act on those indices with `click-annotation` or `fill-annotation` instead of guessing raw coordinates.
+Annotated screenshots remain an existing API surface. Android KAI restricts it to synthetic fixture QA and disables blind index mutations; see the capture and reference limits above. An unavailable or partial observation must not be reported as proof that a page has no matching result.
 
 ## Address-bar search
 
@@ -393,14 +393,13 @@ AI inference on macOS, iOS, Android and Windows; Linux does not yet expose AI ha
 
 ## Annotated Screenshot Workflow
 
-A visual-first automation loop designed for LLMs:
-
-1. Take an annotated screenshot — get an image with numbered labels on interactive elements.
-2. The LLM examines the image and decides what to do.
-3. Click or fill by annotation index — "click 5" or "fill 12 with my@email.com".
-4. Repeat.
-
-No CSS selectors, no DOM knowledge. The LLM works from what it sees, like a human would.
+The Android KAI branch separates visual fixture labels from callable references.
+Synthetic annotation QA can compare a bitmap's labels and coverage against its
+same-capture element map, but cannot mutate by `E01`/index. Ordinary Android image
+export is blocked. Canonical actions require a fresh snapshot and expire or
+consume its refs; after a refusal or uncertain result, observe again before
+deciding what to do. No automatic retry, action receipt or verified Sort/Filter
+effect is added here. iOS parity and real S24 acceptance remain open gates.
 
 ## Mutation Observation
 

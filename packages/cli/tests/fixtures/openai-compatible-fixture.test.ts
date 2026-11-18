@@ -102,9 +102,14 @@ function isPartialUtf8Tail(bytes: Uint8Array): boolean {
 }
 
 function splitsInsideDataField(reads: Uint8Array[]): boolean {
-  return reads.some((read, index) => {
-    const next = reads[index + 1];
-    return next !== undefined && Buffer.from(read).toString("latin1").endsWith("da") && Buffer.from(next).toString("latin1").startsWith("ta:");
+  const bytes = Buffer.concat(reads);
+  const marker = Buffer.from("data:");
+  let boundary = 0;
+  return reads.slice(0, -1).some((read) => {
+    boundary += read.length;
+    // A forced boundary after "da" remains a split even when either side
+    // spans several reads (including the one-byte-fragment case).
+    return boundary >= 2 && bytes.subarray(boundary - 2, boundary + 3).equals(marker);
   });
 }
 
@@ -208,14 +213,38 @@ describe("OpenAI-compatible protocol fixture", { timeout: 20_000 }, () => {
     expect(response.status).toBe(200);
   });
 
-  it("streams a plain answer fragmented, with comments, usage and [DONE]", async () => {
+  it("forces UTF-8 and data-field cuts, including one-byte fragments, without relying on TCP packetization", async () => {
+    const { chunkBytes } = await import(fixturePath) as {
+      chunkBytes: (bytes: Buffer, chunkMax: number, random: () => number) => Buffer[];
+    };
+    const event = JSON.stringify({ content: "Přemýšlím 🤔 سلام" });
+    const bytes = Buffer.from(": keep-alive\r\n\r\ndata: " + event + "\r\n\r\ndata: [DONE]\r\n\r\n");
+    for (const randomValue of [0, 0.5, 0.999]) {
+      const fragments = chunkBytes(bytes, 7, () => randomValue);
+      expect(Buffer.concat(fragments).equals(bytes)).toBe(true);
+      expect(fragments.every((fragment) => fragment.length >= 1 && fragment.length <= 7)).toBe(true);
+      if (randomValue === 0) expect(fragments.every((fragment) => fragment.length === 1)).toBe(true);
+      expect(fragments.some(isPartialUtf8Tail)).toBe(true);
+      expect(splitsInsideDataField(fragments)).toBe(true);
+      const stream = await readSse(new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const fragment of fragments) controller.enqueue(fragment);
+          controller.close();
+        },
+      })));
+      expect(stream.reads.length).toBe(fragments.length);
+      expect(stream.comments).toEqual([": keep-alive"]);
+      expect(stream.events).toEqual([{ data: event }]);
+      expect(stream.done).toBe(true);
+    }
+  });
+
+  it("streams a plain answer with comments, usage and [DONE]", async () => {
     const stream = await readSse(await chat(keyed, { model: MODEL, stream: true, messages: [{ role: "user", content: "hi" }] }));
     expect(stream.done).toBe(true);
-    expect(stream.reads.length).toBeGreaterThan(20);
-    // Reads may coalesce in transit, but the fixture forces cuts inside every
-    // multibyte character and every "data:", so some must survive.
-    expect(stream.reads.some((read) => isPartialUtf8Tail(read))).toBe(true);
-    expect(splitsInsideDataField(stream.reads)).toBe(true);
+    // Fetch/TCP may coalesce any writes. The deterministic test above verifies
+    // hostile byte boundaries; this request verifies real HTTP stream content.
+    expect(stream.reads.length).toBeGreaterThan(0);
     expect(stream.comments).toContain(": keep-alive");
     const all = deltas(stream.events);
     expect(all[0]).toEqual({ role: "assistant" });

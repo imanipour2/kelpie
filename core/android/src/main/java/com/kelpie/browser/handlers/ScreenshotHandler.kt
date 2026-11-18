@@ -1,31 +1,32 @@
 package com.kelpie.browser.handlers
 
+import android.app.KeyguardManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.os.Handler
-import android.os.Looper
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.RectF
+import android.os.SystemClock
+import android.view.View
 import android.webkit.WebView
+import com.kelpie.browser.BuildConfig
+import com.kelpie.browser.nativecore.BrowserGatewayNative
 import com.kelpie.browser.network.Router
 import com.kelpie.browser.network.errorResponse
 import com.kelpie.browser.network.successResponse
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.ByteArrayOutputStream
+import java.time.Instant
 import java.util.Base64
+import java.util.UUID
 import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
+import kotlin.coroutines.resumeWithException
+import kotlin.math.abs
 import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.roundToInt
-
-private val screenshotMainHandler = Handler(Looper.getMainLooper())
-
-/**
- * Hard upper bound on the captured full-page height in device pixels. A tall
- * page (e.g. an infinite-scroll feed reporting 60000+ CSS pixels) would
- * otherwise allocate hundreds of MB in a single `Bitmap`, throwing
- * `OutOfMemoryError`. The page is captured up to this height and truncated past
- * it; the truncation is surfaced via the response metadata.
- */
-private const val MAX_FULL_PAGE_PX = 16384
 
 enum class ScreenshotResolution(
     val wireValue: String,
@@ -72,197 +73,360 @@ data class ScreenshotViewportMetrics(
     }
 }
 
-/** A full-page capture: the stitched bitmap plus the CSS height it spans. */
-private class FullContentCapture(
-    val bitmap: Bitmap,
-    val contentHeightCss: Int,
-    val truncated: Boolean,
-)
-
+/**
+ * One capture implementation for plain, diagnostic and annotated screenshots.
+ * The existing WebView is used; no renderer, service or permission system is added.
+ */
 class ScreenshotHandler(
     private val ctx: HandlerContext,
 ) {
     fun register(router: Router) {
-        router.register("screenshot") { screenshot(it) }
-    }
-
-    private suspend fun screenshot(body: Map<String, Any?>): Map<String, Any?> {
-        val fullPage = body["fullPage"] as? Boolean ?: false
-        val format = body["format"] as? String ?: "png"
-        val quality = (body["quality"] as? Int) ?: 80
-        val resolution =
-            ScreenshotResolution.parse(body["resolution"])
-                ?: return errorResponse("INVALID_PARAMS", "resolution must be 'native' or 'viewport'")
-
-        val payload =
-            if (fullPage) {
-                captureFullPagePayload(format, quality, resolution)
-            } else {
-                ctx.captureScreenshotPayload(format, quality, resolution)
-            } ?: return errorResponse("SCREENSHOT_FAILED", "Failed to capture screenshot")
-        return successResponse(payload)
+        router.register("screenshot") capture@{ body ->
+            try {
+                val resolution =
+                    ScreenshotResolution.parse(body["resolution"])
+                        ?: return@capture errorResponse("INVALID_PARAMS", "Unknown screenshot resolution")
+                if (body["fullPage"] == true) {
+                    captureFullPagePayload("png", 80, resolution)
+                }
+                val payload =
+                    captureViewportPayload(
+                        body["format"] as? String ?: "png",
+                        (body["quality"] as? Number)?.toInt() ?: 80,
+                        resolution,
+                    )
+                successResponse(payload)
+            } catch (error: ScreenshotRefusal) {
+                errorResponse(error.code, error.message ?: "Capture refused")
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                errorResponse("NO_FRESH_FRAME", "No safely verified frame was produced")
+            }
+        }
     }
 
     /**
-     * Captures the full scrollable document, not just the viewport.
-     *
-     * The Android System WebView is not CDP-driven, so the document is captured
-     * by scrolling viewport-by-viewport and compositing each tile into a single
-     * target bitmap. This bounds peak memory to the target bitmap plus one
-     * viewport draw, and — unlike a single oversized `WebView.draw` — guarantees
-     * off-screen content is actually painted. Resolution scaling, encoding, and
-     * the response metadata block mirror the viewport path in
-     * [HandlerContext.captureScreenshotPayload].
+     * Immediate scroll-and-draw did not establish freshness or redaction per tile.
+     * Keep the entry point but refuse until the existing R5 provider supports this.
      */
+    @Suppress("UNUSED_PARAMETER")
     suspend fun captureFullPagePayload(
         format: String,
         quality: Int,
         resolution: ScreenshotResolution,
-    ): Map<String, Any?>? {
-        val wv = ctx.webView ?: return null
-        val normalizedFormat = if (format == "jpeg") "jpeg" else "png"
-        val viewport = ctx.viewportMetrics()
-        val capture = drawFullContent(wv) ?: return null
-        val bitmap = capture.bitmap
+    ): Map<String, Any?>? = throw ScreenshotRefusal("NEEDS_HUMAN", "Full-page capture has no verified per-tile privacy and freshness coverage")
 
-        val rendered =
-            if (resolution == ScreenshotResolution.VIEWPORT) {
-                val targetWidth = max((bitmap.width / max(viewport.devicePixelRatio, 1.0)).roundToInt(), 1)
-                val targetHeight = max((bitmap.height / max(viewport.devicePixelRatio, 1.0)).roundToInt(), 1)
-                if (targetWidth == bitmap.width && targetHeight == bitmap.height) {
-                    bitmap
-                } else {
-                    Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true)
-                }
-            } else {
-                bitmap
+    suspend fun captureAnnotatedPayload(
+        format: String,
+        quality: Int,
+        resolution: ScreenshotResolution,
+    ): Map<String, Any?> = captureViewportPayload(format, quality, resolution, annotated = true)
+
+    suspend fun captureViewportPayload(
+        format: String = "png",
+        quality: Int = 80,
+        resolution: ScreenshotResolution = ScreenshotResolution.NATIVE,
+        annotated: Boolean = false,
+    ): Map<String, Any?> =
+        withContext(Dispatchers.Main.immediate) {
+            if (format !in setOf("png", "jpeg") || quality !in 0..100) {
+                throw ScreenshotRefusal("INVALID_PARAMS", "Invalid image encoding parameters")
             }
+            val view = ctx.webView ?: throw ScreenshotRefusal("NO_FRESH_FRAME", "No renderer")
+            // Page-realm JSON cannot attest that real account pixels are safe. All
+            // callers share this native fixture gate, including plain screenshots.
+            requireSyntheticScreenshotFixture(BuildConfig.KAI_ANNOTATION_QA_ENABLED, view.url)
+            val tab =
+                ctx.tabStore
+                    ?.tabs
+                    ?.value
+                    ?.firstOrNull { it.webView === view }
+                    ?: throw ScreenshotRefusal("NO_FRESH_FRAME", "Renderer ownership is unavailable")
+            val epoch = tab.documentVersion
+            val activeTab = ctx.tabStore?.activeTabId?.value
 
-        return try {
-            val stream = ByteArrayOutputStream()
-            val compressFormat =
-                if (normalizedFormat == "jpeg") {
-                    Bitmap.CompressFormat.JPEG
-                } else {
-                    Bitmap.CompressFormat.PNG
+            fun guard() {
+                requireSyntheticScreenshotFixture(BuildConfig.KAI_ANNOTATION_QA_ENABLED, view.url)
+                if (ctx.remoteDocumentGuard?.invoke() == false ||
+                    ctx.scriptPlaybackState?.isAbortRequested() == true ||
+                    ctx.webView !== view ||
+                    tab.documentVersion != epoch ||
+                    ctx.tabStore?.activeTabId?.value != activeTab ||
+                    ctx.tabStore
+                        ?.tabs
+                        ?.value
+                        ?.none { it === tab && it.webView === view } != false
+                ) {
+                    throw ScreenshotRefusal("OBSERVATION_RACE", "The renderer, document, target or authority changed")
                 }
-            rendered.compress(compressFormat, quality, stream)
-            val baseMetadata =
-                viewport.metadata(
-                    imageWidth = rendered.width,
-                    imageHeight = rendered.height,
-                    format = normalizedFormat,
-                    resolution = resolution,
-                )
-            // The full-page image spans the whole document, so the shared
-            // viewport-based `imageScaleY` is meaningless. Rewrite it against the
-            // full captured CSS content height so a consumer can map full-page
-            // image pixels back to CSS coordinates.
-            val imageScaleY =
-                if (capture.contentHeightCss > 0) {
-                    rendered.height.toDouble() / capture.contentHeightCss.toDouble()
-                } else {
-                    1.0
+                if (view.context.getSystemService(KeyguardManager::class.java)?.isDeviceLocked != false) {
+                    throw ScreenshotRefusal("NEEDS_HUMAN", "Unlock the device before capture")
                 }
-            val fullPageMetadata =
-                baseMetadata +
-                    mapOf(
-                        "contentHeight" to capture.contentHeightCss,
-                        "imageScaleY" to imageScaleY,
-                        "truncated" to capture.truncated,
+                if (!view.isAttachedToWindow || !view.isShown || view.windowVisibility != View.VISIBLE || !view.hasWindowFocus()) {
+                    throw ScreenshotRefusal("UNSUPPORTED_IN_BACKGROUND", "Background capture requires the accepted R5 frame provider")
+                }
+            }
+            guard()
+            val before = observation()
+            requirePrivateCoverage(before)
+            val viewport = captureMetrics(before)
+            var bitmap: Bitmap? = null
+            var rendered: Bitmap? = null
+            val maxBytes = minOf(Runtime.getRuntime().maxMemory() / 8, 32L * 1024 * 1024)
+
+            fun budget(
+                width: Int,
+                height: Int,
+            ) {
+                val retained =
+                    (bitmap?.allocationByteCount?.toLong() ?: 0L) +
+                        (if (rendered !== bitmap) rendered?.allocationByteCount?.toLong() ?: 0L else 0L)
+                requireScreenshotAllocation(width, height, retained, maxBytes)
+            }
+            try {
+                awaitVisualState(view, ::guard)
+                guard()
+                budget(view.width, view.height)
+                // Ownership is established before draw, outside the timeout boundary.
+                bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+                view.draw(Canvas(bitmap))
+                guard()
+                val after = observation()
+                requirePrivateCoverage(after)
+                if (frameEvidence(before) != frameEvidence(after)) {
+                    throw ScreenshotRefusal("OBSERVATION_RACE", "Page geometry changed during capture")
+                }
+                if (uniform(bitmap)) throw ScreenshotRefusal("NO_FRESH_FRAME", "Uniform or empty frame cannot establish a usable observation")
+                rendered =
+                    if (resolution == ScreenshotResolution.VIEWPORT &&
+                        (bitmap.width != viewport.viewportWidth || bitmap.height != viewport.viewportHeight)
+                    ) {
+                        budget(viewport.viewportWidth, viewport.viewportHeight)
+                        Bitmap.createScaledBitmap(bitmap, viewport.viewportWidth, viewport.viewportHeight, true)
+                    } else {
+                        bitmap
+                    }
+                val labels = if (annotated) annotations(before) else emptyList()
+                // An annotation always owns a copy. Every concurrent allocation is budgeted.
+                if (annotated) {
+                    budget(rendered.width, rendered.height)
+                    val copy =
+                        rendered.copy(Bitmap.Config.ARGB_8888, true)
+                            ?: throw ScreenshotRefusal("NO_FRESH_FRAME", "Could not allocate annotation bitmap")
+                    if (rendered !== bitmap) rendered.recycle()
+                    rendered = copy
+                    drawAnnotations(rendered, labels, viewport)
+                }
+                guard()
+                val stream = ByteArrayOutputStream()
+                val encoding = if (format == "jpeg") Bitmap.CompressFormat.JPEG else Bitmap.CompressFormat.PNG
+                if (!rendered.compress(encoding, quality, stream)) {
+                    throw ScreenshotRefusal("NO_FRESH_FRAME", "Image encoding failed")
+                }
+                if (stream.size() > 8 * 1024 * 1024) throw ScreenshotRefusal("SCREENSHOT_TOO_LARGE", "Encoded frame exceeds the image budget")
+                guard()
+                val observationId = UUID.randomUUID().toString()
+                val payload =
+                    mutableMapOf<String, Any?>(
+                        "image" to Base64.getEncoder().encodeToString(stream.toByteArray()),
+                        "observationId" to observationId,
+                        "tabId" to tab.id,
+                        "rendererIdentity" to System.identityHashCode(view).toString(16),
+                        "documentEpoch" to epoch,
+                        "capturedAt" to Instant.now().toString(),
+                        "consentGeneration" to null,
+                        "frameNonce" to null,
+                        "readOnly" to true,
+                        "actionByRefAvailable" to false,
+                        "freshness" to "foreground-callback-unattested",
+                        "privacy" to "synthetic-fixture-only-no-privacy-attestation",
+                        "coverage" to before["coverage"],
+                        "viewport" to before["viewport"],
+                        "visualViewport" to before["visualViewport"],
+                        "scroll" to before["scroll"],
                     )
-            mapOf("image" to Base64.getEncoder().encodeToString(stream.toByteArray())) + fullPageMetadata
-        } finally {
-            if (rendered !== bitmap) {
-                rendered.recycle()
-            }
-            bitmap.recycle()
-        }
-    }
-
-    /**
-     * Scrolls the WebView through the document one viewport at a time, drawing
-     * each tile into a single target bitmap sized to the full content height
-     * (capped at [MAX_FULL_PAGE_PX]). The original scroll position is restored.
-     *
-     * The bitmap allocation and per-tile draws are guarded against
-     * [OutOfMemoryError]: an oversized page that slips past the cap (or a device
-     * under heap pressure) frees any partial bitmap and resumes with `null`, so
-     * the handler returns a clean `SCREENSHOT_FAILED` instead of crashing the app.
-     */
-    private suspend fun drawFullContent(wv: WebView): FullContentCapture? =
-        suspendCoroutine { cont ->
-            screenshotMainHandler.post {
-                var bmp: Bitmap? = null
-                val originalScrollY = wv.scrollY
-                val originalScrollX = wv.scrollX
-                try {
-                    val density = wv.resources.displayMetrics.density
-                    val width = max(wv.width, 1)
-                    val viewportHeight = max(wv.height, 1)
-                    val contentHeightPx = (wv.contentHeight * density).roundToInt()
-                    val desiredHeight = max(contentHeightPx, viewportHeight).coerceAtLeast(1)
-                    val cap = max(min(desiredHeight, heapBoundedCap(width)), viewportHeight)
-                    val fullHeight = min(desiredHeight, cap)
-                    val truncated = fullHeight < desiredHeight
-
-                    bmp = Bitmap.createBitmap(width, fullHeight, Bitmap.Config.ARGB_8888)
-                    val canvas = Canvas(bmp)
-                    stitchViewportTiles(wv, canvas, fullHeight, viewportHeight)
-
-                    val contentHeightCss = max((fullHeight / density).roundToInt(), 1)
-                    cont.resume(FullContentCapture(bmp, contentHeightCss, truncated))
-                } catch (_: Throwable) {
-                    // Catches OutOfMemoryError (an Error, not Exception) from the
-                    // bitmap allocation or any per-tile draw, plus any runtime fault.
-                    bmp?.recycle()
-                    cont.resume(null)
-                } finally {
-                    wv.scrollTo(originalScrollX, originalScrollY)
+                payload.putAll(viewport.metadata(rendered.width, rendered.height, format, resolution))
+                if (annotated) {
+                    payload["annotations"] = labels
+                    payload["annotationCoverage"] =
+                        mapOf(
+                            "drawn" to labels.count { it["labelDrawn"] == true },
+                            "omitted" to labels.count { it["labelDrawn"] != true },
+                        )
+                    payload["annotationSessionId"] = observationId
+                    payload["validUntil"] = "display-only"
+                    payload["hint"] = "E labels are visual only. Blind index actions are disabled; use a fresh canonical snapshot."
                 }
+                payload
+            } catch (_: OutOfMemoryError) {
+                throw ScreenshotRefusal("NO_FRESH_FRAME", "Capture exceeded the bounded bitmap budget")
+            } finally {
+                if (rendered !== bitmap) rendered?.recycle()
+                bitmap?.recycle()
             }
         }
 
-    /**
-     * Draws the document into [canvas] one viewport-tall band at a time, scrolling
-     * the WebView so each band paints its real (possibly off-screen) content.
-     *
-     * The final band is clamped to `maxScrollY` so it ends flush with the page
-     * edge (`maxScrollY + viewportHeight == fullHeight`); its overlap with the
-     * previous band repaints identical document content, so no clipping is needed.
-     */
-    private fun stitchViewportTiles(
-        wv: WebView,
-        canvas: Canvas,
-        fullHeight: Int,
-        viewportHeight: Int,
-    ) {
-        val maxScrollY = max(fullHeight - viewportHeight, 0)
-        var top = 0
-        while (top < fullHeight) {
-            val scrollY = min(top, maxScrollY)
-            wv.scrollTo(wv.scrollX, scrollY)
-            val save = canvas.save()
-            // Place this band so the WebView's painted viewport lands at `scrollY`.
-            canvas.translate(0f, scrollY.toFloat())
-            wv.draw(canvas)
-            canvas.restoreToCount(save)
-            if (scrollY >= maxScrollY) break
-            top += viewportHeight
+    private suspend fun observation(): Map<String, Any?> =
+        ctx.evaluateJSReturningJSON(
+            BrowserGatewayNative.selectorSnapshotExpression(
+                """{"maxElements":50,"maxChars":16000,"prefix":"k","includeShadow":false}""",
+            ),
+        )
+
+    private fun requirePrivateCoverage(snapshot: Map<String, Any?>) {
+        val privacy = snapshot["privacyRects"] as? List<*>
+        val coverage = snapshot["coverage"] as? Map<*, *>
+        if (snapshot["screenshotBlocked"] != false || privacy == null || privacy.isNotEmpty() || coverage == null) {
+            throw ScreenshotRefusal("NEEDS_HUMAN", "Sensitive or opaque content cannot be safely redacted by this frame provider")
         }
     }
 
-    /**
-     * Upper bound on full-page height derived from available heap, so we never
-     * attempt a target allocation that obviously will not fit. Reserves the
-     * bitmap to at most a quarter of max heap (leaving room for the encode buffer
-     * and a viewport draw), never exceeding [MAX_FULL_PAGE_PX].
-     */
-    private fun heapBoundedCap(width: Int): Int {
-        val maxHeapBytes = Runtime.getRuntime().maxMemory()
-        val budgetBytes = maxHeapBytes / 4
-        val bytesPerRow = max(width, 1).toLong() * 4L
-        val heapCap = (budgetBytes / bytesPerRow).toInt().coerceAtLeast(1)
-        return min(heapCap, MAX_FULL_PAGE_PX)
+    private fun frameEvidence(snapshot: Map<String, Any?>): List<Any?> =
+        listOf(snapshot["url"], snapshot["elements"], snapshot["viewport"], snapshot["visualViewport"], snapshot["scroll"], snapshot["coverage"])
+
+    private fun captureMetrics(snapshot: Map<String, Any?>): ScreenshotViewportMetrics {
+        val viewport = snapshot["viewport"] as? Map<*, *> ?: emptyMap<Any, Any>()
+        val visual = snapshot["visualViewport"] as? Map<*, *> ?: emptyMap<Any, Any>()
+
+        fun value(
+            map: Map<*, *>,
+            key: String,
+        ): Double = (map[key] as? Number)?.toDouble() ?: Double.NaN
+        val width = value(viewport, "width")
+        val height = value(viewport, "height")
+        val valid = listOf(width, height).all { it.isFinite() && it >= 1 && it <= 8192 }
+        val visualValid = listOf("width", "height", "scale", "offsetLeft", "offsetTop").all { value(visual, it).isFinite() }
+        val dpr = (snapshot["devicePixelRatio"] as? Number)?.toDouble() ?: Double.NaN
+        if (!valid ||
+            !visualValid ||
+            !dpr.isFinite() ||
+            dpr <= 0 ||
+            abs(value(visual, "width") - width) > 1 ||
+            abs(value(visual, "height") - height) > 1 ||
+            value(visual, "scale") != 1.0 ||
+            value(visual, "offsetLeft") != 0.0 ||
+            value(visual, "offsetTop") != 0.0
+        ) {
+            throw ScreenshotRefusal("INVALID_CAPTURE_GEOMETRY", "Zoom, crop or visual viewport geometry requires a verified provider transform")
+        }
+        return ScreenshotViewportMetrics(width.toInt(), height.toInt(), dpr)
+    }
+
+    private suspend fun awaitVisualState(
+        view: WebView,
+        guard: () -> Unit,
+    ) {
+        val completed =
+            withTimeoutOrNull(3000) {
+                suspendCancellableCoroutine<Unit> { continuation ->
+                    val requestId = SystemClock.elapsedRealtimeNanos()
+                    try {
+                        guard()
+                        view.postVisualStateCallback(
+                            requestId,
+                            object : WebView.VisualStateCallback() {
+                                override fun onComplete(id: Long) {
+                                    if (!continuation.isActive) return
+                                    try {
+                                        guard()
+                                        if (id != requestId) throw ScreenshotRefusal("NO_FRESH_FRAME", "Unexpected frame callback")
+                                        continuation.resume(Unit)
+                                    } catch (error: Exception) {
+                                        if (continuation.isActive) continuation.resumeWithException(error)
+                                    }
+                                }
+                            },
+                        )
+                        view.invalidate()
+                    } catch (error: Exception) {
+                        if (continuation.isActive) continuation.resumeWithException(error)
+                    }
+                }
+                true
+            }
+        if (completed != true) throw ScreenshotRefusal("NO_FRESH_FRAME", "No fresh callback arrived within the capture deadline")
+    }
+
+    private fun uniform(bitmap: Bitmap): Boolean {
+        val first = bitmap.getPixel(0, 0)
+        for (y in 0..15) {
+            for (x in 0..15) {
+                if (bitmap.getPixel(x * (bitmap.width - 1) / 15, y * (bitmap.height - 1) / 15) != first) return false
+            }
+        }
+        return true
+    }
+
+    private fun annotations(snapshot: Map<String, Any?>): List<MutableMap<String, Any?>> =
+        (snapshot["elements"] as? List<*>).orEmpty().take(50).mapIndexedNotNull { index, value ->
+            val element = value as? Map<*, *> ?: return@mapIndexedNotNull null
+            mutableMapOf(
+                "index" to index,
+                "labelDrawn" to false,
+                "omissionReason" to "OUTSIDE_VIEWPORT",
+                "displayId" to "E" + (index + 1).toString().padStart(2, '0'),
+                "elementRef" to null,
+                "role" to element["role"],
+                "name" to element["label"],
+                "rect" to element["rect"],
+                "sensitivity" to element["sensitivity"],
+                "allowedOperations" to emptyList<String>(),
+            )
+        }
+
+    private fun drawAnnotations(
+        bitmap: Bitmap,
+        annotations: List<MutableMap<String, Any?>>,
+        viewport: ScreenshotViewportMetrics,
+    ) {
+        val transform =
+            ScreenshotTransform(
+                bitmap.width.toDouble() / viewport.viewportWidth,
+                bitmap.height.toDouble() / viewport.viewportHeight,
+            )
+        val canvas = Canvas(bitmap)
+        val border =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.rgb(22, 76, 160)
+                style = Paint.Style.STROKE
+                strokeWidth = max(1f, bitmap.width / 390f)
+            }
+        val label =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE
+                textSize = (bitmap.width / 28f).coerceIn(11f, 28f)
+            }
+        val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = border.color }
+        val occupied = mutableListOf<RectF>()
+        for (annotation in annotations) {
+            val raw = annotation["rect"] as? Map<*, *> ?: continue
+
+            fun coordinate(key: String): Double = (raw[key] as? Number)?.toDouble() ?: Double.NaN
+            val css = ScreenshotRect(coordinate("x"), coordinate("y"), coordinate("width"), coordinate("height"))
+            if (!css.valid()) throw ScreenshotRefusal("INVALID_CAPTURE_GEOMETRY", "Invalid annotation bounds")
+            val r = transform.imageRect(css)
+            if (r.width <= 0 || r.height <= 0 || r.x >= bitmap.width || r.y >= bitmap.height || r.x + r.width <= 0 || r.y + r.height <= 0) continue
+            canvas.drawRect(r.x.toFloat(), r.y.toFloat(), (r.x + r.width).toFloat(), (r.y + r.height).toFloat(), border)
+            val text = annotation["displayId"] as String
+            val width = label.measureText(text) + 8
+            val height = label.textSize + 6
+            val left = r.x.toFloat().coerceIn(0f, max(bitmap.width - width, 0f))
+            var top = max(r.y.toFloat() - height, 0f)
+            var box = RectF(left, top, left + width, top + height)
+            while (occupied.any { RectF.intersects(it, box) } && top + height * 2 <= bitmap.height) {
+                top += height
+                box = RectF(left, top, left + width, top + height)
+            }
+            if (occupied.any { RectF.intersects(it, box) }) {
+                annotation["omissionReason"] = "LABEL_COLLISION"
+                continue
+            }
+            occupied.add(box)
+            annotation["labelDrawn"] = true
+            annotation["omissionReason"] = null
+            canvas.drawRect(box, fill)
+            canvas.drawText(text, left + 4, top + height - 4, label)
+        }
     }
 }

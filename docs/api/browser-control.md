@@ -23,15 +23,25 @@ requests use one queue per exact device socket and local launch identity.
 Start with `tabs.list` or `tabs.new {url?}`. Choose `tabId` explicitly for each
 page operation. `tabs.select`, when supported, chooses the active tab.
 `tab.snapshot {maxElements?,maxChars?}` returns bounded URL/title, compact text,
-and `{ref,role,name}` elements; it never reads form-control values. Input values,
-textarea defaults and contenteditable text are excluded. Page content remains
-untrusted and product disclosure/scrubbing policies still apply. The default
-limits are 200 elements and 16,000 text characters, with bounded metadata.
+and `{ref,role,name}` elements. Form/editor values are not exported; the fixed
+reader can inspect bounded private values locally to remove their reflections
+from labels and text. URL credentials, query and fragment are omitted. Additive
+element metadata includes CSS `rect`, `visible`, `enabled`, `sensitivity`,
+`value:null` and `allowedOperations`. Snapshot metadata includes viewport,
+visual viewport, scroll, privacy hints and honest `INCOMPLETE`/`UNKNOWN` coverage.
+The native gateway adds `observationId`, `tabId` and remaining `ttlMs`; these are
+not a native consent or renderer attestation. Page content and privacy hints
+remain untrusted. Default limits are 200 elements and 16,000 text characters.
 
 `tab.click {ref}` and `tab.type {ref,text}` act only on the latest observed
-reference in that tab. Type appends. Observe again after every mutation or
-snapshot. Navigation, detached/replaced elements, another tab's refs and previous
-snapshots are refused. Native snapshots use the generated fixed reader, with an
+reference in that tab. Type appends. A reference observation expires after at most
+15 seconds and is consumed before focus/dispatch, so take a fresh snapshot before
+another action. Navigation, observed mutations, changed geometry, hidden/covered
+targets, another tab's refs and previous snapshots are refused. Native retains at
+most 16 tab observations and invalidates them on cancellation and tab changes.
+Refusals include `STALE_OBSERVATION`, `STALE_ELEMENT`, `AMBIGUOUS_TARGET`,
+`OCCLUDED`, `NEEDS_HUMAN` and the legacy `STALE_REFERENCE` membership error.
+Native snapshots use the generated fixed reader, with an
 opaque generation per gateway. Captured DOM references live in the renderer realm;
 CEF uses a private isolated world. Android's WebView uses its page realm, so its
 registry is a correctness guard and not isolation against hostile page scripts.
@@ -43,8 +53,9 @@ event guarantees; Playwright retains its native input behavior. Focus handlers c
 run synchronously, so object identity is checked again after focus; refusal after
 focus reports uncertainty. Shadow DOM actions are unsupported on native.
 No arbitrary model evaluation is introduced. Selected-renderer bindings inspect
-the actual current tab and authorize a switch only when needed; read-only sessions
-refuse other tabs without switching.
+the actual current tab; a reference action after a tab change refuses rather than
+silently switching back to an old target. Other supported operations keep their
+existing authorized tab-selection behavior; read-only sessions refuse other tabs.
 
 Navigation uses `tab.goto/back/forward/reload`; observation uses `tab.url/title`,
 `tab.screenshot`; page input uses `page.press/scroll`. Key press support depends on actual advertised platform capabilities. Rich semantic locators, fill/check/select and frame scopes
@@ -62,6 +73,14 @@ is never retried automatically. Read and reconcile after `mayHaveCompleted:true`
 Generic backend errors are replaced with secret-safe text; products can preserve
 durable fatal fences through `isFatalError` and apply `authorize` and `scrub`.
 Screenshots use one wire image value and one MCP image block, never base64 text.
+On the Android KAI remediation branch, all ordinary screenshot exports refuse
+`NEEDS_HUMAN`: page-world JSON cannot prove that pixels contain no private data.
+The experimental Canvas path requires a debug build flag and the native WebView's
+exact reserved fixture URL `https://kai-fixture.invalid/`; it does not enable real
+account capture. Full-page capture is refused. A successful canonical action is
+still a dispatch acknowledgement, not an `EFFECT_VERIFIED` receipt. Native R5
+owner consent, effect verification and background capture are blocked dependencies.
+See the [implementation contract and QA ledger](../qa/kai-reuse-exec-20261119/contracts-and-qa.md).
 
 The async JavaScript SDK follows the supported Codex browser subset:
 `browser.tabs.list/new/get/select`, tab navigation, `tab.click(ref)`,

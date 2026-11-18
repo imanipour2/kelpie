@@ -1,8 +1,11 @@
 package com.kelpie.browser.handlers
 
+import com.kelpie.browser.ai.openai.OpenAIException
+import com.kelpie.browser.llm.PageTextSnapshot
 import com.kelpie.browser.network.Router
 import com.kelpie.browser.network.errorResponse
 import com.kelpie.browser.network.successResponse
+import kotlinx.coroutines.CancellationException
 
 class DOMHandler(
     private val ctx: HandlerContext,
@@ -16,83 +19,81 @@ class DOMHandler(
     }
 
     private suspend fun getDOM(body: Map<String, Any?>): Map<String, Any?> {
-        val selector = body["selector"] as? String ?: "html"
-        val safe = JSEscape.string(selector)
-        val js = "(function(){var el=document.querySelector('$safe');return el?{html:el.outerHTML.substring(0,50000),length:el.outerHTML.length}:{html:'',length:0};})()"
-        return try {
-            successResponse(
-                com.kelpie.browser.llm.PageTextSnapshot
-                    .readObject(ctx, body, js),
-            )
-        } catch (error: com.kelpie.browser.ai.openai.OpenAIException) {
-            errorResponse(error.code, error.message)
-        } catch (e: Exception) {
-            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
-        }
+        val selector = JSEscape.string(body["selector"] as? String ?: "html")
+        return read(
+            body,
+            "var el=document.querySelector('$selector');var html=kelpieSafeHTML(el);" +
+                "return{html:html.substring(0,50000),length:html.length,redacted:true};",
+        )
     }
 
     private suspend fun querySelector(body: Map<String, Any?>): Map<String, Any?> {
         val selector = body["selector"] as? String ?: return errorResponse("MISSING_PARAM", "selector is required")
-        val safe = JSEscape.string(selector)
-        val js =
-            "(function(){var el=document.querySelector('$safe');" +
-                "if(!el)return{found:false};var r=el.getBoundingClientRect();" +
-                "return{found:true,element:{tag:el.tagName.toLowerCase()," +
-                "text:(el.textContent||'').trim().substring(0,200)," +
-                "classes:Array.from(el.classList),id:el.id||null," +
-                "rect:{x:r.x,y:r.y,width:r.width,height:r.height}}};})()"
-        return try {
-            val result = ctx.evaluateJSReturningJSON(js)
-            if (result["found"] == true) successResponse(result) else errorResponse("ELEMENT_NOT_FOUND", "No element matches: $selector")
-        } catch (e: Exception) {
-            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
-        }
+        return read(
+            body,
+            "var el=document.querySelector('${JSEscape.string(selector)}');" +
+                "if(!el)return{found:false};return{found:true,element:summary(el)};",
+        )
     }
 
     private suspend fun querySelectorAll(body: Map<String, Any?>): Map<String, Any?> {
         val selector = body["selector"] as? String ?: return errorResponse("MISSING_PARAM", "selector is required")
-        val limit = (body["limit"] as? Int) ?: 50
-        val safe = JSEscape.string(selector)
-        val js =
-            "(function(){var els=document.querySelectorAll('$safe');" +
-                "return{elements:Array.from(els).slice(0,$limit).map(function(el){" +
-                "var r=el.getBoundingClientRect();" +
-                "return{tag:el.tagName.toLowerCase()," +
-                "text:(el.textContent||'').trim().substring(0,200)," +
-                "classes:Array.from(el.classList),id:el.id||null," +
-                "rect:{x:r.x,y:r.y,width:r.width,height:r.height}};}),total:els.length};})()"
-        return try {
-            successResponse(ctx.evaluateJSReturningJSON(js))
-        } catch (e: Exception) {
-            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
-        }
+        val limit = ((body["limit"] as? Number)?.toInt() ?: 50).coerceIn(1, 200)
+        return read(
+            body,
+            "var els=document.querySelectorAll('${JSEscape.string(selector)}');" +
+                "return{elements:Array.from(els).slice(0,$limit).map(summary),total:els.length,truncated:els.length>$limit};",
+        )
     }
 
     private suspend fun getElementText(body: Map<String, Any?>): Map<String, Any?> {
         val selector = body["selector"] as? String ?: return errorResponse("MISSING_PARAM", "selector is required")
-        val safe = JSEscape.string(selector)
-        val js = "(function(){var el=document.querySelector('$safe');if(!el)return null;return{text:(el.innerText||el.textContent||'').trim(),html:el.innerHTML.substring(0,5000)};})()"
-        return try {
-            val result = ctx.evaluateJSReturningJSON(js)
-            if (result.isEmpty()) errorResponse("ELEMENT_NOT_FOUND", "No element matches: $selector") else successResponse(result)
-        } catch (e: Exception) {
-            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
-        }
+        return read(
+            body,
+            "var el=document.querySelector('${JSEscape.string(selector)}');if(!el)return{found:false};" +
+                "return{text:kelpieSafeNodeText(el),html:kelpieSafeHTML(el).substring(0,5000),redacted:true};",
+        )
     }
 
     private suspend fun getAttributes(body: Map<String, Any?>): Map<String, Any?> {
         val selector = body["selector"] as? String ?: return errorResponse("MISSING_PARAM", "selector is required")
-        val safe = JSEscape.string(selector)
-        val js =
-            "(function(){var el=document.querySelector('$safe');" +
-                "if(!el)return null;var attrs={};" +
-                "for(var a of el.attributes){attrs[a.name]=a.value;}" +
-                "return{attributes:attrs};})()"
+        return read(
+            body,
+            "var el=document.querySelector('${JSEscape.string(selector)}');if(!el)return{found:false};" +
+                "return{attributes:kelpieSafeAttributes(el),redacted:true};",
+        )
+    }
+
+    private suspend fun read(
+        body: Map<String, Any?>,
+        expression: String,
+    ): Map<String, Any?> {
+        val script =
+            """
+            (function() {
+                ${observationPrivacyScript()}
+                function summary(el) {
+                    var r = el.getBoundingClientRect();
+                    return {tag: el.tagName.toLowerCase(), text: kelpieSafeNodeText(el).substring(0,200),
+                        classes: [], id: null, sensitivity: kelpiePrivateElement(el) ? 'private' : 'public',
+                        rect: {x:r.x,y:r.y,width:r.width,height:r.height}};
+                }
+                $expression
+            })()
+            """.trimIndent()
         return try {
-            val result = ctx.evaluateJSReturningJSON(js)
-            if (result.isEmpty()) errorResponse("ELEMENT_NOT_FOUND", "No element matches: $selector") else successResponse(result)
-        } catch (e: Exception) {
-            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
+            val result = PageTextSnapshot.readObject(ctx, body, script)
+            if (result["found"] == false) {
+                errorResponse("ELEMENT_NOT_FOUND", "No element matches the requested selector")
+            } else {
+                successResponse(result)
+            }
+        } catch (error: OpenAIException) {
+            errorResponse(error.code, "Could not read the requested document")
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            errorResponse("EVAL_ERROR", "Could not read the requested document")
         }
     }
 }

@@ -3,15 +3,14 @@ package com.kelpie.browser.llm
 import com.kelpie.browser.handlers.HandlerContext
 import com.kelpie.browser.handlers.JSEscape
 import com.kelpie.browser.handlers.ScreenshotHandler
+import com.kelpie.browser.handlers.ScreenshotRefusal
 import com.kelpie.browser.handlers.ScreenshotResolution
-import com.kelpie.browser.handlers.annotationActivationScript
-import com.kelpie.browser.handlers.annotationElementsScript
 import com.kelpie.browser.handlers.elementSelectorBuilderScript
-import com.kelpie.browser.handlers.fillAnnotationScript
+import com.kelpie.browser.handlers.observationPrivacyScript
 import com.kelpie.browser.network.Router
 import com.kelpie.browser.network.errorResponse
 import com.kelpie.browser.network.successResponse
-import java.util.UUID
+import kotlinx.coroutines.CancellationException
 
 class LLMHandler(
     private val ctx: HandlerContext,
@@ -32,57 +31,59 @@ class LLMHandler(
 
     private suspend fun getAccessibilityTree(body: Map<String, Any?>): Map<String, Any?> {
         val root = body["root"] as? String ?: "body"
-        val maxDepth = (body["maxDepth"] as? Int) ?: 5
+        val maxDepth = ((body["maxDepth"] as? Number)?.toInt() ?: 5).coerceIn(0, 12)
         val safe = JSEscape.string(root)
         val js =
-            "(function(){function walk(el,d){if(d>$maxDepth)return null;" +
-                "var role=el.getAttribute('role')||el.tagName.toLowerCase();" +
-                "var name=el.getAttribute('aria-label')||" +
-                "el.textContent?.trim().substring(0,50)||'';" +
-                "var node={role:role,name:name};" +
+            "(function(){" + observationPrivacyScript() + "var visited=0;function walk(el,d){if(d>$maxDepth||visited>=2000)return null;visited++;" +
+                "var role=kelpieSafeRole(el);var name=kelpieSafeName(el).substring(0,50);" +
+                "var node={role:role,name:name,sensitivity:kelpiePrivateElement(el)?'private':'public'};" +
                 "if(el.getAttribute('aria-checked'))" +
                 "node.checked=el.getAttribute('aria-checked')==='true';" +
                 "if(el.disabled)node.disabled=true;" +
                 "if(document.activeElement===el)node.focused=true;" +
-                "var ch=[];for(var c of el.children)" +
+                "var ch=[];if(!kelpiePrivateElement(el))for(var c of el.children)" +
                 "{var cn=walk(c,d+1);if(cn)ch.push(cn);}" +
                 "if(ch.length)node.children=ch;return node;}" +
                 "var r=document.querySelector('$safe');" +
                 "if(!r)return{tree:{role:'none'},nodeCount:0};" +
-                "return{tree:walk(r,0),nodeCount:r.querySelectorAll('*').length};})()"
+                "return{tree:walk(r,0),nodeCount:r.querySelectorAll('*').length,truncated:visited>=2000,coverage:'INCOMPLETE'};})()"
         return try {
             successResponse(PageTextSnapshot.readObject(ctx, body, js))
         } catch (error: com.kelpie.browser.ai.openai.OpenAIException) {
-            errorResponse(error.code, error.message)
+            errorResponse(error.code, "Could not read the requested document")
+        } catch (error: CancellationException) {
+            throw error
         } catch (e: Exception) {
-            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
+            errorResponse("EVAL_ERROR", "Could not read the requested document")
         }
     }
 
     private suspend fun getVisibleElements(body: Map<String, Any?>): Map<String, Any?> {
         val interactableOnly = body["interactableOnly"] as? Boolean ?: false
         val js =
-            "(function(){" + elementSelectorBuilderScript() + "var els=document.querySelectorAll('*');var visible=[];" +
-                "for(var el of els){var r=el.getBoundingClientRect();" +
+            "(function(){" + elementSelectorBuilderScript() + observationPrivacyScript() + "var els=document.querySelectorAll('*');var visible=[];" +
+                "for(var el of els){if(kelpieHiddenElement(el))continue;var r=el.getBoundingClientRect();" +
                 "if(r.width>0&&r.height>0&&r.top<window.innerHeight&&" +
                 "r.bottom>0&&r.left<window.innerWidth&&r.right>0){" +
                 "var tag=el.tagName.toLowerCase();" +
                 "if($interactableOnly&&" +
                 "!['a','button','input','select','textarea'].includes(tag)&&" +
                 "!el.onclick&&el.getAttribute('role')!=='button')continue;" +
-                "var selector=kelpieBuildSelector(el);if(!selector||selector.length>2000)continue;visible.push({selector:selector,tag:tag," +
-                "text:(el.textContent||'').trim().substring(0,100)," +
+                "var selector=kelpieSafeSelector(el);if(!selector||selector.length>2000)continue;visible.push({selector:selector,tag:tag," +
+                "text:kelpieSafeNodeText(el).substring(0,100)," +
                 "rect:{x:r.x,y:r.y,width:r.width,height:r.height}," +
-                "role:el.getAttribute('role')||undefined," +
+                "role:kelpieSafeRole(el)," +
                 "interactable:['a','button','input','select','textarea']" +
                 ".includes(tag)});if(visible.length>=200)break;}}" +
                 "return{viewport:{width:window.innerWidth," +
                 "height:window.innerHeight,scrollX:window.scrollX," +
-                "scrollY:window.scrollY},elements:visible,count:visible.length};})()"
+                "scrollY:window.scrollY},elements:visible,count:visible.length,truncated:visible.length>=200,coverage:'INCOMPLETE'};})()"
         return try {
             successResponse(ctx.evaluateJSReturningJSON(js))
+        } catch (error: CancellationException) {
+            throw error
         } catch (e: Exception) {
-            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
+            errorResponse("EVAL_ERROR", "Could not read the requested document")
         }
     }
 
@@ -90,34 +91,44 @@ class LLMHandler(
         try {
             successResponse(PageTextSnapshot.read(ctx, body))
         } catch (error: com.kelpie.browser.ai.openai.OpenAIException) {
-            errorResponse(error.code, error.message)
+            errorResponse(error.code, "Could not read the requested document")
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
-            errorResponse("EVAL_ERROR", error.message ?: "Could not read page context")
+            errorResponse("EVAL_ERROR", "Could not read page context")
         }
 
     private suspend fun getFormState(): Map<String, Any?> {
         val js =
-            "(function(){" + elementSelectorBuilderScript() + "var forms=document.querySelectorAll('form');" +
-                "if(!forms.length)return{forms:[],formCount:0};" +
-                "return{forms:Array.from(forms).map(function(f){" +
-                "var fields=Array.from(f.querySelectorAll('input,select,textarea'))" +
-                ".map(function(el){return{name:el.name||'',type:el.type||'text'," +
-                "selector:kelpieBuildSelector(el)," +
-                "value:el.value||'',required:el.required," +
-                "valid:el.checkValidity(),disabled:el.disabled};});" +
-                "var btn=f.querySelector('button[type=submit],input[type=submit]');" +
-                "return{selector:kelpieBuildSelector(f)," +
-                "action:f.action||'',method:f.method||'get',fields:fields," +
-                "isValid:f.checkValidity()," +
-                "emptyRequired:fields.filter(function(fl){" +
-                "return fl.required&&!fl.value;}).map(function(fl){return fl.name;})," +
-                "submitButton:btn?{selector:kelpieBuildSelector(btn)," +
-                "text:btn.textContent?.trim()||btn.value||''," +
-                "disabled:btn.disabled}:null};}),formCount:forms.length};})()"
+            """
+            (function() {
+                ${elementSelectorBuilderScript()}
+                ${observationPrivacyScript()}
+                var forms = Array.from(document.querySelectorAll('form'));
+                return {forms: forms.slice(0,50).map(function(form) {
+                    var controls = Array.from(form.querySelectorAll('input,select,textarea'));
+                    var fields = controls.slice(0,200).map(function(el) {
+                        return {name:'redacted',type:kelpieSafeType(el),selector:kelpieSafeSelector(el),value:null,
+                            sensitivity:'private',required:!!el.required,valid:!!(el.validity && el.validity.valid),
+                            disabled:!!el.disabled,emptyRequired:!!el.required && !el.value};
+                    });
+                    var button = form.querySelector('button[type=submit],input[type=submit]');
+                    return {selector:kelpieSafeSelector(form),action:kelpieSafeURL(form.action),
+                        method:form.method === 'post' ? 'post' : 'get',fields:fields,
+                        isValid:controls.length > 200 ? null : fields.every(function(field) { return field.valid; }),
+                        truncated:controls.length > 200,fieldCount:controls.length,
+                        emptyRequired:fields.filter(function(field) { return field.emptyRequired; })
+                            .map(function(field) { return field.selector; }),
+                        submitButton:button?{selector:kelpieSafeSelector(button),text:kelpieSafeName(button),disabled:!!button.disabled}:null};
+                }),formCount:forms.length,truncated:forms.length>50,redacted:true};
+            })()
+            """.trimIndent()
         return try {
             successResponse(ctx.evaluateJSReturningJSON(js))
-        } catch (e: Exception) {
-            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            errorResponse("EVAL_ERROR", "Could not read form metadata")
         }
     }
 
@@ -157,9 +168,9 @@ class LLMHandler(
     ): Map<String, Any?> {
         val safe = JSEscape.string(text.lowercase())
         val js =
-            "(function(){" + elementSelectorBuilderScript() + "var all=document.querySelectorAll('*'),best=null,bt='';" +
+            "(function(){" + elementSelectorBuilderScript() + observationPrivacyScript() + "var all=document.querySelectorAll('*'),best=null,bt='';" +
                 "for(var el of all){if(!($filter))continue;" +
-                "var t=(el.textContent||'').trim();" +
+                "var t=kelpieSafeNodeText(el);" +
                 "if(!t.toLowerCase().includes('$safe'))continue;" +
                 "var r=el.getBoundingClientRect();" +
                 "if(r.width<=0||r.height<=0)continue;" +
@@ -167,12 +178,14 @@ class LLMHandler(
                 "if(!best)return{found:false};var b=best.getBoundingClientRect();" +
                 "return{found:true,element:{" +
                 "tag:best.tagName.toLowerCase(),text:bt.substring(0,100)," +
-                "selector:kelpieBuildSelector(best)," +
+                "selector:kelpieSafeSelector(best)," +
                 "rect:{x:b.x,y:b.y,width:b.width,height:b.height}}};})()"
         return try {
             ctx.evaluateJSReturningJSON(js)
+        } catch (error: CancellationException) {
+            throw error
         } catch (e: Exception) {
-            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
+            errorResponse("EVAL_ERROR", "Could not read the requested document")
         }
     }
 
@@ -180,100 +193,53 @@ class LLMHandler(
         val label = body["label"] as? String ?: ""
         val safe = JSEscape.string(label.lowercase())
         val js =
-            "(function(){" + elementSelectorBuilderScript() + "var inputs=document.querySelectorAll('input,select,textarea');" +
+            "(function(){" + elementSelectorBuilderScript() + observationPrivacyScript() + "var inputs=document.querySelectorAll('input,select,textarea');" +
                 "for(var el of inputs){" +
                 "var lbl=el.getAttribute('aria-label')||el.placeholder||el.name||'';" +
                 "if(lbl.toLowerCase().includes('$safe')){" +
                 "var r=el.getBoundingClientRect();" +
                 "return{found:true,element:{tag:el.tagName.toLowerCase()," +
-                "type:el.type||'text',name:el.name||''," +
-                "selector:kelpieBuildSelector(el)," +
+                "type:kelpieSafeType(el),name:'redacted',sensitivity:'private'," +
+                "selector:kelpieSafeSelector(el)," +
                 "rect:{x:r.x,y:r.y,width:r.width,height:r.height}}};}}return{found:false};})()"
         return try {
             ctx.evaluateJSReturningJSON(js)
+        } catch (error: CancellationException) {
+            throw error
         } catch (e: Exception) {
-            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
+            errorResponse("EVAL_ERROR", "Could not read the requested document")
         }
     }
 
     private suspend fun screenshotAnnotated(body: Map<String, Any?>): Map<String, Any?> {
         val format = body["format"] as? String ?: "png"
-        val quality = (body["quality"] as? Int) ?: 80
-        val fullPage = body["fullPage"] as? Boolean ?: false
+        val quality = (body["quality"] as? Number)?.toInt() ?: 80
         val resolution =
             ScreenshotResolution.parse(body["resolution"] ?: "viewport")
                 ?: return errorResponse("INVALID_PARAMS", "resolution must be 'native' or 'viewport'")
         return try {
-            val annotations = ctx.evaluateJSReturningArray(annotationElementsScript())
-            // Reuse the regular screenshot handler's scroll-and-stitch capture so the
-            // annotated full-page image spans the whole document, not just the viewport.
-            val payload =
-                if (fullPage) {
-                    ScreenshotHandler(ctx).captureFullPagePayload(format, quality, resolution)
-                } else {
-                    ctx.captureScreenshotPayload(format = format, quality = quality, resolution = resolution)
-                } ?: return errorResponse("SCREENSHOT_FAILED", "Failed to capture annotated screenshot")
-            val sessionId = UUID.randomUUID().toString().lowercase()
-            ctx.annotationSessionId = sessionId
-            ctx.annotationPageURL = ctx.webView?.url
-            ctx.annotationElementCount = annotations.size
-            successResponse(
-                payload +
-                    mapOf(
-                        "annotations" to annotations,
-                        "annotationSessionId" to sessionId,
-                        "validUntil" to "next_navigation",
-                        "hint" to "Annotations are valid until the page URL changes. Take a fresh screenshot-annotated if you navigate.",
-                    ),
-            )
-        } catch (e: Exception) {
-            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
+            val handler = ScreenshotHandler(ctx)
+            if (body["fullPage"] == true) handler.captureFullPagePayload(format, quality, resolution)
+            successResponse(handler.captureAnnotatedPayload(format, quality, resolution))
+        } catch (error: ScreenshotRefusal) {
+            errorResponse(error.code, error.message ?: "Capture refused")
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            errorResponse("NO_FRESH_FRAME", "No safely verified annotated frame was produced")
         }
     }
 
-    private suspend fun clickAnnotation(body: Map<String, Any?>): Map<String, Any?> {
-        val index = (body["index"] as? Int) ?: return errorResponse("MISSING_PARAM", "index is required")
-        annotationExpiredError()?.let { return it }
-        return try {
-            val result = ctx.evaluateJSReturningJSON(annotationActivationScript(index))
-            val diagnostics = result["diagnostics"] as? Map<String, Any?>
-            when (result["error"]) {
-                "not_found" -> errorResponse("ELEMENT_NOT_FOUND", "Annotation index $index not found", diagnostics)
-                "not_visible" -> errorResponse("ELEMENT_NOT_VISIBLE", "Annotated element $index is not visible or is obscured", diagnostics)
-                null -> successResponse(mapOf("element" to result))
-                else -> errorResponse("ELEMENT_NOT_FOUND", "Annotation index $index not found", diagnostics)
-            }
-        } catch (e: Exception) {
-            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
-        }
-    }
+    @Suppress("UNUSED_PARAMETER")
+    private suspend fun clickAnnotation(body: Map<String, Any?>): Map<String, Any?> = annotationRequired()
 
-    private suspend fun fillAnnotation(body: Map<String, Any?>): Map<String, Any?> {
-        val index = (body["index"] as? Int) ?: return errorResponse("MISSING_PARAM", "index is required")
-        val value = body["value"] as? String ?: return errorResponse("MISSING_PARAM", "value is required")
-        annotationExpiredError()?.let { return it }
-        return try {
-            val result = ctx.evaluateJSReturningJSON(fillAnnotationScript(index, value))
-            val diagnostics = result["diagnostics"] as? Map<String, Any?>
-            when (result["error"]) {
-                "not_found" -> errorResponse("ELEMENT_NOT_FOUND", "Annotation index $index not found", diagnostics)
-                "not_editable" -> errorResponse("INVALID_PARAMS", "Annotated element $index is not an editable form control", diagnostics)
-                null -> successResponse(mapOf("element" to result, "value" to value))
-                else -> errorResponse("ELEMENT_NOT_FOUND", "Annotation index $index not found", diagnostics)
-            }
-        } catch (e: Exception) {
-            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
-        }
-    }
+    @Suppress("UNUSED_PARAMETER")
+    private suspend fun fillAnnotation(body: Map<String, Any?>): Map<String, Any?> = annotationRequired()
 
-    private fun annotationExpiredError(): Map<String, Any?>? {
-        val annotationPageURL = ctx.annotationPageURL ?: return null
-        val currentPageURL = ctx.webView?.url
-        if (currentPageURL == annotationPageURL) return null
-        return errorResponse(
-            "ANNOTATION_EXPIRED",
-            "Annotations expired because the page URL changed. Take a fresh screenshot-annotated before interacting again.",
-            mapOf("annotationSessionId" to (ctx.annotationSessionId ?: "")),
+    private fun annotationRequired(): Map<String, Any?> =
+        errorResponse(
+            "STALE_OBSERVATION",
+            "Numbered legacy targets are display-only. A validated Observation/ElementRef is required.",
+            mapOf("reason" to "OBSERVATION_REQUIRED"),
         )
-    }
 }

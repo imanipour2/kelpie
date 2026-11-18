@@ -66,7 +66,13 @@ export function createKelpieBrowserBackend(binding: KelpieBrowserBinding): Brows
       const value = await evaluate(id, `(${rememberNativeSnapshot.toString()})((${collectBrowserSnapshot.toString()})(${JSON.stringify(options)}))`);
       const snapshot = z.object({
         url: z.string(), title: z.string(), text: z.string(), truncated: z.boolean(),
-        elements: z.array(z.object({ ref: z.string(), role: z.string(), name: z.string() })),
+        // Preserve the canonical reader's safe action policy in this test adapter,
+        // just as the production native gateway's explicit projection does.
+        elements: z.array(z.object({
+          ref: z.string(), role: z.string(), name: z.string(),
+          sensitivity: z.enum(["PUBLIC", "PRIVATE", "SENSITIVE"]).optional(),
+          allowedOperations: z.array(z.enum(["click", "type"])).optional(),
+        })),
       }).parse(value) satisfies BrowserSnapshot;
       refs.set(id, new Set(snapshot.elements.map((element) => element.ref)));
       return snapshot;

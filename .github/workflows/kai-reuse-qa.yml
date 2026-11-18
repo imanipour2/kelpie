@@ -1,0 +1,69 @@
+name: KAI reuse QA
+
+on:
+  pull_request:
+    paths:
+      - 'core/android/**'
+      - 'core/native/core-mcp/**'
+      - 'core/native/core-automation/**'
+      - 'packages/shared/**'
+      - 'tests/native/**'
+      - '.github/workflows/kai-reuse-qa.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    name: KAI privacy, reference and native gateway fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6.0.3
+      - uses: ./.github/actions/browser-contract
+      - run: pnpm install --frozen-lockfile
+      - name: Build packages
+        id: build
+        run: pnpm build
+      - name: Install fixture Chromium
+        id: browser_install
+        run: pnpm --filter @unlikeotherai/kelpie-shared exec playwright-core install --with-deps chromium
+      - name: Shared browser reference fixtures
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.browser_install.outcome == 'success' }}
+        run: pnpm --filter @unlikeotherai/kelpie-shared test:browser
+      - name: Existing Android ephemeral scripts in browser fixtures
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.browser_install.outcome == 'success' }}
+        run: node tests/native/android-observation-privacy.mjs
+      - name: Compile existing native gateway against its pinned JSON dependency
+        id: native
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          git clone --depth 1 --branch v3.11.3 --filter=blob:none --sparse https://github.com/nlohmann/json.git "$RUNNER_TEMP/kai-json"
+          git -C "$RUNNER_TEMP/kai-json" sparse-checkout set single_include
+          test "$(git -C "$RUNNER_TEMP/kai-json" rev-parse HEAD)" = 9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03
+          mkdir -p "$RUNNER_TEMP/kai-native"
+          node scripts/native/generate-browser-contract.mjs "$RUNNER_TEMP/kai-native/browser_contract.h"
+          for target in test_browser_gateway browser_snapshot_fixture; do
+            g++ -std=c++17 -O1 -UNDEBUG -Wall -Wextra \
+              -I"$RUNNER_TEMP/kai-json/single_include" -I"$RUNNER_TEMP/kai-native" \
+              -Icore/native/core-mcp/include -Icore/native/core-mcp/src \
+              -Icore/native/core-automation/include -Icore/native/core-protocol/include \
+              core/native/core-mcp/src/browser_gateway.cpp \
+              core/native/core-mcp/src/browser_gateway_c_api.cpp \
+              core/native/core-mcp/src/browser_schema.cpp \
+              core/native/core-mcp/src/browser_mcp.cpp \
+              core/native/core-mcp/src/mcp_c_api.cpp \
+              core/native/core-mcp/src/mcp_registry.cpp \
+              core/native/core-mcp/src/mcp_tool.cpp \
+              core/native/core-mcp/src/native_extension_schema.cpp \
+              core/native/core-protocol/src/platform.cpp \
+              "core/native/core-mcp/tests/$target.cpp" \
+              -o "$RUNNER_TEMP/kai-native/$target"
+          done
+          "$RUNNER_TEMP/kai-native/test_browser_gateway"
+      - name: Generated native reader in Chromium
+        if: ${{ !cancelled() && steps.native.outcome == 'success' && steps.browser_install.outcome == 'success' }}
+        run: node tests/native/browser-snapshot-selectors.mjs "$RUNNER_TEMP/kai-native/browser_snapshot_fixture"
+      - name: Full package regression suite
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: pnpm test

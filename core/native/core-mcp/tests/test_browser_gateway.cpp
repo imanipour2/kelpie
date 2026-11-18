@@ -201,4 +201,141 @@ void Notifications() {
   assert(gateway.BeginMcp({{"jsonrpc", "2.0"}, {"method", "notifications/unknown"}})["response"].is_null());
   assert(gateway.BeginMcp({{"jsonrpc", "2.0"}, {"method", "tools/call"}, {"params", {{"name", 123}}}})["response"].is_null());
 }
-int main() { ReadOnlySnapshotLifetime(); Notifications(); Contracts(); Sequencing(); References(); Mcp(); ExtensionReachability(); SelectedAndMapping(); CAbi(); std::cout << "Browser gateway contracts passed\n"; }
+json SnapshotFor(const json& step) {
+  const std::string expression = step["params"]["expression"];
+  const auto start = expression.find("\"prefix\":\"") + 10;
+  const std::string ref = expression.substr(start, expression.find('"', start) - start) + "1";
+  return {{"url", "https://fixture.test/"}, {"title", "Fixture"}, {"text", "button Save"},
+    {"elements", {{{"ref", ref}, {"role", "button"}, {"name", "Save"}}}}};
+}
+std::string Observe(kelpie::BrowserGateway& gateway, const std::string& tab = "a") {
+  const auto snapshot = SnapshotFor(gateway.Begin(Request("tab.snapshot", json::object(), tab)));
+  assert(gateway.Advance({{"success", true}, {"result", snapshot}})["response"]["ok"] == true);
+  return snapshot["elements"][0]["ref"];
+}
+void ObservationMetadata() {
+  kelpie::BrowserGateway gateway({{"nativeMethods", {"click", "type"}}, {"fixedReader", true}, {"requireAuthorization", false}});
+  auto snapshot = SnapshotFor(gateway.Begin(Request("tab.snapshot")));
+  auto& element = snapshot["elements"][0];
+  element["rect"] = {{"x", 12.5}, {"y", 20}, {"width", 80}, {"height", 40}, {"extra", "SYNTHETIC_SECRET"}};
+  element["visible"] = true; element["enabled"] = true;
+  element["value"] = "SYNTHETIC_SECRET"; element["sensitivity"] = "SENSITIVE";
+  element["name"] = "SYNTHETIC_SECRET"; element["allowedOperations"] = json::array();
+  snapshot["text"] = "button SYNTHETIC_SECRET";
+  snapshot["viewport"] = {{"width", 390}, {"height", 844}};
+  snapshot["devicePixelRatio"] = 3.0;
+  snapshot["visualViewport"] = nullptr; snapshot["scroll"] = {{"x", 0}, {"y", 120}};
+  snapshot["coverage"] = {{"status", "INCOMPLETE"}, {"observed", 1}, {"scanned", 501},
+    {"totalCandidates", nullptr}, {"truncated", true}, {"unobserved", nullptr}, {"limitations", {"ELEMENT_OR_TEXT_LIMIT"}}};
+  snapshot["privacyRects"] = {{{"x", 12.5}, {"y", 20}, {"width", 80}, {"height", 40}}};
+  snapshot["screenshotBlocked"] = true; snapshot["screenshotBlockReasons"] = {"PRIVATE_FORM_DATA"};
+  snapshot["observationId"] = "SYNTHETIC_SECRET"; snapshot["consentGeneration"] = "SYNTHETIC_SECRET";
+  const auto response = gateway.Advance({{"success", true}, {"result", snapshot}})["response"];
+  assert(response["ok"] == true);
+  const auto& value = response["value"];
+  assert(value["tabId"] == "a" && value["ttlMs"] <= 15000 && value["ttlMs"] > 0);
+  assert(value["observationId"].is_string() && value["observationId"] != snapshot["observationId"]);
+  assert(value["elements"][0]["rect"]["x"] == 12.5 && value["elements"][0]["value"].is_null());
+  assert(value["elements"][0]["name"] == "redacted" && value["coverage"] == snapshot["coverage"]);
+  assert(value["devicePixelRatio"] == 3.0);
+  assert(value["screenshotBlocked"] == true && value["privacyRects"] == snapshot["privacyRects"]);
+  assert(response.dump().find("SYNTHETIC_SECRET") == std::string::npos);
+  snapshot = SnapshotFor(gateway.Begin(Request("tab.snapshot")));
+  snapshot["elements"][0]["sensitivity"] = "PRIVATE";
+  snapshot["elements"][0]["name"] = "جستجو"; snapshot["elements"][0]["value"] = "SYNTHETIC_SECRET";
+  const auto private_label = gateway.Advance({{"success", true}, {"result", snapshot}})["response"];
+  assert(private_label["value"]["elements"][0]["name"] == "جستجو");
+  assert(private_label.dump().find("SYNTHETIC_SECRET") == std::string::npos);
+  // Malformed geometry must not reach bitmap correlation or leave usable refs.
+  snapshot = SnapshotFor(gateway.Begin(Request("tab.snapshot")));
+  snapshot["elements"][0]["rect"] = {{"x", 0}, {"y", 0}, {"width", -1}, {"height", 4}};
+  const std::string ref = snapshot["elements"][0]["ref"];
+  assert(gateway.Advance({{"success", true}, {"result", snapshot}})["response"]["ok"] == false);
+  assert(gateway.Begin(Request("tab.click", {{"ref", ref}}))["response"]["error"]["code"] == "STALE_REFERENCE");
+}
+void NativeReferenceLifetime() {
+  auto now = std::chrono::steady_clock::time_point{};
+  const json config = {{"nativeMethods", {"click", "type", "switch-tab"}}, {"fixedReader", true}, {"requireAuthorization", false}};
+  kelpie::BrowserGateway gateway(config, [&now] { return now; });
+  auto ref = Observe(gateway);
+  now += std::chrono::milliseconds(15000);
+  auto step = gateway.Begin(Request("tab.click", {{"ref", ref}}));
+  assert(step["kind"] == "complete" && step["response"]["error"]["code"] == "STALE_OBSERVATION");
+  assert(step["response"]["error"]["mayHaveCompleted"] == false);
+  ref = Observe(gateway);
+  gateway.Cancel(); // An idle native cancellation also retires observations.
+  assert(gateway.Begin(Request("tab.click", {{"ref", ref}}))["response"]["error"]["code"] == "STALE_REFERENCE");
+  const auto pending = SnapshotFor(gateway.Begin(Request("tab.snapshot")));
+  gateway.InvalidateReferences("a");
+  step = gateway.Advance({{"success", true}, {"result", pending}});
+  assert(step["response"]["error"]["code"] == "OBSERVATION_RACE");
+  assert(gateway.Begin(Request("tab.click", {{"ref", pending["elements"][0]["ref"]}}))["response"]["error"]["code"] == "STALE_REFERENCE");
+  ref = Observe(gateway);
+  assert(gateway.Begin(Request("tab.click", {{"ref", ref}}))["kind"] == "dispatch");
+  now += std::chrono::seconds(15);
+  step = gateway.Advance({{"success", true}, {"result", {{"ok", true}}}});
+  assert(step["response"]["error"]["code"] == "STALE_OBSERVATION" && step["response"]["error"]["mayHaveCompleted"] == true);
+  ref = Observe(gateway);
+  assert(gateway.Begin(Request("tab.click", {{"ref", ref}}))["kind"] == "dispatch");
+  gateway.InvalidateReferences("a");
+  step = gateway.Advance({{"success", true}, {"result", {{"ok", true}}}});
+  assert(step["response"]["error"]["code"] == "STALE_OBSERVATION" && step["response"]["error"]["mayHaveCompleted"] == true);
+  ref = Observe(gateway);
+  step = gateway.Begin(Request("tabs.select", json::object(), "b"));
+  assert(step["method"] == "switch-tab"); gateway.Advance({{"success", true}});
+  assert(gateway.Begin(Request("tab.click", {{"ref", ref}}))["response"]["error"]["code"] == "STALE_REFERENCE");
+  // Native lifetime starts before the async reader and cannot be extended by it.
+  const auto slow = SnapshotFor(gateway.Begin(Request("tab.snapshot")));
+  now += std::chrono::seconds(15);
+  assert(gateway.Advance({{"success", true}, {"result", slow}})["response"]["error"]["code"] == "STALE_OBSERVATION");
+  const auto oldest = Observe(gateway, "first");
+  for (int i = 0; i < 16; ++i) { now += std::chrono::milliseconds(1); Observe(gateway, "other" + std::to_string(i)); }
+  assert(gateway.Begin(Request("tab.click", {{"ref", oldest}}, "first"))["response"]["error"]["code"] == "STALE_REFERENCE");
+}
+void RefusalAndAtomicPublication() {
+  const json config = {{"nativeMethods", {"click", "type", "screenshot"}}, {"fixedReader", true}, {"requireAuthorization", false}};
+  kelpie::BrowserGateway gateway(config);
+  for (const auto code : {"STALE_ELEMENT", "STALE_OBSERVATION", "AMBIGUOUS_TARGET", "OCCLUDED", "NEEDS_HUMAN"}) {
+    const auto ref = Observe(gateway);
+    gateway.Begin(Request("tab.click", {{"ref", ref}}));
+    const auto step = gateway.Advance({{"success", true}, {"result", {{"error", code}, {"mayHaveCompleted", false}, {"secret", "SYNTHETIC_SECRET"}}}});
+    assert(step["response"]["error"]["code"] == code && step["response"]["error"]["mayHaveCompleted"] == false);
+    assert(step.dump().find("SYNTHETIC_SECRET") == std::string::npos);
+  }
+  auto snapshot = SnapshotFor(gateway.Begin(Request("tab.snapshot")));
+  const auto duplicate = snapshot["elements"][0]; snapshot["elements"].push_back(duplicate);
+  assert(gateway.Advance({{"success", true}, {"result", snapshot}})["response"]["ok"] == false);
+  assert(gateway.Begin(Request("tab.click", {{"ref", duplicate["ref"]}}))["response"]["error"]["code"] == "STALE_REFERENCE");
+  for (const auto code : {"NEEDS_HUMAN", "NO_FRESH_FRAME", "OBSERVATION_RACE", "KAI_FEATURE_DISABLED", "INVALID_CAPTURE_GEOMETRY"}) {
+    gateway.Begin(Request("tab.screenshot"));
+    const auto step = gateway.Advance({{"success", false}, {"error", {{"code", code}, {"message", "SYNTHETIC_SECRET"}}}});
+    assert(step["response"]["error"]["code"] == code && step["response"]["error"]["mayHaveCompleted"] == false);
+    assert(step.dump().find("SYNTHETIC_SECRET") == std::string::npos);
+  }
+}
+void NativeAuthorizationRecheck() {
+  auto now = std::chrono::steady_clock::time_point{};
+  const json config = {{"nativeMethods", {"click", "type", "get-tabs", "switch-tab"}}, {"fixedReader", true}};
+  kelpie::BrowserGateway gateway(config, [&now] { return now; });
+  gateway.Begin(Request("tab.snapshot"));
+  auto snapshot = SnapshotFor(gateway.Advance({{"success", true}}));
+  gateway.Advance({{"success", true}, {"result", snapshot}});
+  const auto ref = snapshot["elements"][0]["ref"];
+  assert(gateway.Begin(Request("tab.click", {{"ref", ref}}))["kind"] == "authorize");
+  now += std::chrono::seconds(15);
+  assert(gateway.Advance({{"success", true}})["response"]["error"]["code"] == "STALE_OBSERVATION");
+  gateway.Begin(Request("tab.snapshot")); snapshot = SnapshotFor(gateway.Advance({{"success", true}}));
+  gateway.Advance({{"success", true}, {"result", snapshot}});
+  gateway.Begin(Request("tab.snapshot")); gateway.Advance({{"success", false}});
+  assert(gateway.Begin(Request("tab.click", {{"ref", snapshot["elements"][0]["ref"]}}))["response"]["error"]["code"] == "STALE_REFERENCE");
+  auto selected_config = config; selected_config["targeting"] = "selected"; selected_config["requireAuthorization"] = false;
+  kelpie::BrowserGateway selected(selected_config);
+  selected.Begin(Request("tab.snapshot"));
+  snapshot = SnapshotFor(selected.Advance({{"success", true}, {"activeTab", "a"}}));
+  selected.Advance({{"success", true}, {"result", snapshot}});
+  selected.Begin(Request("tab.click", {{"ref", snapshot["elements"][0]["ref"]}}));
+  const auto step = selected.Advance({{"success", true}, {"activeTab", "b"}});
+  assert(step["kind"] == "complete" && step["response"]["error"]["code"] == "STALE_OBSERVATION");
+  assert(step["response"]["error"]["mayHaveCompleted"] == false);
+}
+int main() { ObservationMetadata(); NativeReferenceLifetime(); RefusalAndAtomicPublication(); NativeAuthorizationRecheck(); ReadOnlySnapshotLifetime(); Notifications(); Contracts(); Sequencing(); References(); Mcp(); ExtensionReachability(); SelectedAndMapping(); CAbi(); std::cout << "Browser gateway contracts passed\n"; }
