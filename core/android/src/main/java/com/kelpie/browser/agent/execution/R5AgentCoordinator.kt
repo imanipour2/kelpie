@@ -215,7 +215,6 @@ class R5AgentCoordinator(
         }
     }
 
-
     fun registerPrivateMcp(router: Router) {
         R5PrivateMcpBridge(::isReady).register(router)
     }
