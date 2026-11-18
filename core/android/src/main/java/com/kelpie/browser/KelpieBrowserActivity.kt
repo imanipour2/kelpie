@@ -6,16 +6,25 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import com.kelpie.browser.agent.session.AgentSessionNotification
+import com.kelpie.browser.agent.session.R5BackgroundOptInStore
 import com.kelpie.browser.agent.session.AndroidAgentProcessSession
 import com.kelpie.browser.agent.session.R5ObservedAgentClients
 import com.kelpie.browser.agent.session.R5StartupGateState
+import com.kelpie.browser.agent.session.shouldPromptForR5BackgroundOptIn
 import com.kelpie.browser.network.KelpieNetworkService
 import com.kelpie.browser.network.NetworkServiceState
 
 /** Optional standalone-window host; other apps may embed KelpieBrowserSession.view(). */
 open class KelpieBrowserActivity : ComponentActivity() {
     private lateinit var browser: KelpieBrowserSession
-    private val startupGate by lazy { R5StartupGateState(requireR5FirstEntryConsent()) }
+    private val startupGate by lazy {
+        R5StartupGateState(
+            shouldPromptForR5BackgroundOptIn(
+                backgroundFeatureRequiresOptIn = requireR5FirstEntryConsent(),
+                previouslyApproved = R5BackgroundOptInStore.isApproved(this),
+            ),
+        )
+    }
 
     protected open fun enablePrivateCaptureQa(): Boolean = false
 
@@ -48,8 +57,13 @@ open class KelpieBrowserActivity : ComponentActivity() {
                     "agent control. Pair a verified client and explicitly approve its session; " +
                     "STOP is always available. Sensitive actions need separate approval.",
             ).setPositiveButton("Allow & continue") { _, _ ->
-                startupGate.allow()
-                launchBrowserIfAllowed()
+                if (R5BackgroundOptInStore.rememberApproval(this)) {
+                    startupGate.allow()
+                    launchBrowserIfAllowed()
+                } else {
+                    Toast.makeText(this, "Could not save startup choice. Please retry.", Toast.LENGTH_LONG).show()
+                    showR5FirstEntryConsent()
+                }
             }.setNegativeButton("No — bye bye") { _, _ ->
                 startupGate.decline()
                 exitWithoutStarting()
