@@ -11,7 +11,7 @@ class TunnelReadinessSnapshotTest {
         val state = TunnelReadinessSnapshot(healthStatus = null, readyStatus = null)
         assertFalse(state.healthOk)
         assertFalse(state.readyOk)
-        assertEquals("Not reachable", tunnelReadyLabel(state.healthOk, state.readyOk))
+        assertEquals("Diagnostics unavailable", tunnelReadyLabel(state.healthStatus, state.readyStatus))
     }
 
     @Test
@@ -19,14 +19,19 @@ class TunnelReadinessSnapshotTest {
         val state = TunnelReadinessSnapshot(healthStatus = 200, readyStatus = 503)
         assertTrue(state.healthOk)
         assertFalse(state.readyOk)
-        assertEquals("Running; not ready", tunnelReadyLabel(state.healthOk, state.readyOk))
+        assertEquals("Running; not ready (HTTP 503)", tunnelReadyLabel(state.healthStatus, state.readyStatus))
     }
 
     @Test
     fun bothChecksOnlyProveLocalReadiness() {
         val state = TunnelReadinessSnapshot(healthStatus = 200, readyStatus = 200)
         assertTrue(state.readyOk)
-        assertEquals("Ready locally", tunnelReadyLabel(state.healthOk, state.readyOk))
+        assertEquals("Ready locally", tunnelReadyLabel(state.healthStatus, state.readyStatus))
+    }
+
+    @Test
+    fun healthSuccessAndMissingReadyIsNotReportedAsReady() {
+        assertEquals("Running; readiness unknown", tunnelReadyLabel(200, null))
     }
 
     @Test
@@ -45,6 +50,6 @@ class TunnelReadinessSnapshotTest {
     fun healthFailureOverridesReadinessStatus() {
         val state = TunnelReadinessSnapshot(healthStatus = 500, readyStatus = 200)
         assertFalse(state.readyOk)
-        assertEquals("Not reachable", tunnelReadyLabel(state.healthOk, state.readyOk))
+        assertEquals("Diagnostics unhealthy (HTTP 500)", tunnelReadyLabel(state.healthStatus, state.readyStatus))
     }
 }
