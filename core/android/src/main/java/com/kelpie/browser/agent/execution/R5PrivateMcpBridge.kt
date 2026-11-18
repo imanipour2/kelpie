@@ -88,7 +88,8 @@ internal class R5PrivateMcpBridge(
                                 "method" to
                                     mapOf(
                                         "type" to "string",
-                                        "enum" to ((
+                                        "enum" to
+                                            (
                                             listOf(
                                                 "capabilities",
                                                 "documentation",
@@ -99,7 +100,7 @@ internal class R5PrivateMcpBridge(
                                                 "tab.snapshot",
                                                 "tab.screenshot",
                                             ) + R5PrivateMcpActions.methods
-                                        )),
+                                            ),
                                     ),
                                 "tabId" to mapOf("type" to "string"),
                                 "params" to mapOf("type" to "object"),
