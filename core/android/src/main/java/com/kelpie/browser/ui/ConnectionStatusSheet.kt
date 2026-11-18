@@ -27,7 +27,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kelpie.browser.agent.session.AndroidAgentProcessSession
-import com.kelpie.browser.agent.session.SessionConsentCore
 import com.kelpie.browser.device.DeviceInfo
 import com.kelpie.browser.network.McpActivityEvidence
 import com.kelpie.browser.network.NetworkServiceState
