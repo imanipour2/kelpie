@@ -327,3 +327,220 @@ Acceptance Pack: source SHA، build version و SHA256 APK، signing certificate�
 27 — Android security: https://developer.android.com/privacy-and-security/security-best-practices
 
 28 — Model Context Protocol: https://modelcontextprotocol.io/specification/2025-11-25
+
+## الحاقیه تخصصی A | مشخصات اجرایی Annotated Observation و Set-of-Mark برای Kelpie
+
+شناسه پیشنهادی: KAI-AO-001 / زیرمجموعه EF-OPS-KELPIE-KAI-001
+نسخه سند: 0.1 (پیشنهاد فنی قابل بازبینی) | تاریخ: 2026-11-19
+مالک تصمیم: کارفرما و CDG | وضعیت: PROPOSED / DOCUMENTED / NO_CODE_CHANGE / NO_DEVICE_QA / NO_RELEASE
+جایگاه اصلی: همین Google Doc، الحاقیه سند KAI-001؛ آینه بررسی فنی در PR #68 مخزن imanipour2/kelpie.
+هدف ثبت: حفظ روش پیشنهادی و معیارهای پیاده‌سازی برای توسعه‌دهنده یا عامل هوش مصنوعی بعدی؛ این الحاقیه تصویب معماری، مجوز ادغام، نصب APK یا انتشار محصول نیست.
+[KAI-ANNEX-A-20261119-BEGIN]
+
+### A1. مسئله، تعریف موفقیت و دامنه
+
+عامل هنگام کار با مرورگر نیاز دارد بداند هر دکمه، فیلد، تب، منو و کارت واقعی در تصویری که مشاهده می‌کند کجاست و چگونه با روش دقیق و قابل حسابرسی روی آن عمل کند. ارسال عکس خام و حدس مختصات احتمال خطا، کلیک اشتباه پس از اسکرول، ابهام آیکون‌های مشابه، و اجرای ناقص مأموریت را افزایش می‌دهد. راهکار، بسته مشاهده ترکیبی است: تصویر واقعی تازه + نقشه ساختاری عناصر + نشان عددی قابل تطبیق + قرارداد اقدام + شاهد نتیجه.
+تعریف موفقیت MVP: عامل بتواند از روی تصویر شماره‌دار یا فهرست معنایی، عنصر E03 را در همان snapshot انتخاب کند؛ Kelpie بدون اتکا به کلیک کور، مجوز و تازگی را کنترل کند، روی همان WebView اجرا کند، سپس نتیجه واقعی را در مشاهده بعدی گزارش دهد. همان رابط باید برای عامل‌های گوناگون با قرارداد MCP یکسان قابل استفاده باشد.
+دامنه: تب‌ها و محتوای متعلق به WebView خود Kelpie، با رضایت معتبر مالک، در پیش‌زمینه و در پس‌زمینه‌ای که R5 واقعاً تصویر تازه تحویل می‌دهد. خارج از دامنه: کنترل کل اندروید یا سایر اپ‌ها، ADB عمومی در محصول، عبور از قفل، تولید مجوز از محتوای صفحه، خرید یا پرداخت بدون تأیید، و ادعای تعامل پیوسته در حالت Suspend یا Lock.
+
+### A2. شواهد و چرایی انتخاب روش ترکیبی
+
+- Set-of-Mark و Microsoft OmniParser: نمایش شماره/کادر روی تصویر امکان اشاره دقیق به اجزا را فراهم می‌کند، به‌ویژه در UI بدون DOM. این پروژه‌ها برای الهام در فهم تصویرند، نه وابستگی الزامی یا اثبات کارایی روی S24.
+- WebVoyager: استخراج مکان عناصر تعاملی از DOM و نمایش شماره روی صفحه؛ مزیت ارجاع واضح، ریسک تداخل overlay تزریق‌شده با سایت.
+- Browser Use: نگاشت عنصرهای DOM به شناسه و ترسیم کادر/شماره روی کپی Screenshot؛ الگوی مطلوب برای پرهیز از تزریق دائمی به DOM.
+- agent-browser: نمایش شماره در اسکرین‌شات همراه شناسه عمل‌پذیر (@eN)؛ قرارداد واحد بین «دیدن» و «کلیک کردن».
+- BrowserGym: ترکیب تصویر، DOM، درخت دسترس‌پذیری، bounding box، شناسه و وضعیت visibility برای مشاهده قابل ارزیابی.
+- Playwright MCP: اولویت role/label/ref و Snapshot ساختاری؛ ابزار تصویر/مختصات فقط وقتی لازم است.
+- KAI-001 و پژوهش P5 قبلی: Observe → Admit → Act → Verify، coverage، منع stale reference و تفکیک مالکیت واقعی R5 از قابلیت تشخیص UI.
+تصمیم پیشنهادی: DOM/Accessibility-first + Screenshot Annotation اختیاری + Visual Grounding فقط fallback. هیچ مدل سنگین روی گوشی، OCR سراسری، سرویس ابری یا تزریق content-script ماندگار جزء MVP نباشد. پیش از اقتباس واقعی از کد خارجی، مجوز، Commit، API، بسته و مخاطرات امنیتی بازبینی شوند.
+
+### A3. معماری و مالکیت اجزا
+
+مسیر داده:
+Authenticated Agent → MCP/Native Auth & Consent → Browser Observation Coordinator → {WebView DOM/AX extractor + R5 fresh-frame provider} → Observation Consistency Check → ElementRef Registry → Annotation Composer → Versioned Observation Bundle → Agent.
+مسیر عمل:
+Agent(ref, observationId, operation) → Native OperationAdmission → Revalidate tab/document/principal/element/action → Native WebView Action → Observe postcondition → ActionReceipt.
+- Browser/Session Core مالک WebView، تب، ناوبری، render lifecycle و ثبت عملیات است. Host/MCP فقط قرارداد و مسیریابی دارد.
+- DOM Extractor با اجرای موقت و محدود JavaScript روی thread صحیح WebView، عناصر قابل تعامل و rect را به ساختار نوع‌دار تبدیل می‌کند؛ هیچ listener دائمی یا دستکاری DOM با برچسب‌ها در حالت عادی ایجاد نشود.
+- Frame Provider از موتور موجود R5 (VirtualDisplay/Presentation/ImageReader برای پس‌زمینه مجاز) استفاده می‌کند. Image Composer صرفاً نسخه کپی Bitmap را ترسیم می‌کند؛ تصویر اصلی بدون علامت برای مقایسه/دیباگ محدود قابل حفظ در حافظه باشد.
+- ElementRef Registry فقط در حافظه، scoped به tab + document epoch + observationId + current principal است؛ ref به‌خودی‌خود مجوز امنیتی نیست.
+- Task Coordinator در عامل/adapter می‌تواند درخواست مشاهده، تعیین اقدام و صحت‌سنجی کار را مدیریت کند؛ هیچ «مغز تصمیم دوم» با اختیار موازی در مرورگر افزوده نشود.
+- لایه native قرارداد مشترک Android/iOS داشته باشد؛ پیاده‌سازی بومی Android (Kotlin) و iOS (Swift) یا استثنای رسمی parity مطابق AGENTS.md پیش از merge.
+
+### A4. الگوریتم دقیق تولید Observation
+
+مرحله 1: preflight اتصال و permission. بررسی principal تأییدشده، رضایت مالک، session generation، STOP، device lock، tab فعال و WebView شناخته‌شده. سالم بودن تونل یا درخواست محلی به‌تنهایی مجوز تصویر/کلیک نیست.
+مرحله 2: snapshot کوتاه DOM/AX همان سند. جمع‌آوری role، accessible name، tag، semantic type، href بدون token، enabled/selected/checked، rect viewport، scroll-container ref، z-index/occlusion فقط در حد لازم. ورودی‌های حساس و text areaهای محرمانه از خروجی حذف یا redact شوند.
+مرحله 3: انتخاب عناصر نامزد: button, link, input, textarea, select, summary, contenteditable، roleهای تعاملی، tabindex مناسب، عناصر دارای رفتار تعامل شناسایی‌شده، کنترل‌های سفارشی با شواهد. وجود cursor:pointer به‌تنهایی برای مجوز click کافی نیست.
+مرحله 4: فیلتر قابلیت مشاهده. computed display/visibility/opacity، ابعاد مثبت، clipping، viewport/visualViewport، پوشش توسط عنصر رویی (elementFromPoint)، disabled، پشتیبانی از Shadow DOM باز و iframe هم‌مبدأ. iframe متقاطع یا closed shadow = OPAQUE/UNVERIFIED، نه حدس.
+مرحله 5: canonicalization. ادغام مستطیل‌های تکراری یک کنترل، تعیین بهترین مرکز هدف یا click point امن، ثبت چند rect برای کنترل چندخطی، مرتب‌سازی پایدار بر اساس جایگاه بصری مناسب RTL و نقش؛ تقدم دکمه‌های اصلی/فیلتر/فرم بر تزئینات.
+مرحله 6: ثبت شناسه موقت E01..EN. Registry از selector پایدار احتمالی + fingerprint معنایی + node handle محدود به document epoch استفاده کند، نه فقط index عددی یا متن. هیچ شناسه‌ای میان تب، ناوبری یا نسل نشست منتقل نشود.
+مرحله 7: دریافت Frame تازه با frameNonce و timestamp. برابری تب، principal، renderer state و epoch را پیش و پس از دریافت تصویر بررسی کن. اگر DOM بین دو مشاهده تغییر اساسی کرد یا فریم واقعی نداریم، NO_FRESH_FRAME/OBSERVATION_RACE و retry محدود؛ snapshot متنی غیرهمزمان را تصویر منطبق جلوه نده.
+مرحله 8: از متادیتای تصویر، imageScaleX/Y، viewport width/height، visualViewport offset، zoom، scroll و web-content origin برای تبدیل rectCss به pixels استفاده کن. برچسب روی کپی تصویر با Android Canvas/Bitmap یا معادل iOS رسم شود؛ هیچ overlay دائمی در DOM لازم نیست.
+مرحله 9: بسته ObservationBundle شامل image (درخواست‌شده)، Elements، Coverage و محدودیت‌ها ارسال شود. هنگام خطای تصویر، تنها اگر قرارداد و درخواست مجاز می‌دانند Snapshot متنی با degraded=true و علت صریح تحویل داده شود.
+مرحله 10: پردازش داده‌های تصویر، عناصر و شناسه‌ها در حافظه کوتاه‌عمر باشد؛ TTL، صفرسازی/آزادسازی Bitmap و پاک‌سازی در stop, revoke, tab close, navigation و lock انجام شود.
+
+### A5. سیاست نمایش شماره‌ها و خوانایی
+
+- تصویر اصلی وب تغییر نکند؛ برچسب‌ها روی تصویر مشتق‌شده رسم شوند. اعداد کوتاه E01، E02 … و کادر کم‌ضخامت؛ اندازه برچسب در DPRهای مختلف خوانا بماند.
+- برچسب‌های عناصر پوشاننده یکدیگر جابه‌جا شوند و با خط ارتباطی کوتاه به کادر متصل باشند؛ پیکسل‌های محل اقدام و متن قیمت/ساعت تا حد امکان پوشانده نشوند.
+- عناصر دارای برچسب متنی شفاف می‌توانند در حالت compact فقط در Element Map آمده و روی تصویر کم‌تر نمایش داده شوند. در debug mode همه عناصر معتبر قابل ترسیم باشند.
+- سقف اولیه پیشنهادی 60 نشان در یک frame (قابل تنظیم و مبتنی بر آزمون، نه مصوبه عملکرد). اگر تعداد بیشتر شد، grouping/page chunk و overlay partial؛ وضعیت truncated و unmarkedCount صریح باشد.
+- برای محتوای RTL، شماره‌ها در گوشه کم‌مزاحمت قرار گیرند، ترتیب شناسه‌گذاری معنادار باشد، ولی معنای عنصر از role/label استخراج شود نه صرف شماره.
+- رنگ به‌تنهایی حامل معنا نباشد؛ label، کادر و وضعیت متنی همراه باشد. در zoom/font scale، رنگ‌های high contrast، dark mode، صفحه کوچک و صفحه‌کلید آزمایش شود.
+- صفحه دارای رمز/OTP/شماره کارت یا داده شناسایی حساس: redaction در تصویر قبل از ارسال خارجی، نه فقط حذف از JSON. در صورت ناتوانی redaction قابل‌اتکا، تصویر آن بخش ارسال نشود و handoff به کاربر صورت گیرد.
+
+### A6. قرارداد پیشنهادی ObservationBundle نسخه‌دار
+
+نمونه صرفاً طراحی است؛ ابزار نصب‌شده یا داده واقعی گوشی نیست:
+    {
+      "schemaVersion": "kai-observation/v1",
+      "observationId": "obs-example-021",
+      "tabId": "tab-example-1",
+      "documentEpoch": 12,
+      "sessionGeneration": 7,
+      "frameNonce": "fresh-example-021",
+      "capturedAt": "2026-11-19T00:00:00Z",
+      "viewport": {"cssWidth": 393, "cssHeight": 700,
+                   "scrollX": 0, "scrollY": 340,
+                   "visualOffsetX": 0, "visualOffsetY": 0},
+      "image": {"format": "png", "widthPx": 1080,
+                "heightPx": 1925, "imageScaleX": 2.75,
+                "imageScaleY": 2.75, "annotated": true},
+      "elements": [
+        {"ref": "E03", "role": "button",
+         "name": "مرتب‌سازی قیمت",
+         "rectCss": [110, 140, 160, 48],
+         "visible": true, "enabled": true,
+         "actionHints": ["click"], "risk": "low"}
+      ],
+      "coverage": {"visibleElementCount": 1,
+                   "truncated": false,
+                   "scrollContainers": "unknown"},
+      "warnings": []
+    }
+مقادیر عددی بالا ساختگی هستند؛ توافق بر واحدهای CSS/px و تبدیل rect با frame باید در fixture آزمایش شود. فیلد image باید در مسیر transport به‌صورت attachment/bytes از قرارداد native ارسال شود و نباید base64 در audit log نوشته شود. frameNonce شاهد تازگی است، جایگزین احراز هویت cryptographic یا رضایت مالک نیست.
+منبع نخست JSON باید واحد و نسخه‌دار باشد؛ تصویر annotated و نقشه عناصر دقیقاً observationId مشترک داشته باشند. اگر یک عنصر فقط از بینایی شناسایی شد، confidence، روش تشخیص، bbox و عبارت unverifiedSemantic ثبت و تا تأیید locator/هدف، عمل پرخطر ممنوع باشد.
+
+### A7. قرارداد ابزارها و سازگاری MCP
+
+ابتدا ابزارهای فعلی native Kelpie /mcp و /v1/ و قراردادهای مشترک را inspect کن؛ یک مجموعه API جدید موازی بدون توجیه نساز. نام ابزارهای زیر PROPOSED هستند:
+- kelpie_tab_observe: پارامترهای tabId، mode=semantic|annotated|image، maxElements، maxLabels، includeCoverage؛ نتیجه ObservationBundle + capabilities/unsupported.
+- kelpie_tab_act_on_ref: operation=click|focus|fill|select|scroll، observationId، ref، expectedEffect و متن/مقدار با کنترل حریم خصوصی؛ نتیجه ActionReceipt. برای تایپ محرمانه مسیر local user/handoff و no-store اجباری است.
+- kelpie_tab_observe_result: snapshot تازه پس از عمل، تغییر state، یا خطای UNCERTAIN.
+اگر ابزار موجود tab.screenshot و tab.click قابل گسترش ایمن و backward-compatible باشد، افزودن گزینه annotationMode و observationRef به همان مسیر بر ساخت endpoint موازی مقدم است. نسخه جدید باید capability negotiation داشته و agent قدیمی همچنان Screenshot ساده بگیرد. اسامی دقیق پس از قرارداد API review تثبیت می‌شوند.
+نمونه خواسته عامل:
+    observe(tabId="tab-example-1", mode="annotated")
+    act(operation="click", observationId="obs-example-021",
+        ref="E03", expectedEffect="sort-by-price-selected")
+    observe_result(commandId="cmd-example-9")
+هیچ selector/JS از محتوای صفحه به‌عنوان دستور trusted اجرا نشود. Localhost، Cloud، تونل یا Meta MCP نمی‌توانند consent native ایجاد کنند.
+
+### A8. Validation و ماشین حالت اقدام
+
+قبل از فرمان: بررسی session principal و consent generation یکسان، STOP=false، unlocked policy، tab/document/WebView ثابت، origin scope، action scope، observation TTL، عنصر یکتا و موجود، hit testing، وضعیت enabled و عدم تغییر مهم جایگاه. stale ref باید STALE_OBSERVATION یا STALE_ELEMENT بدهد و Agent را به مشاهده تازه هدایت کند.
+در اجرای فرمان: یک commandId/idempotencyKey اختصاصی، حداکثر یک عمل در هر لحظه برای تب، محدودیت retry، deadline و cancellation واقعی. تفاوت DISPATCHED، EXECUTED و EFFECT_VERIFIED الزامی است.
+پس از فرمان: snapshot جدید، assert متنی/semantic و در صورت لزوم فریم تازه. برای Sort/Filter باید وضعیت selected و حداقل یک شاهد مستقل از تغییر نتیجه بررسی شود. برای scroll، تغییر scrollTop به‌تنهایی اثبات رسیدن به پایان داده‌ها نیست. برای فرم، تنها تغییر مقدار ورودی اثبات ثبت درخواست نیست.
+وضعیت‌های استاندارد: VERIFIED، ACTION_DISPATCHED_UNVERIFIED، STALE_OBSERVATION، ELEMENT_NOT_FOUND، OCCLUDED، AMBIGUOUS_TARGET، NO_FRESH_FRAME، OBSERVATION_RACE، NEEDS_HUMAN، BLOCKED_POLICY، SESSION_REVOKED، DEVICE_LOCKED، TIMEOUT، UNCERTAIN.
+ActionReceipt نمونه:
+    {
+      "commandId": "cmd-example-9",
+      "observationId": "obs-example-021",
+      "ref": "E03", "operation": "click",
+      "documentEpochBefore": 12,
+      "actionStatus": "EXECUTED",
+      "effectStatus": "VERIFIED",
+      "postObservationId": "obs-example-022",
+      "resultReason": "sort-state-updated"
+    }
+گزارش واقعی هر مرحله باید به مشاهده و receipt معتبر اشاره کند، نه به استنباط صرف عامل. در خطای نامعین، اقدام برگشت‌ناپذیر خودکار تکرار نشود.
+
+### A9. Scroll، پوشش صفحه، و داده‌های پویا
+
+WebView ممکن است scroll اصلی، نواحی داخل Modal، لیست virtualized و بخش lazy-load داشته باشد. برای هر scrollContainer حداقل rect، scrollTop، clientHeight، scrollHeight، lastKnownItems، atEnd=true|false|unknown و محدودیت مشاهده ثبت شود.
+پیمایش کامل فقط زمانی قابل ادعاست که pagination/show-more، loader، تعداد کارت‌های جدید و پایان همه containerهای مربوط بررسی شده باشد. ثابت ماندن scrollY یا تعداد کارت‌ها به‌تنهایی کافی نیست.
+در صفحات پرواز یا فروش: ابتدا کنترل‌های Sort/Filter و اعمال واقعی آن‌ها، سپس پیمایش تمام نتایج تحت محدودیت budget، استخراج قیمت/زمان/موجودی با timestamp و provenance، بازبینی گزینه منتخب در مرحله غیرمالی بعدی. خروجی منفی فقط VERIFIED_EMPTY با پوشش قابل دفاع؛ در غیر این صورت INCOMPLETE/UNCERTAIN.
+هر Screenshot شماره‌گذاری‌شده برای همان viewport است؛ نمایش full-page یا stitched output نیازمند قرارداد/همترازی جداگانه است. مسیر private background فعلی fullPage را رد می‌کند و نباید پشتیبانی خیالی اعلام شود.
+
+### A10. امنیت، رضایت و حریم خصوصی
+
+- R5 consent و Ed25519 pairing، verified principal، owner-only approval، Native STOP و revocation مرجع اصلی‌اند؛ این الحاقیه مجوزها را گسترش نمی‌دهد.
+- دامنه دسترسی تب/مبدا/مدت و عمل تفکیک شود: READ_DOM، SCREENSHOT، SCROLL، CLICK، FILL، NAVIGATE؛ مشاهده یا pairing حق کلیک خودکار نمی‌دهد.
+- lock، power-off، STOP، revoked session یا عدم نمایش اعلان STOP گیت‌های موجود را دور نمی‌زنند؛ در این شرایط صف اعمال متوقف و ارجاعات قبلی باطل شوند.
+- رمز، OTP، CAPTCHA، پرداخت، انتشار، حذف و عمل حقوقی/مالی حساس با human handoff یا تأیید خاص باقی بمانند؛ هیچ screenshot یا کد صفحه نباید با prompt injection مجوز دهد.
+- داده DOM/عکس/URL دارای token/کوکی/هدر اعتبار/متن شخصی در GitHub، Drive، PR و journal دائمی ذخیره نشود؛ redaction در مبدأ و TTL محدود. fingerprintها نباید محتوای حساس را قابل بازسازی کنند.
+- هر اتصال راه‌دور باید در محدوده همان WebView خصوصی دارای اجازه عمل کند؛ نه MediaProjection کل دستگاه، نه ADB command عمومی و نه browser cross-app capture.
+
+### A11. Android/iOS و وضعیت پس‌زمینه
+
+Android: کد موجود R5 برای تصویر تازه در background از مالکیت واقعی WebView و VirtualDisplay/ImageReader استفاده می‌کند؛ هدف این الحاقیه اضافه کردن annotation بر خروجی مجاز است، نه نوشتن renderer دوم. ترجیحاً بدون بازکردن Activity، تغییر foreground و Popup ناخواسته عمل کند.
+عدم دریافت پیکسل یا بازگشت gray frame = NO_FRESH_FRAME، حتی اگر API HTTP پاسخ 200 داده باشد. same-tab/epoch/owner باید قبل و بعد capture کنترل شود.
+باید رفتار پس از HOME، rotate، resize، keyboard، immersive UI، network switch، renderer restart، process death، lock/unlock و revoke آزموده شود. پورت/بسته نصب‌شده را از دستگاه بازخوانی کن، نه از سند تاریخی.
+iOS: WKWebView و lifecycle پس‌زمینه محدودیت متفاوت دارند. قرارداد قابلیت مشترک باشد و Unsupported/RequiresForeground صادقانه اعلام گردد؛ parity بین Android/iOS یا استثنای رسمی مطابق AGENTS قبل از merge.
+
+### A12. کارایی و محدودیت منابع
+
+- حالت پیش‌فرض Agent: semantic-only برای فرمان‌های ساده؛ annotated screenshot تنها با درخواست، ابهام یا سیاست نظارت. از ارسال PNG در هر click بی‌نیاز خودداری کن.
+- سقف عناصر/برچسب‌ها، ابعاد تصویر، bytes، CPU/memory و عمر Bitmap قابل تنظیم و تست باشند. محدودیت‌های واقعی R5 موجود (مانند سقف bytes/pixels در adapter) پیش از توسعه خوانده شوند.
+- اجرای extraction/encoding روی thread مناسب، عدم انسداد UI و توقف graceful هنگام cancellation؛ حداکثر یک frame در حال ساخت برای هر tab/agent و backpressure.
+- گزارش latency و مصرف منابع فقط به‌شکل متاداده غیرحساس؛ هیچ آستانه عملکردی ثابت تا بنچمارک دستگاه مصوب نشود. الگوی پیشنهادی P50/P95 و peak memory در 25 چرخه.
+- عامل کم‌تجربه در صورت نبود تصویر باید دلیل خطا و گزینه اقدام مجدد مشخص داشته باشد، نه تصویری قدیمی یا ادعای بی‌دلیل موفقیت.
+
+### A13. نقشه ساخت و تقسیم کار پیشنهادی
+
+P0. قرارداد: بازخوانی آخرین main و شاخه‌های PR66/67/68، API و screenshot metadata؛ ثبت ADR/Threat Model، انتخاب extension سازگار با قرارداد فعلی؛ fixture بدون گوشی. خروجی: schema و دو نمونه مثبت/منفی.
+P1. Element Extractor: انتخاب/رتبه‌بندی عناصر، rect/visibility/occlusion، role/label، ref registry و stale protection؛ تست DOM+Shadow+iframe+RTL. بدون سرویس خارجی.
+P2. Annotation Composer: ماژول Kotlin برای Bitmap copy + canvas boxes + labels؛ collision handling، privacy masking و coordinate transforms؛ طلایی‌های screenshot و اختلاف پیکسلی/مکان.
+P3. MCP Bridge: مشاهده annotated و act-by-ref با compatibility/feature flag، admission native، receipt و verify؛ عدم ایجاد راه consent موازی. تست security negative.
+P4. Real Device QA: Samsung Galaxy S24 Ultra با build/signer مشخص، 25 چرخه HOME/background/scroll/tab/reboot/lock/rotation، regression برنامه قبلی و no-foreground-steal، Wi-Fi/LTE و STOP.
+P5. Parity & Review: معادل iOS یا استثنای مصوب، بررسی تکمیلی CI/مستندات، Owner Acceptance و Release Gate مستقل؛ هیچ push به شاخه توسعه، خودبه‌خود APK/website را تغییر نمی‌دهد.
+
+### A14. آزمون‌های پذیرش و حالت‌های شکست
+
+QA-01: صفحه فارسی با دست‌کم 12 کنترل؛ همه نشان‌ها با عنصر صحیح و rect معتبر منطبق؛ کلیک با E03 همان دکمه را فعال و با مشاهده تازه تأیید کند.
+QA-02: پس از scroll، reload، SPA route، tab switch یا document epoch change، کلیک با شناسه قدیمی رد شود و هیچ کلیک ناخواسته نداشته باشیم.
+QA-03: صفحه دارای سه دکمه با متن مشابه، دو icon-only و کنترل پوشیده؛ ambiguous/occluded رد یا clarification لازم باشد.
+QA-04: zoom، DPR، keyboard، RTL، orientation و viewport offset؛ موقعیت کادر و نقطه عمل روی هدف متناظر باشد، نه اشتباه مجاور.
+QA-05: modal با scroll مستقل، iframe هم‌مبدأ، iframe متقاطع و لیست virtualized؛ نواحی پشتیبانی‌نشده به‌صراحت UNKNOWN/OPAQUE باشند.
+QA-06: صفحه‌ای با 160+ عنصر و lazy loading؛ truncated شناخته شود، label policy بدون OOM رعایت شود و نتیجه منفی ناقص صادر نشود.
+QA-07: background حقیقی روی S24 پس از HOME با ChatGPT foreground: تصویر تازه و خوانا + شماره‌های معتبر؛ هیچ Kelpie Activity ناخواسته به جلو نیاید.
+QA-08: screenshot gray/stale یا permission revoked → NO_FRESH_FRAME/BLOCKED؛ هرگز تصویر قبلی را به‌عنوان تازه بازنفرستد.
+QA-09: STOP، lock، unpair و principal mismatch در میان capture/act → revoke و عدم اجرای فرمان.
+QA-10: OTP، password، card fields و محتوای شخصی → redaction قبل از خروج از دستگاه؛ بدون log دائمی؛ handoff به کاربر.
+QA-11: sort/filter نتیجه پرواز در فارسی/انگلیسی → اجرا و تأیید واقعی state+results، پیمایش و گزارش coverage؛ بدون اعلام منفی کاذب.
+QA-12: ابزار MCP قدیمی و قابلیت‌های جدید → feature negotiation و fallback بدون تغییر رفتار قبلی؛ API/CI و آزمون Android/iOS.
+شواهد QA: source SHA، build/version/signature/port واقعی، schema version، fixture+oracle، before/after observation IDs، redacted action receipt، snapshot شناسه‌ها، test log و rollback. تست کاغذی یا سبز شدن CI جای شاهد روی گوشی را نمی‌گیرد.
+
+### A15. معیار پذیرش محصول و اصول عدم اغراق
+
+قابلیت فقط وقتی «QA_ACCEPTED» است که تمام سناریوهای P0، مالکیت امنیتی، تازگی تصویر، عملکرد واقعی گوشی، سازگاری قرارداد و parity/exception با شواهد مستند گذرانده شده باشند. موفقیت ساخت، ذخیره کد، وجود UI یا پاسخ 200 به‌تنهایی معادل عملکرد درست نیست.
+سطوح گزارش مستقل: DESIGN_PROPOSED، SOURCE_COMMITTED، CI_PASS، DEVICE_QA_PASS، OWNER_ACCEPTED، MAIN_MERGED، APK_INSTALLED، REMOTE_E2E_VERIFIED، PUBLIC_RELEASE_APPROVED.
+در زمان نگارش این الحاقیه فقط DESIGN_PROPOSED/DOCUMENTED معتبر است. برای آزمون فعلی Kelpie، به وضعیت مستند PR #66، PR #68، Issue #98 و readback واقعی گوشی مراجعه شود؛ هیچ تغییر در Port/Termux/Tunnel/APK انجام نشده است.
+
+### A16. پرسش‌های تصمیم و روند حاکمیت
+
+نیازمند تصمیم مستقل مالک/CDG پیش از کدنویسی عملیاتی: (1) انتشار annotation برای هر agent یا فقط agent دارای consent مشخص؛ (2) مرز origin/tab و TTL؛ (3) سیاست تصویر صفحات حساب و Redaction؛ (4) اجازه fallback vision/coordinate؛ (5) سقف تعداد نشانه و بودجه مصرف؛ (6) الزامات Android/iOS parity؛ (7) رفتار در پس‌زمینه و محدودیت انتقال داده؛ (8) معیار Release.
+چرخه: Capture → Classify (proposal در KAI-001) → Owner approval در CDG → Drive canonical → GitHub branch/PR + ADR → CI/QA → Merge → readback/Live Log → conflict audit. نگارش این الحاقیه «Capture/Documentation» است و اجازه تصویب خودکار تصمیم را نمی‌دهد. تا ادغام/پذیرش، SYNC_BLOCKED_MAIN اعلام شود.
+
+### A17. منابع تحقیق و کد برای توسعه‌دهنده بعدی
+
+اصل KAI-001: https://docs.google.com/document/d/1AJ8Yfr9tDXg4VRy8aepkpuWdMQEWSAn5ObrImMg-zm0/edit
+پژوهش P5: https://docs.google.com/document/d/1oM-IQArjUKb0biVodw87F0KJGPh74XAwg01cADPgtDM/edit
+PR68: https://github.com/imanipour2/kelpie/pull/68
+PR66: https://github.com/imanipour2/kelpie/pull/66
+Main Kelpie policies: https://github.com/imanipour2/kelpie/blob/main/AGENTS.md
+Incident S24: https://github.com/imanipour2/enerfoam-website/issues/98
+CDG and EF-GOV-DOCOPS: https://docs.google.com/document/d/1oYRR-qawFourZeDEUE30QNUfF9S0bD_WXAP4uljGVJU/edit ; https://docs.google.com/document/d/1ZwBQdFdMwYu6jOAcIZ32oVIedzy4W5BGaZEz91XbEi4/edit
+WebVoyager: https://github.com/MinorJerry/WebVoyager/blob/main/utils.py
+Browser Use Highlights: https://github.com/browser-use/browser-use/blob/main/browser_use/browser/python_highlights.py
+agent-browser: https://github.com/vercel-labs/agent-browser
+BrowserGym: https://github.com/ServiceNow/BrowserGym
+OmniParser: https://github.com/microsoft/OmniParser
+SoM: https://github.com/microsoft/SoM
+Playwright MCP: https://github.com/microsoft/playwright-mcp
+Android WebView: https://developer.android.com/reference/android/webkit/WebView
+Android background work: https://developer.android.com/develop/background-work
+W3C WCAG 2.2: https://www.w3.org/TR/WCAG22/
+منابع بیرونی الگو هستند، نه کد تأییدشده یا ادعای اینکه در گوشی کاربر تست شده‌اند. قبل از استفاده فنی، نسخه و مجوزشان دوباره بررسی شود.
+
+[KAI-ANNEX-A-20261119-END]
