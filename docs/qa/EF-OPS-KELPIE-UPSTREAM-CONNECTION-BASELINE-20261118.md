@@ -50,7 +50,8 @@ The new profile deliberately sets all three private QA flags false:
 `PRIVATE_CAPTURE_QA_ENABLED`, `R5_NATIVE_CONSENT_QA_ENABLED`,
 `R5_BACKGROUND_AGENT_QA_ENABLED`. Therefore `KelpieBrowserSession` does not
 replace the standard MCP router with `R5PrivateMcpBridge` and does not
-activate the private R5 session coordinator/legacy route block. This is a
+activate the private R5 session coordinator/legacy route block. The standard Android
+manifest is used rather than R5-specific agent/foreground permission overlays. This is a
 **connection behavior baseline**, NOT a replacement R5-capability beta.
 Private background-tab and native-frame screenshot functionality is not
 claimed or tested for this separate app.
