@@ -11,6 +11,7 @@ import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.kelpie.browser.agent.execution.R5AgentCoordinator
+import com.kelpie.browser.agent.execution.R5PrivateMcpBridge
 import com.kelpie.browser.agent.session.AgentSessionCoordinator
 import com.kelpie.browser.ai.AIHandler
 import com.kelpie.browser.browser.BookmarkStore
@@ -306,7 +307,7 @@ class KelpieBrowserSession(
         // Isolated native-consent QA replaces only the private /mcp envelope.
         // Legacy browser methods remain blocked by Router.consentOnlyQa.
         if (!motherMcpR5RendererQaEnabled && r5AgentCoordinator != null) {
-            com.kelpie.browser.agent.execution.R5PrivateMcpBridge(r5AgentCoordinator::isReady).register(router)
+            R5PrivateMcpBridge(r5AgentCoordinator::isReady).register(router)
         }
     }
 
