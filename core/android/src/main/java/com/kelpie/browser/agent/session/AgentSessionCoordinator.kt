@@ -160,6 +160,41 @@ class AgentSessionCoordinator(
         return AndroidAgentProcessSession.request(principal) != null
     }
 
+    /**
+     * A single explicit physical owner tap covers request + approval for one
+     * fresh, uniquely bearer-verified agent. Do not expose this through HTTP,
+     * MCP, background callbacks or an Activity lifecycle event.
+     *
+     * Every callback, including the Android notification-permission callback,
+     * must recheck the EXACT principal the user saw before the tap. Never
+     * silently switch to a newly observed principal during an OS prompt.
+     */
+    fun beginOneTapFromNativeUi(expectedPrincipal: String): Boolean {
+        syncLock()
+        val observed = R5ObservedAgentClients.registry.soleRecentPrincipal()
+        if (!nativeOneTapConsentAllowed(
+                intendedPrincipal = expectedPrincipal,
+                freshUniquePrincipal = observed,
+                lifecycleResumed = activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED),
+                activityVisible = activity.window.decorView.isShown,
+                deviceUnlocked = !deviceLocked(),
+                stopNotificationEnabled = AgentSessionNotification.canNotify(activity),
+            ) || closed
+        ) {
+            return false
+        }
+
+        val pending = AndroidAgentProcessSession.request(expectedPrincipal) ?: return false
+        // No second confirmation dialog: the affirmative tap that invoked
+        // this method IS the native owner-consent gesture.
+        val approved = approveFromNativeUi(pending.promptId)
+        if (!approved) {
+            AndroidAgentProcessSession.stop()
+            AgentSessionNotification.hide(activity)
+        }
+        return approved
+    }
+
     /** Only the affirmative native dialog callback invokes this, never HTTP. */
     fun approveFromNativeUi(promptId: String): Boolean {
         // Compose AlertDialog is a separate focused window. Requiring the
@@ -227,6 +262,29 @@ class AgentSessionCoordinator(
         return keyguard?.isDeviceLocked != false || power?.isInteractive != true
     }
 }
+
+/**
+ * Pure decision gate: a one-tap owner gesture can only authorize the same
+ * single non-localhost principal that remains freshly authenticated at tap
+ * processing time. No principal is selected by the AI, network or OS callback.
+ */
+internal fun nativeOneTapConsentAllowed(
+    intendedPrincipal: String?,
+    freshUniquePrincipal: String?,
+    lifecycleResumed: Boolean,
+    activityVisible: Boolean,
+    deviceUnlocked: Boolean,
+    stopNotificationEnabled: Boolean,
+): Boolean =
+    intendedPrincipal != null &&
+        intendedPrincipal == freshUniquePrincipal &&
+        R5AgentPrincipalPolicy.eligible(intendedPrincipal) &&
+        nativeConsentTapAllowed(
+            lifecycleResumed = lifecycleResumed,
+            activityVisible = activityVisible,
+            deviceUnlocked = deviceUnlocked,
+            stopNotificationEnabled = stopNotificationEnabled,
+        )
 
 /** A genuine native dialog tap may focus the dialog, not the Activity main window. */
 internal fun nativeConsentTapAllowed(
