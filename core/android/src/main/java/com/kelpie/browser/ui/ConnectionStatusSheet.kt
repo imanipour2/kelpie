@@ -65,8 +65,6 @@ internal fun ConnectionStatusSheet(
 
     val stage = NetworkServiceState.snapshot()
     val browserRunning = stage?.httpServer?.isRunning == true
-    val health = result?.healthOk == true
-    val ready = result?.readyOk == true
 
     Column(
         modifier =
@@ -86,7 +84,7 @@ internal fun ConnectionStatusSheet(
             when {
                 refreshing -> "Checking..."
                 result == null -> "Not checked"
-                else -> tunnelReadyLabel(health, ready)
+                else -> tunnelReadyLabel(result?.healthStatus, result?.readyStatus)
             },
         )
         StatusDetail("MCP request activity", mcpActivityLabel(mcpAgeMs))
