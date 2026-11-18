@@ -19,6 +19,9 @@ class Router {
     /** R5 QA commands are gated separately from all legacy browser routes. */
     var backgroundAgentQa = false
 
+    /** R5 native renderer with standard mother MCP and bearer-first identity. */
+    var motherR5BackgroundQa = false
+
     /** Snapshot of currently-registered method names. */
     val registeredMethods: Set<String>
         get() = routes.keys.toSet()
