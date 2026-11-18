@@ -14,19 +14,22 @@ internal object R5BackgroundOptInStore {
     private const val APPROVED_KEY = "owner_approved"
 
     fun isApproved(context: Context): Boolean =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        context
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getBoolean(APPROVED_KEY, false)
 
     /** Synchronous commit: never skip the owner's first-entry choice on write failure. */
     fun rememberApproval(context: Context): Boolean =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        context
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .putBoolean(APPROVED_KEY, true)
             .commit()
 
     /** Only resets the startup choice; never grants or renews remote browser access. */
     fun askAgainNextLaunch(context: Context): Boolean =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        context
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .remove(APPROVED_KEY)
             .commit()
