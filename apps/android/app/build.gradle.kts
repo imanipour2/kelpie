@@ -59,6 +59,7 @@ android {
         buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")
         buildConfigField("boolean", "R5_NATIVE_CONSENT_QA_ENABLED", "false")
         buildConfigField("boolean", "R5_BACKGROUND_AGENT_QA_ENABLED", "false")
+        buildConfigField("boolean", "R5_MOTHER_MCP_BACKGROUND_QA_ENABLED", "false")
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
@@ -66,7 +67,7 @@ android {
         getByName("debug") {
             if (anyP4Qa) {
                 manifest.srcFile("src/privateCaptureQa/AndroidManifest.xml")
-            } else if (r5SourceQa || r5AgentQa || r5PrivateBetaQa) {
+            } else if (r5SourceQa || r5AgentQa || r5PrivateBetaQa || r5MotherConnectionQa) {
                 manifest.srcFile("src/r5SourceQa/AndroidManifest.xml")
             }
         }
