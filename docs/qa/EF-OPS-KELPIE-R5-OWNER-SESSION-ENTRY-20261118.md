@@ -37,3 +37,54 @@ The connected ChatGPT tool's **client-side enum** currently does not contain `se
 Owner decision: [canonical CDG](https://docs.google.com/document/d/1oYRR-qawFourZeDEUE30QNUfF9S0bD_WXAP4uljGVJU/edit) entry `EF-OPS-KELPIE-R5-ONE-TAP-CONSENT-20261118`. Device incident: [Enerfoam Issue #98](https://github.com/imanipour2/enerfoam-website/issues/98). Base source: [Kelpie draft PR #55](https://github.com/imanipour2/kelpie/pull/55). Official Android developer docs on background activity launch restrictions and notification permission remain applicable.
 
 Status: `CDG_OWNER_APPROVED / SOURCE_ONLY / QA_OPEN / CONNECTOR_SCHEMA_BLOCKED / SYNC_BLOCKED_MAIN / PUBLIC_BETA_NO_GO`. No website LIVE/STAGING change.
+
+
+## Second-pass hardening: owner-initiated shortcut and Android loopback (2026-11-18)
+
+An additional native owner-initiated path avoids relying on the installed ChatGPT
+connector's fixed tool enum. When the existing `kelpie_browser_control.capabilities`
+is invoked through a **uniquely paired bearer** identity, the process records its
+non-secret principal ID for at most 120 seconds (RAM only). With exactly one recent
+paired client, the foreground browser displays a **Connect** shortcut; tapping it
+creates only a PENDING session request. A separate genuine on-device Approve tap
+is mandatory, followed by persistent STOP notification. The connection sheet
+shows the same guarded shortcut and state. Nothing opens Kelpie from background.
+
+The Android loopback interface is shared by apps in the same profile. The base
+`AuthMiddleware` can identify loopback as generic `localhost` even if a bearer
+header is supplied. In isolated R5 QA `/mcp` and `/v1/agent-*` routes, middleware
+now **prefers a validated PairingStore bearer identity** instead of broad
+localhost. Session request/status/stop reject anonymous, generic localhost and
+invalid principals. Metadata discovery remains possible without a grant, but
+cannot create an owner session. Invalid/absent tokens do not produce a Connect
+shortcut; multiple fresh agents are ambiguous and require explicit client
+selection through an authenticated request. The same security boundary applies
+to both remote and locally initiated prompts.
+
+**Expected short path:** prior pairing + tunnel running -> ChatGPT
+`capabilities` (no grant) -> Kelpie foreground Connect -> owner native Approve
+-> ChatGPT `capabilities` returns a fresh `consentGeneration` -> authorized
+`tabs.list` using the generation -> page snapshot/screenshot and STOP test.
+The existing ChatGPT tool schema already supports capabilities and tabs.list;
+the one-tap path is therefore *plausibly compatible* without adding a new
+connector method. This is **not** accepted without real S24 proof. Updating and
+refreshing connector metadata is still required for the alternative remote
+`session.request/status/stop` paths.
+
+**P0 acceptance additions:** verify that a locally unauthenticated third-party
+app cannot impersonate a paired AI agent even after native consent, that invalid
+bearers cannot see a pending-capable principal, and that a revoked or competing
+client never inherits an active session. Treat the auth file as a local secret:
+prove presence, permissions and matching origin without outputting its value.
+
+Official references:
+- Android security tips: https://developer.android.com/privacy-and-security/security-tips
+- Android accessibility/touch targets: https://developer.android.com/develop/ui/compose/accessibility/api-defaults
+- Android runtime notification consent: https://developer.android.com/develop/ui/compose/notifications/notification-permission
+- OpenAI custom MCP plugin metadata refresh: https://developers.openai.com/plugins/deploy/connect-chatgpt
+- OpenAI Secure MCP Tunnel: https://developers.openai.com/api/docs/guides/secure-mcp-tunnels
+
+**Still NOT done:** compiler CI on the complete PR head, signed provenance
+readback, S24 install and physical owner prompt, active authenticated tab,
+browser effects, Doze/lock 25-cycle, threat review, platform parity or exception,
+main merge and independent release approval.
