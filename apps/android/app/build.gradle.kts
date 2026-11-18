@@ -52,8 +52,8 @@ android {
             versionCode = 37
             versionName = "0.2.17-r5-loopback-pair-qa"
         } else if (r5MotherConnectionQa) {
-            versionCode = 38
-            versionName = "0.2.18-r5-mother-connection-qa"
+            versionCode = 39
+            versionName = "0.2.19-r5-mother-background-qa"
         }
         buildConfigField("int", "LOCAL_HTTP_PORT", "8420")
         buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")
@@ -107,14 +107,15 @@ android {
                 buildConfigField("boolean", "R5_NATIVE_CONSENT_QA_ENABLED", "true")
                 buildConfigField("boolean", "R5_BACKGROUND_AGENT_QA_ENABLED", "true")
             } else if (r5MotherConnectionQa) {
-                // Side-by-side mother-architecture baseline: standard Android MCP gateway
-                // and upstream Ed25519 computer trust, without R5 session overlays.
+                // Owner-approved mother MCP + native R5 background rendering QA.
+                // Keep standard /mcp, pairing and the existing port; no private MCP replacement.
                 // The separate P4/R5 capture and agent branches remain intact.
                 applicationIdSuffix = ".r5motherverify"
                 buildConfigField("int", "LOCAL_HTTP_PORT", "18462")
                 buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")
-                buildConfigField("boolean", "R5_NATIVE_CONSENT_QA_ENABLED", "false")
-                buildConfigField("boolean", "R5_BACKGROUND_AGENT_QA_ENABLED", "false")
+                buildConfigField("boolean", "R5_NATIVE_CONSENT_QA_ENABLED", "true")
+                buildConfigField("boolean", "R5_BACKGROUND_AGENT_QA_ENABLED", "true")
+                buildConfigField("boolean", "R5_MOTHER_MCP_BACKGROUND_QA_ENABLED", "true")
             }
         }
         release {
