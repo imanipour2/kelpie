@@ -305,7 +305,9 @@ class KelpieBrowserSession(
             .register()
         // Isolated native-consent QA replaces only the private /mcp envelope.
         // Legacy browser methods remain blocked by Router.consentOnlyQa.
-        if (!motherMcpR5RendererQaEnabled) r5AgentCoordinator?.registerPrivateMcp(router)
+        if (!motherMcpR5RendererQaEnabled && r5AgentCoordinator != null) {
+            com.kelpie.browser.agent.execution.R5PrivateMcpBridge(r5AgentCoordinator::isReady).register(router)
+        }
     }
 
     private fun startServer(deviceInfo: DeviceInfo) {
