@@ -163,6 +163,56 @@ class R5AgentCoordinator(
 
     fun isReady(): Boolean = !closed && ready
 
+    /**
+     * Binds the existing mother MCP gateway to the verified private renderer,
+     * WITHOUT replacing /mcp with R5PrivateMcpBridge. No tunnel or localhost
+     * health response can create a consent generation.
+     */
+    fun attachMotherMcpScreenshot() {
+        ctx.motherPrivateAgentActive = {
+            renderer.state.value != PrivateWebViewDisplay.State.IDLE ||
+                !activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        }
+        ctx.motherGatewayAuthorization = {
+            val principal = verifiedClientId()
+            val active = consent.snapshot() as? SessionConsentCore.State.Active
+            active != null &&
+                ready &&
+                canUse(principal, active.generation, active) &&
+                principal != "localhost"
+        }
+        ctx.motherPrivateScreenshot = {
+            val principal = verifiedClientId()
+            val active = consent.snapshot() as? SessionConsentCore.State.Active
+            val tab = ctx.tabStore?.activeTab
+            if (active == null ||
+                !ready ||
+                !canUse(principal, active.generation, active) ||
+                principal == "localhost" ||
+                ownership.status() != WebViewOwnershipState.Host.PRIVATE ||
+                renderer.state.value != PrivateWebViewDisplay.State.PRIVATE_DISPLAY ||
+                tab == null ||
+                tab.id != currentTabId ||
+                !renderer.canDeliverFrame()
+            ) {
+                null
+            } else {
+                val captured = renderer.captureFreshPng()
+                if (captured != null &&
+                    ready &&
+                    currentTabId == tab.id &&
+                    ownership.status() == WebViewOwnershipState.Host.PRIVATE &&
+                    canUse(principal, active.generation, consent.snapshot() as? SessionConsentCore.State.Active)
+                ) {
+                    captured
+                } else {
+                    null
+                }
+            }
+        }
+    }
+
+
     fun registerPrivateMcp(router: Router) {
         R5PrivateMcpBridge(::isReady).register(router)
     }
