@@ -79,6 +79,7 @@ export async function runPrivacyConformance(page) {
   // Values are generated in memory and never emitted to CI logs or saved as fixture artifacts.
   await page.evaluate(() => {
     const values = Array.from({ length: 10 }, (_, i) => `private-${i}-${Math.random().toString(36).slice(2)}`);
+    values[4] += '<>&"\'';
     window.fixtureSecrets = values;
     ["password", "otp", "card", "hidden"].forEach((id, i) => { document.getElementById(id).value = values[i]; });
     document.querySelector("#notes").textContent = values[4];
@@ -95,22 +96,26 @@ export async function runPrivacyConformance(page) {
   const bundle = await page.evaluate(`(() => {${selector}${privacy}
     const output = {page:(${pageText}), annotations:(${annotations}), html:kelpieSafeHTML(document.body),
       attrs:kelpieSafeAttributes(document.querySelector('#metadata'))};
-    const serialized=JSON.stringify(output);
-    return {leaked:window.fixtureSecrets.some(s=>serialized.includes(s)),
-      publicName:output.annotations[0].name, value:output.annotations[0].value,
-      privateNames:output.annotations.filter(e=>e.sensitivity==='private').map(e=>e.name),
+    const strings = (value) => typeof value === 'string' ? [value] : value && typeof value === 'object' ? Object.values(value).flatMap(strings) : [];
+    const exportedStrings = strings(output);
+    const decoded = document.createElement('div'); decoded.innerHTML = output.html;
+    return {leaked:window.fixtureSecrets.some(s=>exportedStrings.some(value=>value.includes(s))),
+      encodedHTMLLeak:window.fixtureSecrets.some(s=>decoded.textContent.includes(s)),
+      publicNameMatches:output.annotations[0].name === 'مرتب‌سازی قیمت', valueIsNull:output.annotations[0].value === null,
+      privateNamesSafe:output.annotations.filter(e=>e.sensitivity==='private').every(e=>e.name === 'redacted' || e.name === ''),
       rawIdentifiers:output.annotations.some(e=>e.selector && (e.selector.includes('#')||e.selector.includes('[name='))),
-      pageText:output.page.content, secretAttribute:('aria-label' in output.attrs),
+      pageTextRetained:output.page.content.includes('مرتب‌سازی قیمت'), secretAttribute:('aria-label' in output.attrs),
       scriptExported:output.html.includes('must not be exported')};
   })()`);
   assert.equal(bundle.leaked, false, "No generated private value may leave an existing read path");
-  assert.equal(bundle.publicName, "مرتب‌سازی قیمت");
-  assert.equal(bundle.value, null);
-  assert.ok(bundle.privateNames.every((name) => name === "redacted" || name === ""));
+  assert.equal(bundle.encodedHTMLLeak, false, "HTML entity encoding must not bypass private-value redaction");
+  assert.equal(bundle.publicNameMatches, true);
+  assert.equal(bundle.valueIsNull, true);
+  assert.equal(bundle.privateNamesSafe, true);
   assert.equal(bundle.rawIdentifiers, false);
   assert.equal(bundle.secretAttribute, false);
   assert.equal(bundle.scriptExported, false);
-  assert.ok(bundle.pageText.includes("مرتب‌سازی قیمت"));
+  assert.equal(bundle.pageTextRetained, true);
 
   const denial = await page.evaluate(diagnostics({ setupExpression: "document.cookie", exportExpression: "document.body.textContent" }));
   assert.equal(denial.error.code, "POLICY_BLOCKED");
@@ -128,7 +133,7 @@ export async function runPrivacyConformance(page) {
   const value = `test-${randomUUID()}`;
   const filled = await page.evaluate(fill("#field", value));
   assert.equal(filled.error, undefined);
-  assert.equal(filled.value, null);
+  assert.equal(filled.value === null, true);
   assert.equal(JSON.stringify(filled).includes(value), false);
   assert.equal(await page.evaluate((expected) => document.querySelector("#field").value === expected, value), true);
 
@@ -213,7 +218,7 @@ export async function runPrivacyConformance(page) {
   await page.setContent('<input id="field" value="prefix-">');
   const typed = await page.evaluate(typeText('#field', value));
   assert.equal(typed.error, undefined);
-  assert.equal(typed.typed, 'redacted');
+  assert.equal(typed.typed === 'redacted', true);
   assert.equal(JSON.stringify(typed).includes(value), false);
   assert.equal(await page.evaluate((expected) => document.querySelector('#field').value === 'prefix-' + expected, value), true);
 
@@ -309,7 +314,7 @@ export async function runPrivacyConformance(page) {
   });
   assert.ok(['OCCLUDED', 'STALE_ELEMENT', 'INVALID_TARGET'].includes((await tapField()).error), 'A parent disabled during focus must block dispatch');
   assert.equal(await page.evaluate(() => window.clickCount), 0);
-  return { groups: 22, status: "PASS", scope: "ephemeral-script DOM semantics; not Android hardware or PNG" };
+  return { groups: 23, status: "PASS", scope: "ephemeral-script DOM semantics; not Android hardware or PNG" };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

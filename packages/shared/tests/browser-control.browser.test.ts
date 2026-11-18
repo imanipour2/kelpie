@@ -205,7 +205,11 @@ describe("KAI shared observation security fixtures (not Android device acceptanc
       expect(elements.every((element) => element.rect && Object.values(element.rect).every(Number.isFinite))).toBe(true);
       expect(elements.every((element) => element.rect && element.rect.width > 0 && element.rect.height > 0)).toBe(true);
       expect(elements.every((element) => element.value === null)).toBe(true);
-      expect(snapshot.coverage?.status).toBe("INCOMPLETE");
+      // The fixture's selected value is private form data even before typing.
+      // Geometry coverage stays explicit; image privacy is conservatively unknown.
+      expect(snapshot.coverage).toMatchObject({ status: "UNKNOWN", observed: elements.length, truncated: false });
+      expect(snapshot.screenshotBlockReasons).toContain("PRIVATE_FORM_DATA");
+      expect(snapshot.screenshotBlocked).toBe(true);
       expect(snapshot.devicePixelRatio).toBeGreaterThan(0);
     });
   });

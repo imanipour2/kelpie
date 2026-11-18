@@ -156,6 +156,10 @@ fun observationPrivacyScript(): String =
             var attrs = kelpieSafeAttributes(original);
             Object.keys(attrs).forEach(function(name) { target.setAttribute(name, attrs[name]); });
         }
+        // Redact decoded text before HTML serialization can entity-escape private values.
+        var textNodes = document.createTreeWalker(copy, NodeFilter.SHOW_TEXT);
+        var textNode;
+        while ((textNode = textNodes.nextNode())) textNode.data = kelpieSafeText(textNode.data);
         return copy;
     }
     function kelpieSafeNodeText(node) {
