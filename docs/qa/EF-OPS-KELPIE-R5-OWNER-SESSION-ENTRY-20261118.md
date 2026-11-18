@@ -2,6 +2,18 @@
 
 Status: SOURCE DRAFT; no APK installation, native S24 acceptance, merge, or production release.
 
+## Candidate version and rollback identity
+
+Source candidate (NOT installed): QA package `com.kelpie.browser.r5betaverify`,
+versionCode **35** / versionName **0.2.15-r5-easyconnect-qa**,
+port **18461**. Current owner-observed installed beta remains versionCode 34 /
+`0.2.14-r5-private-beta-qa` until confirmed hardware readback after installation.
+The QA GitHub workflow checks package, both BuildConfig port constants,
+signer and provenance. GitHub Actions debug signing is not evidence of
+compatibility with the APK already installed on the user's Windows-built device:
+compare actual SHA-256 signing certificate digests before any `adb install -r`;
+if different, do not uninstall or wipe the working package.
+
 ## Root cause and observed device state
 
 - Installed package: `com.kelpie.browser.r5betaverify`, version `0.2.14-r5-private-beta-qa`, local listener `18461` (owner screenshot and ADB).
