@@ -92,6 +92,7 @@ fun BrowserScreen(
     var showNetworkInspector by remember { mutableStateOf(false) }
     var showAI by remember { mutableStateOf(false) }
     var showConnectAgent by remember { mutableStateOf(false) }
+    var showConnectionStatus by remember { mutableStateOf(false) }
     val composeView = LocalView.current
     val isTablet = remember(context) { context.isTabletDevice() }
     val coroutineScope = rememberCoroutineScope()
@@ -298,6 +299,7 @@ fun BrowserScreen(
                             onNetworkInspector = { showNetworkInspector = true },
                             onAI = { showAI = true },
                             onConnectAgent = { showConnectAgent = true },
+                            onConnectionStatus = { showConnectionStatus = true },
                             agentConnectionAvailable = agentSessionCoordinator != null,
                             onSnapshot3D = {
                                 coroutineScope.launch { toggle3DInspector() }
@@ -388,6 +390,7 @@ fun BrowserScreen(
             showNetworkInspector = false
             showAI = false
             showConnectAgent = false
+            showConnectionStatus = false
             pendingWelcomeFromHelp = false
             forceShowWelcome = false
             showWelcome = false
@@ -479,6 +482,22 @@ fun BrowserScreen(
             sheetState = rememberModalBottomSheetState(),
         ) {
             NetworkInspectorSheet(onDismiss = { showNetworkInspector = false })
+        }
+    }
+
+    if (showConnectionStatus) {
+        ModalBottomSheet(
+            onDismissRequest = { showConnectionStatus = false },
+            sheetState = rememberModalBottomSheetState(),
+        ) {
+            ConnectionStatusSheet(
+                deviceInfo = deviceInfo,
+                onShowPairedComputers = {
+                    showConnectionStatus = false
+                    showPairedClients = true
+                },
+                onDismiss = { showConnectionStatus = false },
+            )
         }
     }
 
