@@ -332,17 +332,7 @@ class R5AgentCoordinator(
         client: String?,
         expectedGeneration: String?,
         active: SessionConsentCore.State.Active?,
-    ): Boolean =
-        !closed &&
-            client != null &&
-            expectedGeneration != null &&
-            active != null &&
-            !active.locked &&
-            active.principalId == client &&
-            active.generation == expectedGeneration &&
-            activity.getSystemService(PowerManager::class.java).isInteractive &&
-            !activity.getSystemService(KeyguardManager::class.java).isDeviceLocked &&
-            AgentSessionNotification.canNotify(activity)
+    ): Boolean = R5AgentAuthorization.permits(activity, client, expectedGeneration, active, closed)
 
     /** Called from Activity lifecycle, not from a remote JSON argument. */
     fun onPause() {
