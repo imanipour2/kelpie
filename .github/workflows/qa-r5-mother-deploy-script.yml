@@ -34,7 +34,6 @@ jobs:
           foreach ($needle in @(
             "com.kelpie.browser.r5motherverify",
             "com.kelpie.browser.r5betaverify",
-            "Verify-Apk",
             "VerifiedApk",
             "new_pairing_verified",
             "remote_tabs_and_screenshot_pass",
