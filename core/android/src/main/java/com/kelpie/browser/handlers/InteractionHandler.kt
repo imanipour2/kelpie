@@ -27,11 +27,12 @@ class InteractionHandler(
                 "needs_human" -> errorResponse("NEEDS_HUMAN", "This control requires human interaction")
                 "ambiguous_target" -> errorResponse("AMBIGUOUS_TARGET", "More than one control matches the target")
                 "stale_element" -> errorResponse("STALE_ELEMENT", "The control changed before dispatch")
-                "uncertain" -> errorResponse(
-                    "UNCERTAIN",
-                    "Dispatch may have completed; observe again before retrying",
-                    mapOf("mayHaveCompleted" to true, "status" to "UNCERTAIN"),
-                )
+                "uncertain" ->
+                    errorResponse(
+                        "UNCERTAIN",
+                        "Dispatch may have completed; observe again before retrying",
+                        mapOf("mayHaveCompleted" to true, "status" to "UNCERTAIN"),
+                    )
                 "not_found" -> {
                     errorResponse("ELEMENT_NOT_FOUND", "No element matches the requested target", diagnostics)
                 }
@@ -150,54 +151,55 @@ class InteractionHandler(
             if (ctx.scriptPlaybackState?.isAbortRequested() == true) return errorResponse("BLOCKED", "Script stopped")
             // One fixed operation retains the same DOM object. Re-reading activeElement
             // between delayed characters could type into another control after a focus change.
-            val result = ctx.evaluateJSReturningJSON(
-                """
-                (function() {
-                    ${observationPrivacyScript()}
-                    ${formControlMutationScript()}
-                    var selector = ${selector?.let { "'${JSEscape.string(it)}'" } ?: "null"};
-                    var matches = selector ? document.querySelectorAll(selector) : [document.activeElement];
-                    if (matches.length !== 1) return {error:'AMBIGUOUS_TARGET'};
-                    var el = matches[0];
-                    if (!el || !el.isConnected) return {error:'STALE_ELEMENT'};
-                    if (kelpieSensitiveAction(el)) return {error:'NEEDS_HUMAN'};
-                    var supported = function() {
-                        return (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' &&
-                            ['text','search','email','tel','url','number'].includes(el.type))) && !el.matches(':disabled') &&
-                            !el.closest('[inert]') && el.getAttribute('aria-disabled') !== 'true' && !el.readOnly;
-                    };
-                    if (!supported()) return {error:'INVALID_TARGET'};
-                    function signature() {
-                        return JSON.stringify(['role','name','aria-label','aria-labelledby','placeholder','autocomplete','formaction']
-                            .map(function(key) { return el.getAttribute(key); }).concat([
-                                el.type, Array.from(el.labels || []).map(function(label) { return label.textContent; }).join(' '),
-                                el.form ? el.form.getAttribute('action') : null]));
-                    }
-                    var expectedType = el.type, expectedSignature = signature(), expectedForm = el.form;
-                    var initialValue = kelpieReadFormControlValue(el);
-                    var r = el.getBoundingClientRect();
-                    var hit = document.elementFromPoint(r.x + r.width/2, r.y + r.height/2);
-                    if (kelpieHiddenElement(el) || r.width <= 0 || r.height <= 0 || !(hit === el || el.contains(hit))) return {error:'OCCLUDED'};
-                    el.focus({preventScroll:true});
-                    var after = el.getBoundingClientRect();
-                    var afterMatches = selector ? document.querySelectorAll(selector) : [document.activeElement];
-                    if (!el.isConnected || document.activeElement !== el || !supported() || el.type !== expectedType ||
-                        afterMatches.length !== 1 || afterMatches[0] !== el || signature() !== expectedSignature ||
-                        el.form !== expectedForm || kelpieReadFormControlValue(el) !== initialValue ||
-                        Math.abs(after.x-r.x) > 0.5 || Math.abs(after.y-r.y) > 0.5 ||
-                        Math.abs(after.width-r.width) > 0.5 || Math.abs(after.height-r.height) > 0.5) return {error:'STALE_ELEMENT'};
-                    if (kelpieSensitiveAction(el)) return {error:'NEEDS_HUMAN'};
-                    hit = document.elementFromPoint(after.x + after.width/2, after.y + after.height/2);
-                    if (kelpieHiddenElement(el) || !(hit === el || el.contains(hit))) return {error:'OCCLUDED'};
-                    try {
-                        kelpieWriteFormControlValue(el, initialValue + '${JSEscape.string(text)}');
-                        kelpieDispatchFormControlInput(el);
-                        kelpieDispatchFormControlChange(el);
-                    } catch (_) { return {error:'UNCERTAIN'}; }
-                    return {typed:'redacted',dispatched:true,effectVerified:false};
-                })()
-                """.trimIndent(),
-            )
+            val result =
+                ctx.evaluateJSReturningJSON(
+                    """
+                    (function() {
+                        ${observationPrivacyScript()}
+                        ${formControlMutationScript()}
+                        var selector = ${selector?.let { "'${JSEscape.string(it)}'" } ?: "null"};
+                        var matches = selector ? document.querySelectorAll(selector) : [document.activeElement];
+                        if (matches.length !== 1) return {error:'AMBIGUOUS_TARGET'};
+                        var el = matches[0];
+                        if (!el || !el.isConnected) return {error:'STALE_ELEMENT'};
+                        if (kelpieSensitiveAction(el)) return {error:'NEEDS_HUMAN'};
+                        var supported = function() {
+                            return (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' &&
+                                ['text','search','email','tel','url','number'].includes(el.type))) && !el.matches(':disabled') &&
+                                !el.closest('[inert]') && el.getAttribute('aria-disabled') !== 'true' && !el.readOnly;
+                        };
+                        if (!supported()) return {error:'INVALID_TARGET'};
+                        function signature() {
+                            return JSON.stringify(['role','name','aria-label','aria-labelledby','placeholder','autocomplete','formaction']
+                                .map(function(key) { return el.getAttribute(key); }).concat([
+                                    el.type, Array.from(el.labels || []).map(function(label) { return label.textContent; }).join(' '),
+                                    el.form ? el.form.getAttribute('action') : null]));
+                        }
+                        var expectedType = el.type, expectedSignature = signature(), expectedForm = el.form;
+                        var initialValue = kelpieReadFormControlValue(el);
+                        var r = el.getBoundingClientRect();
+                        var hit = document.elementFromPoint(r.x + r.width/2, r.y + r.height/2);
+                        if (kelpieHiddenElement(el) || r.width <= 0 || r.height <= 0 || !(hit === el || el.contains(hit))) return {error:'OCCLUDED'};
+                        el.focus({preventScroll:true});
+                        var after = el.getBoundingClientRect();
+                        var afterMatches = selector ? document.querySelectorAll(selector) : [document.activeElement];
+                        if (!el.isConnected || document.activeElement !== el || !supported() || el.type !== expectedType ||
+                            afterMatches.length !== 1 || afterMatches[0] !== el || signature() !== expectedSignature ||
+                            el.form !== expectedForm || kelpieReadFormControlValue(el) !== initialValue ||
+                            Math.abs(after.x-r.x) > 0.5 || Math.abs(after.y-r.y) > 0.5 ||
+                            Math.abs(after.width-r.width) > 0.5 || Math.abs(after.height-r.height) > 0.5) return {error:'STALE_ELEMENT'};
+                        if (kelpieSensitiveAction(el)) return {error:'NEEDS_HUMAN'};
+                        hit = document.elementFromPoint(after.x + after.width/2, after.y + after.height/2);
+                        if (kelpieHiddenElement(el) || !(hit === el || el.contains(hit))) return {error:'OCCLUDED'};
+                        try {
+                            kelpieWriteFormControlValue(el, initialValue + '${JSEscape.string(text)}');
+                            kelpieDispatchFormControlInput(el);
+                            kelpieDispatchFormControlChange(el);
+                        } catch (_) { return {error:'UNCERTAIN'}; }
+                        return {typed:'redacted',dispatched:true,effectVerified:false};
+                    })()
+                    """.trimIndent(),
+                )
             val code = result["error"] as? String
             if (code != null) errorResponse(safeInteractionError(code), "Typing has no verified result; inspect before retrying") else successResponse(result)
         } catch (error: CancellationException) {
@@ -307,8 +309,14 @@ class InteractionHandler(
         val viewport = viewportSize()
         val appliedX = requestedX + calibration.offsetX
         val appliedY = requestedY + calibration.offsetY
-        require(appliedX.isFinite() && appliedY.isFinite() && appliedX >= 0 && appliedY >= 0 &&
-            appliedX < viewport.first && appliedY < viewport.second) { "Point is outside the current viewport" }
+        require(
+            appliedX.isFinite() &&
+                appliedY.isFinite() &&
+                appliedX >= 0 &&
+                appliedY >= 0 &&
+                appliedX < viewport.first &&
+                appliedY < viewport.second,
+        ) { "Point is outside the current viewport" }
         return TapExecution(
             requestedX = requestedX,
             requestedY = requestedY,

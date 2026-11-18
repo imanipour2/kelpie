@@ -17,9 +17,22 @@ object FeedbackStore {
     private val commands = setOf("click", "tap", "fill", "type", "select-option", "scroll", "screenshot", "snapshot", "coordinate-diagnostics")
     private val errors =
         setOf(
-            "STALE_ELEMENT", "STALE_OBSERVATION", "AMBIGUOUS_TARGET", "OCCLUDED", "OBSERVATION_RACE",
-            "NO_FRESH_FRAME", "NEEDS_HUMAN", "BLOCKED", "SESSION_REVOKED", "DEVICE_LOCKED", "TIMEOUT",
-            "ELEMENT_NOT_FOUND", "ELEMENT_NOT_VISIBLE", "EVAL_ERROR", "INVALID_PARAMS", "SCREENSHOT_FAILED",
+            "STALE_ELEMENT",
+            "STALE_OBSERVATION",
+            "AMBIGUOUS_TARGET",
+            "OCCLUDED",
+            "OBSERVATION_RACE",
+            "NO_FRESH_FRAME",
+            "NEEDS_HUMAN",
+            "BLOCKED",
+            "SESSION_REVOKED",
+            "DEVICE_LOCKED",
+            "TIMEOUT",
+            "ELEMENT_NOT_FOUND",
+            "ELEMENT_NOT_VISIBLE",
+            "EVAL_ERROR",
+            "INVALID_PARAMS",
+            "SCREENSHOT_FAILED",
         )
     private val statuses = setOf("ADMITTED", "DISPATCHED", "EXECUTED", "EFFECT_VERIFIED", "UNCERTAIN", "STALE", "BLOCKED")
     private val counters = setOf("count", "seenCount", "observedCount", "attemptCount", "errorCount", "durationMs", "width", "height")

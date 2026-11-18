@@ -83,16 +83,18 @@ class ScreenshotHandler(
     fun register(router: Router) {
         router.register("screenshot") capture@{ body ->
             try {
-                val resolution = ScreenshotResolution.parse(body["resolution"])
-                    ?: return@capture errorResponse("INVALID_PARAMS", "Unknown screenshot resolution")
+                val resolution =
+                    ScreenshotResolution.parse(body["resolution"])
+                        ?: return@capture errorResponse("INVALID_PARAMS", "Unknown screenshot resolution")
                 if (body["fullPage"] == true) {
                     captureFullPagePayload("png", 80, resolution)
                 }
-                val payload = captureViewportPayload(
-                    body["format"] as? String ?: "png",
-                    (body["quality"] as? Number)?.toInt() ?: 80,
-                    resolution,
-                )
+                val payload =
+                    captureViewportPayload(
+                        body["format"] as? String ?: "png",
+                        (body["quality"] as? Number)?.toInt() ?: 80,
+                        resolution,
+                    )
                 successResponse(payload)
             } catch (error: ScreenshotRefusal) {
                 errorResponse(error.code, error.message ?: "Capture refused")
@@ -113,16 +115,13 @@ class ScreenshotHandler(
         format: String,
         quality: Int,
         resolution: ScreenshotResolution,
-    ): Map<String, Any?>? =
-        throw ScreenshotRefusal("NEEDS_HUMAN", "Full-page capture has no verified per-tile privacy and freshness coverage")
+    ): Map<String, Any?>? = throw ScreenshotRefusal("NEEDS_HUMAN", "Full-page capture has no verified per-tile privacy and freshness coverage")
 
     suspend fun captureAnnotatedPayload(
         format: String,
         quality: Int,
         resolution: ScreenshotResolution,
-    ): Map<String, Any?> {
-        return captureViewportPayload(format, quality, resolution, annotated = true)
-    }
+    ): Map<String, Any?> = captureViewportPayload(format, quality, resolution, annotated = true)
 
     suspend fun captureViewportPayload(
         format: String = "png",
@@ -138,17 +137,26 @@ class ScreenshotHandler(
             // Page-realm JSON cannot attest that real account pixels are safe. All
             // callers share this native fixture gate, including plain screenshots.
             requireSyntheticScreenshotFixture(BuildConfig.KAI_ANNOTATION_QA_ENABLED, view.url)
-            val tab = ctx.tabStore?.tabs?.value?.firstOrNull { it.webView === view }
-                ?: throw ScreenshotRefusal("NO_FRESH_FRAME", "Renderer ownership is unavailable")
+            val tab =
+                ctx.tabStore
+                    ?.tabs
+                    ?.value
+                    ?.firstOrNull { it.webView === view }
+                    ?: throw ScreenshotRefusal("NO_FRESH_FRAME", "Renderer ownership is unavailable")
             val epoch = tab.documentVersion
             val activeTab = ctx.tabStore?.activeTabId?.value
+
             fun guard() {
                 requireSyntheticScreenshotFixture(BuildConfig.KAI_ANNOTATION_QA_ENABLED, view.url)
                 if (ctx.remoteDocumentGuard?.invoke() == false ||
                     ctx.scriptPlaybackState?.isAbortRequested() == true ||
-                    ctx.webView !== view || tab.documentVersion != epoch ||
+                    ctx.webView !== view ||
+                    tab.documentVersion != epoch ||
                     ctx.tabStore?.activeTabId?.value != activeTab ||
-                    ctx.tabStore?.tabs?.value?.none { it === tab && it.webView === view } != false
+                    ctx.tabStore
+                        ?.tabs
+                        ?.value
+                        ?.none { it === tab && it.webView === view } != false
                 ) {
                     throw ScreenshotRefusal("OBSERVATION_RACE", "The renderer, document, target or authority changed")
                 }
@@ -166,9 +174,14 @@ class ScreenshotHandler(
             var bitmap: Bitmap? = null
             var rendered: Bitmap? = null
             val maxBytes = minOf(Runtime.getRuntime().maxMemory() / 8, 32L * 1024 * 1024)
-            fun budget(width: Int, height: Int) {
-                val retained = (bitmap?.allocationByteCount?.toLong() ?: 0L) +
-                    (if (rendered !== bitmap) rendered?.allocationByteCount?.toLong() ?: 0L else 0L)
+
+            fun budget(
+                width: Int,
+                height: Int,
+            ) {
+                val retained =
+                    (bitmap?.allocationByteCount?.toLong() ?: 0L) +
+                        (if (rendered !== bitmap) rendered?.allocationByteCount?.toLong() ?: 0L else 0L)
                 requireScreenshotAllocation(width, height, retained, maxBytes)
             }
             try {
@@ -185,20 +198,22 @@ class ScreenshotHandler(
                     throw ScreenshotRefusal("OBSERVATION_RACE", "Page geometry changed during capture")
                 }
                 if (uniform(bitmap)) throw ScreenshotRefusal("NO_FRESH_FRAME", "Uniform or empty frame cannot establish a usable observation")
-                rendered = if (resolution == ScreenshotResolution.VIEWPORT &&
-                    (bitmap.width != viewport.viewportWidth || bitmap.height != viewport.viewportHeight)
-                ) {
-                    budget(viewport.viewportWidth, viewport.viewportHeight)
-                    Bitmap.createScaledBitmap(bitmap, viewport.viewportWidth, viewport.viewportHeight, true)
-                } else {
-                    bitmap
-                }
+                rendered =
+                    if (resolution == ScreenshotResolution.VIEWPORT &&
+                        (bitmap.width != viewport.viewportWidth || bitmap.height != viewport.viewportHeight)
+                    ) {
+                        budget(viewport.viewportWidth, viewport.viewportHeight)
+                        Bitmap.createScaledBitmap(bitmap, viewport.viewportWidth, viewport.viewportHeight, true)
+                    } else {
+                        bitmap
+                    }
                 val labels = if (annotated) annotations(before) else emptyList()
                 // An annotation always owns a copy. Every concurrent allocation is budgeted.
                 if (annotated) {
                     budget(rendered.width, rendered.height)
-                    val copy = rendered.copy(Bitmap.Config.ARGB_8888, true)
-                        ?: throw ScreenshotRefusal("NO_FRESH_FRAME", "Could not allocate annotation bitmap")
+                    val copy =
+                        rendered.copy(Bitmap.Config.ARGB_8888, true)
+                            ?: throw ScreenshotRefusal("NO_FRESH_FRAME", "Could not allocate annotation bitmap")
                     if (rendered !== bitmap) rendered.recycle()
                     rendered = copy
                     drawAnnotations(rendered, labels, viewport)
@@ -212,31 +227,33 @@ class ScreenshotHandler(
                 if (stream.size() > 8 * 1024 * 1024) throw ScreenshotRefusal("SCREENSHOT_TOO_LARGE", "Encoded frame exceeds the image budget")
                 guard()
                 val observationId = UUID.randomUUID().toString()
-                val payload = mutableMapOf<String, Any?>(
-                    "image" to Base64.getEncoder().encodeToString(stream.toByteArray()),
-                    "observationId" to observationId,
-                    "tabId" to tab.id,
-                    "rendererIdentity" to System.identityHashCode(view).toString(16),
-                    "documentEpoch" to epoch,
-                    "capturedAt" to Instant.now().toString(),
-                    "consentGeneration" to null,
-                    "frameNonce" to null,
-                    "readOnly" to true,
-                    "actionByRefAvailable" to false,
-                    "freshness" to "foreground-callback-unattested",
-                    "privacy" to "synthetic-fixture-only-no-privacy-attestation",
-                    "coverage" to before["coverage"],
-                    "viewport" to before["viewport"],
-                    "visualViewport" to before["visualViewport"],
-                    "scroll" to before["scroll"],
-                )
+                val payload =
+                    mutableMapOf<String, Any?>(
+                        "image" to Base64.getEncoder().encodeToString(stream.toByteArray()),
+                        "observationId" to observationId,
+                        "tabId" to tab.id,
+                        "rendererIdentity" to System.identityHashCode(view).toString(16),
+                        "documentEpoch" to epoch,
+                        "capturedAt" to Instant.now().toString(),
+                        "consentGeneration" to null,
+                        "frameNonce" to null,
+                        "readOnly" to true,
+                        "actionByRefAvailable" to false,
+                        "freshness" to "foreground-callback-unattested",
+                        "privacy" to "synthetic-fixture-only-no-privacy-attestation",
+                        "coverage" to before["coverage"],
+                        "viewport" to before["viewport"],
+                        "visualViewport" to before["visualViewport"],
+                        "scroll" to before["scroll"],
+                    )
                 payload.putAll(viewport.metadata(rendered.width, rendered.height, format, resolution))
                 if (annotated) {
                     payload["annotations"] = labels
-                    payload["annotationCoverage"] = mapOf(
-                        "drawn" to labels.count { it["labelDrawn"] == true },
-                        "omitted" to labels.count { it["labelDrawn"] != true },
-                    )
+                    payload["annotationCoverage"] =
+                        mapOf(
+                            "drawn" to labels.count { it["labelDrawn"] == true },
+                            "omitted" to labels.count { it["labelDrawn"] != true },
+                        )
                     payload["annotationSessionId"] = observationId
                     payload["validUntil"] = "display-only"
                     payload["hint"] = "E labels are visual only. Blind index actions are disabled; use a fresh canonical snapshot."
@@ -271,15 +288,25 @@ class ScreenshotHandler(
     private fun captureMetrics(snapshot: Map<String, Any?>): ScreenshotViewportMetrics {
         val viewport = snapshot["viewport"] as? Map<*, *> ?: emptyMap<Any, Any>()
         val visual = snapshot["visualViewport"] as? Map<*, *> ?: emptyMap<Any, Any>()
-        fun value(map: Map<*, *>, key: String): Double = (map[key] as? Number)?.toDouble() ?: Double.NaN
+
+        fun value(
+            map: Map<*, *>,
+            key: String,
+        ): Double = (map[key] as? Number)?.toDouble() ?: Double.NaN
         val width = value(viewport, "width")
         val height = value(viewport, "height")
         val valid = listOf(width, height).all { it.isFinite() && it >= 1 && it <= 8192 }
         val visualValid = listOf("width", "height", "scale", "offsetLeft", "offsetTop").all { value(visual, it).isFinite() }
         val dpr = (snapshot["devicePixelRatio"] as? Number)?.toDouble() ?: Double.NaN
-        if (!valid || !visualValid || !dpr.isFinite() || dpr <= 0 ||
-            abs(value(visual, "width") - width) > 1 || abs(value(visual, "height") - height) > 1 ||
-            value(visual, "scale") != 1.0 || value(visual, "offsetLeft") != 0.0 || value(visual, "offsetTop") != 0.0
+        if (!valid ||
+            !visualValid ||
+            !dpr.isFinite() ||
+            dpr <= 0 ||
+            abs(value(visual, "width") - width) > 1 ||
+            abs(value(visual, "height") - height) > 1 ||
+            value(visual, "scale") != 1.0 ||
+            value(visual, "offsetLeft") != 0.0 ||
+            value(visual, "offsetTop") != 0.0
         ) {
             throw ScreenshotRefusal("INVALID_CAPTURE_GEOMETRY", "Zoom, crop or visual viewport geometry requires a verified provider transform")
         }
@@ -290,30 +317,34 @@ class ScreenshotHandler(
         view: WebView,
         guard: () -> Unit,
     ) {
-        val completed = withTimeoutOrNull(3000) {
-            suspendCancellableCoroutine<Unit> { continuation ->
-                val requestId = SystemClock.elapsedRealtimeNanos()
-                try {
-                    guard()
-                    view.postVisualStateCallback(requestId, object : WebView.VisualStateCallback() {
-                        override fun onComplete(id: Long) {
-                            if (!continuation.isActive) return
-                            try {
-                                guard()
-                                if (id != requestId) throw ScreenshotRefusal("NO_FRESH_FRAME", "Unexpected frame callback")
-                                continuation.resume(Unit)
-                            } catch (error: Exception) {
-                                if (continuation.isActive) continuation.resumeWithException(error)
-                            }
-                        }
-                    })
-                    view.invalidate()
-                } catch (error: Exception) {
-                    if (continuation.isActive) continuation.resumeWithException(error)
+        val completed =
+            withTimeoutOrNull(3000) {
+                suspendCancellableCoroutine<Unit> { continuation ->
+                    val requestId = SystemClock.elapsedRealtimeNanos()
+                    try {
+                        guard()
+                        view.postVisualStateCallback(
+                            requestId,
+                            object : WebView.VisualStateCallback() {
+                                override fun onComplete(id: Long) {
+                                    if (!continuation.isActive) return
+                                    try {
+                                        guard()
+                                        if (id != requestId) throw ScreenshotRefusal("NO_FRESH_FRAME", "Unexpected frame callback")
+                                        continuation.resume(Unit)
+                                    } catch (error: Exception) {
+                                        if (continuation.isActive) continuation.resumeWithException(error)
+                                    }
+                                }
+                            },
+                        )
+                        view.invalidate()
+                    } catch (error: Exception) {
+                        if (continuation.isActive) continuation.resumeWithException(error)
+                    }
                 }
+                true
             }
-            true
-        }
         if (completed != true) throw ScreenshotRefusal("NO_FRESH_FRAME", "No fresh callback arrived within the capture deadline")
     }
 
@@ -349,24 +380,28 @@ class ScreenshotHandler(
         annotations: List<MutableMap<String, Any?>>,
         viewport: ScreenshotViewportMetrics,
     ) {
-        val transform = ScreenshotTransform(
-            bitmap.width.toDouble() / viewport.viewportWidth,
-            bitmap.height.toDouble() / viewport.viewportHeight,
-        )
+        val transform =
+            ScreenshotTransform(
+                bitmap.width.toDouble() / viewport.viewportWidth,
+                bitmap.height.toDouble() / viewport.viewportHeight,
+            )
         val canvas = Canvas(bitmap)
-        val border = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(22, 76, 160)
-            style = Paint.Style.STROKE
-            strokeWidth = max(1f, bitmap.width / 390f)
-        }
-        val label = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
-            textSize = (bitmap.width / 28f).coerceIn(11f, 28f)
-        }
+        val border =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.rgb(22, 76, 160)
+                style = Paint.Style.STROKE
+                strokeWidth = max(1f, bitmap.width / 390f)
+            }
+        val label =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE
+                textSize = (bitmap.width / 28f).coerceIn(11f, 28f)
+            }
         val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = border.color }
         val occupied = mutableListOf<RectF>()
         for (annotation in annotations) {
             val raw = annotation["rect"] as? Map<*, *> ?: continue
+
             fun coordinate(key: String): Double = (raw[key] as? Number)?.toDouble() ?: Double.NaN
             val css = ScreenshotRect(coordinate("x"), coordinate("y"), coordinate("width"), coordinate("height"))
             if (!css.valid()) throw ScreenshotRefusal("INVALID_CAPTURE_GEOMETRY", "Invalid annotation bounds")

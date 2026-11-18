@@ -17,10 +17,11 @@ not device acceptance or release approval. Read it with the pre-implementation
 | Allowed work | Source branch, fixtures, tests, documentation and development PR |
 | Gates not granted | Main merge, install/remove APK, public release, connection/port/tunnel/VPN/Termux/signing changes, other-app control, consent/STOP/lock bypass, website changes |
 
-Results below describe the implementation working tree and locally executed
-checks. The G0 commit is not the tested implementation commit. The development
-PR must bind final source SHA and CI runs before asserting `SOURCE_COMMITTED` or
-`CI_PASS` for that implementation. No new S24 session, installed APK version,
+The local checks and initial CI history below are explicitly time-bounded.
+The final source SHA, completed CI links and final T01–T14 source readback are
+recorded in [development PR 69](https://github.com/imanipour2/kelpie/pull/69).
+The G0 commit is not the tested implementation commit. A prior run or a written
+fixture does not grant `CI_PASS` to a later source SHA. No new S24 session, installed APK version,
 package inventory or signing certificate was read in this mission.
 
 ## ADR: minimum change inside the existing paths
@@ -327,11 +328,19 @@ Local C++ tests were not the complete CMake/Android/Apple integration build.
   markers override that exclusion. Six ordinary-control variants each allow one
   sort click, while marked private data remains redacted; all 25 DOM groups pass
   locally. The correction requires a new exact-head CI run.
+- Source `962d2dae00164ccc821bd075af1bbe4e36228690` passed every step of
+  [KAI run 44412203647](https://github.com/imanipour2/kelpie/actions/runs/44412203647/job/135183046874):
+  36 Chromium cases, 25 Android DOM script groups, native gateway/generated reader,
+  94 shared units and 664 CLI tests. Lint also passed. The independent Android gate
+  on the earlier `ec4d9b8` source ([run 44410824017](https://github.com/imanipour2/kelpie/actions/runs/44410824017))
+  exposed main-source KtLint layout rules; the follow-up change
+  adjusts Kotlin formatting only, retains all gates and keeps source files below
+  500 lines. The 25 embedded-script fixture groups were rechecked after formatting.
 - Follow-up CI on the exact final source SHA is required. No failing gate is
   bypassed: independent fixture steps continue to collect evidence, while any
   failed step still fails the job. None of these CI results is S24 evidence.
 
-### T01–T14 acceptance matrix
+### Initial T01–T14 source matrix (final CI readback in PR 69)
 
 `PASS` below is restricted to the named source check. Every physical S24 result
 is **BLOCKED**; no source/mock result closes G4. The source evidence uses the

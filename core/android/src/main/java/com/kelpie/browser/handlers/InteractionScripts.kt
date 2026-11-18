@@ -49,8 +49,7 @@ fun selectorActivationScript(selector: String): String {
 }
 
 @Suppress("UNUSED_PARAMETER")
-fun annotationActivationScript(index: Int): String =
-    "({error:'STALE_OBSERVATION',reason:'OBSERVATION_REQUIRED'})"
+fun annotationActivationScript(index: Int): String = "({error:'STALE_OBSERVATION',reason:'OBSERVATION_REQUIRED'})"
 
 fun fillElementScript(
     selector: String,

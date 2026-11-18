@@ -7,8 +7,7 @@ data class ScreenshotRect(
     val width: Double,
     val height: Double,
 ) {
-    fun valid(): Boolean =
-        listOf(x, y, width, height).all { it.isFinite() } && width >= 0 && height >= 0
+    fun valid(): Boolean = listOf(x, y, width, height).all { it.isFinite() } && width >= 0 && height >= 0
 }
 
 data class ScreenshotTransform(
@@ -50,14 +49,22 @@ class ScreenshotRefusal(
 ) : IllegalStateException(message)
 
 /** Native-only gate: this reserved origin is loaded by synthetic instrumentation fixtures. */
-internal fun requireSyntheticScreenshotFixture(qaEnabled: Boolean, nativeUrl: String?) {
+internal fun requireSyntheticScreenshotFixture(
+    qaEnabled: Boolean,
+    nativeUrl: String?,
+) {
     if (!qaEnabled || nativeUrl != "https://kai-fixture.invalid/") {
         throw ScreenshotRefusal("NEEDS_HUMAN", "Real-page image export requires a trusted privacy and frame provider")
     }
 }
 
 /** Budget the peak live allocations, not just the first capture. */
-internal fun requireScreenshotAllocation(width: Int, height: Int, retainedBytes: Long, maxBytes: Long) {
+internal fun requireScreenshotAllocation(
+    width: Int,
+    height: Int,
+    retainedBytes: Long,
+    maxBytes: Long,
+) {
     if (width !in 1..8192 || height !in 1..8192 || retainedBytes < 0 || maxBytes <= 0) {
         throw ScreenshotRefusal("SCREENSHOT_TOO_LARGE", "Invalid bitmap allocation bounds")
     }
