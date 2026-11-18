@@ -496,6 +496,14 @@ fun BrowserScreen(
                     showConnectionStatus = false
                     showPairedClients = true
                 },
+                onManageAgent = if (agentSessionCoordinator != null) {
+                    {
+                        showConnectionStatus = false
+                        showConnectAgent = true
+                    }
+                } else {
+                    null
+                },
                 onDismiss = { showConnectionStatus = false },
             )
         }
