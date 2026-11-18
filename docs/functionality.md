@@ -40,10 +40,21 @@ The in-app **Connect AI agent** sheet distinguishes OFF, PENDING and locally
 authorized states, and offers an in-app STOP when authorized. The persistent
 STOP notification remains mandatory; locking/revocation invalidates grants.
 
-The existing ChatGPT connector currently uses a fixed method enum that **does
-not yet allow these new session verbs**. Updating the Android source does not
-change that client-side schema: a separate reviewed connector update/reconnect
-and live hardware acceptance are prerequisites to claiming one-tap pairing.
+For the simplest owner-run workflow, the installed ChatGPT connector can
+call existing `kelpie_browser_control.capabilities` to record a recent, uniquely
+paired non-local identity in process memory. Kelpie foreground then shows a
+**Connect** shortcut; the owner taps it to open a distinct native approval
+dialog, then taps **Approve**. The native session is tied to exactly that
+verified principal, not generic Android `localhost`, never to an unverified
+request, and is suspended or revoked by existing lock/STOP/process rules.
+If several verified agents are recent, the shortcut fails closed. This local
+path is expected to work with the current browser-control connector method
+schema after genuine bearer pairing, but remains unverified on S24.
+
+The existing ChatGPT connector currently uses a fixed method enum that does
+not yet allow the **remote** `session.request/status/stop` verbs. Updating the
+native source does not change the client-side schema; the remote initiation
+path needs a separately reviewed connector Refresh/reconnect and hardware QA.
 See [owner-session acceptance](qa/EF-OPS-KELPIE-R5-OWNER-SESSION-ENTRY-20261118.md).
 No APK deployment, parity acceptance, main merge or public release is implied.
 
