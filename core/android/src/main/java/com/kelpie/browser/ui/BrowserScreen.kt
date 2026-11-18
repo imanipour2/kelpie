@@ -222,6 +222,7 @@ fun BrowserScreen(
 
             com.kelpie.browser.connect
                 .ConnectControls(compact = true)
+            R5AgentConnectShortcut(agentSessionCoordinator) { showConnectAgent = true }
             if (!captureMoved) {
                 BrowserViewport(
                     tabStore,
