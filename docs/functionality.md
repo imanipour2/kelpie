@@ -29,6 +29,24 @@ handoff UX, process-recreation handling and live device verification remain
 follow-on K1 tasks. Never copy Google account tokens, passwords, OTPs or
 other apps' cookies. Draft only: no installation, merge or public release.
 
+## Android R5 explicit owner-session entry — draft QA, 2026-11-18
+
+The private QA browser now advertises explicit `session.request`, `session.status`
+and `session.stop` operations inside the paired `kelpie_browser_control` MCP
+tool, in addition to its native `kelpie_agent_session` tool. An explicit request
+creates only a PENDING native dialog, and only while Kelpie is foreground,
+focused and unlocked. The human owner alone may approve the prompt on Android.
+The in-app **Connect AI agent** sheet distinguishes OFF, PENDING and locally
+authorized states, and offers an in-app STOP when authorized. The persistent
+STOP notification remains mandatory; locking/revocation invalidates grants.
+
+The existing ChatGPT connector currently uses a fixed method enum that **does
+not yet allow these new session verbs**. Updating the Android source does not
+change that client-side schema: a separate reviewed connector update/reconnect
+and live hardware acceptance are prerequisites to claiming one-tap pairing.
+See [owner-session acceptance](qa/EF-OPS-KELPIE-R5-OWNER-SESSION-ENTRY-20261118.md).
+No APK deployment, parity acceptance, main merge or public release is implied.
+
 ## Android R5 private agent QA — not released
 
 The source-only draft PR #41 adds a separate, explicitly write-capable
