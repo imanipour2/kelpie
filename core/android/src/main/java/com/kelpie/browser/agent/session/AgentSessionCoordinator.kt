@@ -29,6 +29,7 @@ class AgentSessionCoordinator(
     internal val pending = AndroidAgentProcessSession.pending
     internal val active = AndroidAgentProcessSession.active
     internal val observedAgents = R5ObservedAgentClients.registry.observed
+
     /** Keep the visible connection label aligned with the expiry admission gate. */
     fun refreshObservedAgents() {
         R5ObservedAgentClients.registry.refreshExpired()
@@ -172,17 +173,16 @@ class AgentSessionCoordinator(
     fun beginOneTapFromNativeUi(expectedPrincipal: String): Boolean {
         syncLock()
         val observed = R5ObservedAgentClients.registry.soleRecentPrincipal()
-        if (!nativeOneTapConsentAllowed(
+        val permitted =
+            nativeOneTapConsentAllowed(
                 intendedPrincipal = expectedPrincipal,
                 freshUniquePrincipal = observed,
                 lifecycleResumed = activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED),
                 activityVisible = activity.window.decorView.isShown,
                 deviceUnlocked = !deviceLocked(),
                 stopNotificationEnabled = AgentSessionNotification.canNotify(activity),
-            ) || closed
-        ) {
-            return false
-        }
+            )
+        if (closed || !permitted) return false
 
         val pending = AndroidAgentProcessSession.request(expectedPrincipal) ?: return false
         // No second confirmation dialog: the affirmative tap that invoked
@@ -195,7 +195,7 @@ class AgentSessionCoordinator(
         return approved
     }
 
-    /** Only the affirmative native dialog callback invokes this, never HTTP. */
+    /** Called only from an affirmative native UI gesture, never HTTP. */
     fun approveFromNativeUi(promptId: String): Boolean {
         // Compose AlertDialog is a separate focused window. Requiring the
         // Activity's *main* window focus here rejects a genuine dialog tap.
