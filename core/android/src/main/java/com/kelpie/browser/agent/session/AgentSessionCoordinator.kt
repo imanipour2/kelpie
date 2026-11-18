@@ -29,6 +29,11 @@ class AgentSessionCoordinator(
     internal val pending = AndroidAgentProcessSession.pending
     internal val active = AndroidAgentProcessSession.active
     internal val observedAgents = R5ObservedAgentClients.registry.observed
+    /** Keep the visible connection label aligned with the expiry admission gate. */
+    fun refreshObservedAgents() {
+        R5ObservedAgentClients.registry.refreshExpired()
+    }
+
     private var closed = false
 
     private val screenOffReceiver =
