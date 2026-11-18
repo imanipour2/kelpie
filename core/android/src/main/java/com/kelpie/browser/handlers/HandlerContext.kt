@@ -339,8 +339,13 @@ class HandlerContext(
         resolution: ScreenshotResolution = ScreenshotResolution.NATIVE,
     ): Map<String, Any?>? {
         if (motherPrivateAgentActive?.invoke() == true) {
-            if (format != "png" || resolution != ScreenshotResolution.NATIVE) return null
-            return motherPrivateScreenshot?.invoke()
+            if (format != "png") return null
+            val verifiedFrame = motherPrivateScreenshot?.invoke() ?: return null
+            if (resolution == ScreenshotResolution.NATIVE) return verifiedFrame
+            val viewport = runCatching { viewportMetrics() }.getOrNull() ?: return null
+            return withContext(kotlinx.coroutines.Dispatchers.Default) {
+                R5MotherMcpViewportImage.viewport(verifiedFrame, viewport)
+            }
         }
         if (privateCaptureRestricted?.invoke() == true) return null
         val wv = webView ?: return null
