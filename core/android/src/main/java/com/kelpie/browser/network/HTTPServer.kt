@@ -349,7 +349,20 @@ class HTTPServer(
         }
         val (status, result) =
             kotlinx.coroutines.withContext(AuthenticatedClientContext.fromVerifiedDecision(principal)) {
-                router.handle(method, body)
+                val privateAtIngress =
+                    router.motherR5BackgroundQa &&
+                        router.handlerContext?.motherPrivateAgentActive?.invoke() == true
+                val outcome = router.handle(method, body)
+                val privateAtEgress =
+                    router.motherR5BackgroundQa &&
+                        router.handlerContext?.motherPrivateAgentActive?.invoke() == true
+                if ((privateAtIngress || privateAtEgress) &&
+                    router.handlerContext?.motherGatewayAuthorization?.invoke() != true
+                ) {
+                    403 to errorResponse("SESSION_REVOKED", "Native private WebView approval ended before delivery")
+                } else {
+                    outcome
+                }
             }
         // Late STOP/lock/re-approval can happen after an await but before
         // Ktor begins writing the response. The exact request generation must
