@@ -3,7 +3,6 @@ package com.kelpie.browser.network
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
-import java.net.InetSocketAddress
 import java.net.Proxy
 import java.net.URL
 
