@@ -124,6 +124,23 @@ class R5PrivateMcpContractTest {
     }
 
     @Test
+    fun explicitBrowserControlSessionVerbsAreTheOnlyNewGrantExemptPaths() {
+        for (method in listOf("session.request", "session.status", "session.stop")) {
+            val call = wrappedBrowserCall(method)
+            assertTrue(R5PrivateMcpContract.isGrantExempt(call))
+            assertFalse(R5AgentDeliveryGuard.requiresGrant("mcp", call))
+            assertNull(R5PrivateMcpContract.expectedGeneration(call))
+            assertFalse(R5PrivateMcpContract.isGrantExempt(wrappedBrowserCall(method, version = 2)))
+            assertFalse(R5PrivateMcpContract.isGrantExempt(wrappedBrowserCall(method, name = R5PrivateMcpContract.ACTION_TOOL)))
+        }
+        for (method in listOf("session.approve", "session.grant", "agent-session-request", "tabs.new", "tab.click")) {
+            val call = wrappedBrowserCall(method)
+            assertFalse(R5PrivateMcpContract.isGrantExempt(call))
+            assertTrue(R5AgentDeliveryGuard.requiresGrant("mcp", call))
+        }
+    }
+
+    @Test
     fun nativeSessionMethodsRemainPairedClientOnlyInTheRouter() {
         for (method in listOf("request", "status", "stop")) {
             val envelope =

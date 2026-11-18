@@ -1,6 +1,7 @@
 package com.kelpie.browser.agent.execution
 
 import com.kelpie.browser.agent.session.AndroidAgentProcessSession
+import com.kelpie.browser.agent.session.R5ObservedAgentClients
 import com.kelpie.browser.agent.session.SessionConsentCore
 import com.kelpie.browser.network.Router
 import com.kelpie.browser.network.verifiedClientId
@@ -88,7 +89,17 @@ internal class R5PrivateMcpBridge(
                                 "method" to
                                     mapOf(
                                         "type" to "string",
-                                        "enum" to (listOf("capabilities", "documentation", "tabs.list", "tab.snapshot", "tab.screenshot") + R5PrivateMcpActions.methods),
+                                        "enum" to
+                                            listOf(
+                                                "capabilities",
+                                                "documentation",
+                                                "session.request",
+                                                "session.status",
+                                                "session.stop",
+                                                "tabs.list",
+                                                "tab.snapshot",
+                                                "tab.screenshot",
+                                            ).plus(R5PrivateMcpActions.methods),
                                     ),
                                 "tabId" to mapOf("type" to "string"),
                                 "params" to mapOf("type" to "object"),
@@ -154,6 +165,18 @@ internal class R5PrivateMcpBridge(
             return rpcError(id, -32602, "Unsupported browser tool/version")
         }
         val action = arguments["method"] as? String ?: return rpcError(id, -32602, "Browser method required")
+        // Explicit verbs reuse the paired browser-control transport.
+        // These routes may request a native prompt but never grant approval.
+        if (!actionTool && action in setOf("session.request", "session.status", "session.stop")) {
+            val route =
+                when (action) {
+                    "session.request" -> "agent-session-request"
+                    "session.status" -> "agent-session-status"
+                    else -> "agent-session-stop"
+                }
+            val (status, outcome) = router.handle(route, emptyMap(), fromGateway = true)
+            return toolResult(id, outcome, status != 200 || outcome["success"] != true)
+        }
         // The ChatGPT connector currently surfaces only BROWSER_TOOL. Reuse the
         // exact same native admission/replay path for its advertised write methods.
         val controlMutation = name == R5PrivateMcpContract.BROWSER_TOOL && action in R5PrivateMcpActions.methods
@@ -167,6 +190,9 @@ internal class R5PrivateMcpBridge(
             )
         }
         if (!actionTool && action == "capabilities") {
+            // Metadata reads never authorize browser access. Record only a
+            // recent uniquely paired principal for explicit on-device setup.
+            R5ObservedAgentClients.registry.noteVerified(principal)
             val active = AndroidAgentProcessSession.snapshot() as? SessionConsentCore.State.Active
             val owned = active != null && active.principalId == principal && !active.locked && browserReady()
             return toolResult(
@@ -175,7 +201,15 @@ internal class R5PrivateMcpBridge(
                     "version" to 1,
                     "nativeSession" to if (owned) "READY" else "OWNER_CONSENT_OR_RENDERER_REQUIRED",
                     "consentGeneration" to if (owned) active?.generation else null,
-                    "methods" to listOf("tabs.list", "tab.snapshot", "tab.screenshot"),
+                    "methods" to
+                        listOf(
+                            "session.request",
+                            "session.status",
+                            "session.stop",
+                            "tabs.list",
+                            "tab.snapshot",
+                            "tab.screenshot",
+                        ),
                     "mutationToolsAvailable" to owned,
                     "mutationTool" to R5PrivateMcpContract.ACTION_TOOL,
                 ),

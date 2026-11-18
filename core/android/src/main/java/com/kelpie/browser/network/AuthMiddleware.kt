@@ -70,8 +70,21 @@ class AuthMiddleware(
         val trustedClient = store.trustedComputers.clientId(req.sourceAddress, extractBearer(req.headers) ?: "")
         val computerRejection = if (trustedClient != null) trustedRequestReject(req) else null
         val computerClient = trustedClient.takeIf { computerRejection == null }
+        // R5 agent commands must never inherit a broad "localhost" principal.
+        // Android loopback ports can be reached by other apps on the same device.
+        // Keep local metadata discovery available while preferring a uniquely
+        // paired bearer identity for this private QA surface.
+        val privateAgentPath =
+            r5PrivateMcpQa &&
+                (req.path in setOf("/mcp", "/v1/mcp") || req.path.startsWith("/v1/agent-"))
+        val explicitAgentClient =
+            if (privateAgentPath && computerClient == "localhost") {
+                extractBearer(req.headers)?.let(store::validateBearer) ?: verifiedAccountClientId
+            } else {
+                null
+            }
         val clientId =
-            computerClient ?: run {
+            explicitAgentClient ?: computerClient ?: run {
                 val bearer = extractBearer(req.headers) ?: return computerRejection ?: AuthDecision.Reject(401, "UNAUTHORIZED", "Authentication required")
                 store.validateBearer(bearer) ?: verifiedAccountClientId
                     ?: return AuthDecision.Reject(401, "UNAUTHORIZED", "Invalid bearer token")

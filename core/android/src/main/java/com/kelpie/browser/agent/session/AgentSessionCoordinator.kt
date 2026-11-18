@@ -28,6 +28,7 @@ class AgentSessionCoordinator(
     var runtimeReady: () -> Boolean = { false }
     internal val pending = AndroidAgentProcessSession.pending
     internal val active = AndroidAgentProcessSession.active
+    internal val observedAgents = R5ObservedAgentClients.registry.observed
     private var closed = false
 
     private val screenOffReceiver =
@@ -58,8 +59,8 @@ class AgentSessionCoordinator(
     fun register(router: Router) {
         router.register("agent-session-request") { _ ->
             val principal =
-                verifiedClientId()
-                    ?: return@register errorResponse("PERMISSION_REQUIRED", "Authenticated paired client required")
+                verifiedClientId()?.takeIf(R5AgentPrincipalPolicy::eligible)
+                    ?: return@register errorResponse("PERMISSION_REQUIRED", "Unique authenticated paired client required")
             withContext(Dispatchers.Main.immediate) {
                 syncLock()
                 if (closed ||
@@ -84,8 +85,8 @@ class AgentSessionCoordinator(
 
         router.register("agent-session-status") { _ ->
             val principal =
-                verifiedClientId()
-                    ?: return@register errorResponse("PERMISSION_REQUIRED", "Authenticated paired client required")
+                verifiedClientId()?.takeIf(R5AgentPrincipalPolicy::eligible)
+                    ?: return@register errorResponse("PERMISSION_REQUIRED", "Unique authenticated paired client required")
             withContext(Dispatchers.Main.immediate) {
                 syncLock()
                 when (val state = AndroidAgentProcessSession.snapshot()) {
@@ -116,8 +117,8 @@ class AgentSessionCoordinator(
 
         router.register("agent-session-stop") { _ ->
             val principal =
-                verifiedClientId()
-                    ?: return@register errorResponse("PERMISSION_REQUIRED", "Authenticated paired client required")
+                verifiedClientId()?.takeIf(R5AgentPrincipalPolicy::eligible)
+                    ?: return@register errorResponse("PERMISSION_REQUIRED", "Unique authenticated paired client required")
             withContext(Dispatchers.Main.immediate) {
                 val current = AndroidAgentProcessSession.snapshot()
                 val owned =
@@ -134,6 +135,24 @@ class AgentSessionCoordinator(
                 }
             }
         }
+    }
+
+    /**
+     * Called only by an explicit tap in the connection sheet. A recent, unique
+     * bearer-verified client is required; localhost and multiple clients fail closed.
+     * The separate on-device confirmation dialog is still mandatory to grant.
+     */
+    fun requestFromNativeUi(): Boolean {
+        syncLock()
+        if (closed ||
+            deviceLocked() ||
+            !activity.window.decorView.isShown ||
+            !activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        ) {
+            return false
+        }
+        val principal = R5ObservedAgentClients.registry.soleRecentPrincipal() ?: return false
+        return AndroidAgentProcessSession.request(principal) != null
     }
 
     /** Only the affirmative native dialog callback invokes this, never HTTP. */
@@ -166,11 +185,13 @@ class AgentSessionCoordinator(
 
     fun denyFromNativeUi() {
         AndroidAgentProcessSession.stop()
+        R5ObservedAgentClients.registry.clear()
         AgentSessionNotification.hide(activity)
     }
 
     fun stopFromNativeUi() {
         AndroidAgentProcessSession.stop()
+        R5ObservedAgentClients.registry.clear()
         AgentSessionNotification.hide(activity)
     }
 
