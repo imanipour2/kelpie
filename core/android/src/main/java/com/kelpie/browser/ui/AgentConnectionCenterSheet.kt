@@ -66,6 +66,7 @@ internal fun AgentConnectionCenterSheet(
         Text("The browser stays on this phone. Pairing and local consent are separate steps.")
         Text(
             when {
+                session?.locked == true -> "Native session: SUSPENDED (device locked)"
                 session != null -> "Native session: approved on this device; remote agent not yet verified"
                 pending != null -> "Native session: awaiting your on-device approval"
                 else -> "Native session: OFF; waiting for an authenticated agent request"
