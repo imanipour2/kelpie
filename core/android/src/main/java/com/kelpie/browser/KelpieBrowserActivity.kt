@@ -32,6 +32,8 @@ open class KelpieBrowserActivity : ComponentActivity() {
 
     protected open fun enableR5BackgroundAgentQa(): Boolean = false
 
+    protected open fun useMotherMcpWithR5Renderer(): Boolean = false
+
     /** Private Android R5 beta only. Embedded consumers and production builds are unchanged. */
     protected open fun requireR5FirstEntryConsent(): Boolean = false
 
@@ -79,6 +81,7 @@ open class KelpieBrowserActivity : ComponentActivity() {
                 privateCaptureQaEnabled = enablePrivateCaptureQa(),
                 agentConsentQaEnabled = enableAgentConsentQa(),
                 agentBackgroundQaEnabled = enableR5BackgroundAgentQa(),
+                motherMcpR5RendererQaEnabled = useMotherMcpWithR5Renderer(),
             )
         setContentView(browser.view())
     }
