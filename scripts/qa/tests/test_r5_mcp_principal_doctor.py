@@ -64,6 +64,29 @@ class DoctorContractTests(unittest.TestCase):
         self.assertEqual(doctor.catalog_contract({"result": {"tools": base}}),
                          "NATIVE_TOOL_CATALOG_MISMATCH")
 
+    def test_active_status_is_not_renderer_readiness(self):
+        self.assertEqual(doctor.renderer_class({
+            "success": True, "status": "ACTIVE_AGENT_SESSION",
+            "browserOperationsEnabled": True}), "ENABLED")
+        self.assertEqual(doctor.renderer_class({
+            "success": True, "status": "ACTIVE_AGENT_SESSION",
+            "browserOperationsEnabled": False}), "DISABLED")
+        self.assertEqual(doctor.renderer_class({
+            "success": True, "status": "ACTIVE_AGENT_SESSION"}), "UNKNOWN")
+        self.assertEqual(doctor.renderer_class({
+            "success": True, "status": "OFF"}), "NOT_EVALUABLE")
+
+    def test_remote_metadata_readiness_does_not_print_generation(self):
+        self.assertEqual(doctor.capabilities_class({
+            "nativeSession": "READY", "consentGeneration": "private-secret-generation"}),
+            "READY_GENERATION_PRESENT")
+        self.assertEqual(doctor.capabilities_class({
+            "nativeSession": "OWNER_CONSENT_OR_RENDERER_REQUIRED",
+            "consentGeneration": None}), "NOT_READY")
+        self.assertEqual(doctor.capabilities_class({
+            "nativeSession": "READY", "consentGeneration": None}),
+            "UNEXPECTED_OR_MALFORMED")
+
     def test_main_prints_only_redacted_classes(self):
         with tempfile.TemporaryDirectory() as work:
             path = pathlib.Path(work) / "auth.txt"
