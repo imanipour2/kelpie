@@ -7,9 +7,11 @@ class MainActivity : KelpieBrowserActivity() {
 
     override fun enableR5BackgroundAgentQa(): Boolean = com.unlikeotherai.kelpie.app.BuildConfig.R5_BACKGROUND_AGENT_QA_ENABLED
 
+    override fun useMotherMcpWithR5Renderer(): Boolean = com.unlikeotherai.kelpie.app.BuildConfig.R5_MOTHER_MCP_BACKGROUND_QA_ENABLED
+
     override fun requireR5FirstEntryConsent(): Boolean =
         com.unlikeotherai.kelpie.app.BuildConfig.R5_BACKGROUND_AGENT_QA_ENABLED &&
-            com.unlikeotherai.kelpie.app.BuildConfig.LOCAL_HTTP_PORT == 18461
+            com.unlikeotherai.kelpie.app.BuildConfig.LOCAL_HTTP_PORT in setOf(18461, 18462, 18463)
 
     private val updates get() = (application as KelpieApp).updates
 

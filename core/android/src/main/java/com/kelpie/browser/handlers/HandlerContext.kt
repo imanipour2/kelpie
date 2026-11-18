@@ -42,6 +42,13 @@ class HandlerContext(
 
     /** QA-only: refuse ordinary remote commands while one WebView has private ownership. */
     var privateCaptureRestricted: (() -> Boolean)? = null
+
+    /** R5 owner consent is required to read a privately hosted owned WebView. */
+    var motherPrivateAgentActive: (() -> Boolean)? = null
+    var motherGatewayAuthorization: (suspend () -> Boolean)? = null
+
+    /** Null means deny private capture; never draw the suspended activity as a fallback. */
+    var motherPrivateScreenshot: (suspend () -> Map<String, Any?>?)? = null
     var remoteDocumentGuard: (() -> Boolean)? = null
     var remoteNavigationStart: (() -> Boolean)? = null
     var remoteNavigationReadGuard: (() -> Boolean)? = null
@@ -331,6 +338,15 @@ class HandlerContext(
         quality: Int = 80,
         resolution: ScreenshotResolution = ScreenshotResolution.NATIVE,
     ): Map<String, Any?>? {
+        if (motherPrivateAgentActive?.invoke() == true) {
+            if (format != "png") return null
+            val verifiedFrame = motherPrivateScreenshot?.invoke() ?: return null
+            if (resolution == ScreenshotResolution.NATIVE) return verifiedFrame
+            val viewport = runCatching { viewportMetrics() }.getOrNull() ?: return null
+            return withContext(kotlinx.coroutines.Dispatchers.Default) {
+                R5MotherMcpViewportImage.viewport(verifiedFrame, viewport)
+            }
+        }
         if (privateCaptureRestricted?.invoke() == true) return null
         val wv = webView ?: return null
         val normalizedFormat = if (format == "jpeg") "jpeg" else "png"

@@ -6,8 +6,8 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import com.kelpie.browser.agent.session.AgentSessionNotification
-import com.kelpie.browser.agent.session.R5BackgroundOptInStore
 import com.kelpie.browser.agent.session.AndroidAgentProcessSession
+import com.kelpie.browser.agent.session.R5BackgroundOptInStore
 import com.kelpie.browser.agent.session.R5ObservedAgentClients
 import com.kelpie.browser.agent.session.R5StartupGateState
 import com.kelpie.browser.agent.session.shouldPromptForR5BackgroundOptIn
@@ -31,6 +31,8 @@ open class KelpieBrowserActivity : ComponentActivity() {
     protected open fun enableAgentConsentQa(): Boolean = false
 
     protected open fun enableR5BackgroundAgentQa(): Boolean = false
+
+    protected open fun useMotherMcpWithR5Renderer(): Boolean = false
 
     /** Private Android R5 beta only. Embedded consumers and production builds are unchanged. */
     protected open fun requireR5FirstEntryConsent(): Boolean = false
@@ -79,6 +81,7 @@ open class KelpieBrowserActivity : ComponentActivity() {
                 privateCaptureQaEnabled = enablePrivateCaptureQa(),
                 agentConsentQaEnabled = enableAgentConsentQa(),
                 agentBackgroundQaEnabled = enableR5BackgroundAgentQa(),
+                motherMcpR5RendererQaEnabled = useMotherMcpWithR5Renderer(),
             )
         setContentView(browser.view())
     }

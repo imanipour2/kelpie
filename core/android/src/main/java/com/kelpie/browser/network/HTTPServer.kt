@@ -88,7 +88,7 @@ class HTTPServer(
         private set
 
     fun start() {
-        val middleware = AccountPairingAuthorization(pairingStore, r5PrivateMcpQa = router.backgroundAgentQa)
+        val middleware = AccountPairingAuthorization(pairingStore, r5PrivateMcpQa = router.backgroundAgentQa || router.motherR5BackgroundQa)
         val pairEndpoints =
             PairEndpoints(pairingStore) { onPendingPairChanged() }
 
@@ -343,10 +343,27 @@ class HTTPServer(
         // Metadata only: never retain principal, token, MCP args, origin, tab or URL.
         if (method == "mcp" && principal.clientId != "localhost") {
             McpActivityEvidence.noteAuthenticatedMcpRequest()
+            if (router.motherR5BackgroundQa) {
+                com.kelpie.browser.agent.session.R5ObservedAgentClients.registry
+                    .noteVerified(principal.clientId)
+            }
         }
         val (status, result) =
             kotlinx.coroutines.withContext(AuthenticatedClientContext.fromVerifiedDecision(principal)) {
-                router.handle(method, body)
+                val privateAtIngress =
+                    router.motherR5BackgroundQa &&
+                        router.handlerContext?.motherPrivateAgentActive?.invoke() == true
+                val outcome = router.handle(method, body)
+                val privateAtEgress =
+                    router.motherR5BackgroundQa &&
+                        router.handlerContext?.motherPrivateAgentActive?.invoke() == true
+                if ((privateAtIngress || privateAtEgress) &&
+                    router.handlerContext?.motherGatewayAuthorization?.invoke() != true
+                ) {
+                    403 to errorResponse("SESSION_REVOKED", "Native private WebView approval ended before delivery")
+                } else {
+                    outcome
+                }
             }
         // Late STOP/lock/re-approval can happen after an await but before
         // Ktor begins writing the response. The exact request generation must

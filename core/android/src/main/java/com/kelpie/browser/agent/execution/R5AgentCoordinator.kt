@@ -49,6 +49,7 @@ import java.util.UUID
 class R5AgentCoordinator(
     private val activity: ComponentActivity,
     private val ctx: HandlerContext,
+    private val deferPrivateUntilBackground: Boolean = false,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val transferMutex = Mutex()
@@ -151,7 +152,9 @@ class R5AgentCoordinator(
                     currentGeneration = state.generation
                     ownership = WebViewOwnershipState()
                     runtime = newRuntime()
-                    scope.launch { activateRenderer(state) }
+                    if (!deferPrivateUntilBackground || !activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                        scope.launch { activateRenderer(state) }
+                    }
                 } else if (ownership.status() == WebViewOwnershipState.Host.SUSPENDED) {
                     // Unlock updates safetyEpoch but does NOT create a new generation.
                     // Activity may already be RESUMED, so onResume will not re-fire.
@@ -163,8 +166,23 @@ class R5AgentCoordinator(
 
     fun isReady(): Boolean = !closed && ready
 
-    fun registerPrivateMcp(router: Router) {
-        R5PrivateMcpBridge(::isReady).register(router)
+    /** Native R5 compositor stays behind standard mother MCP; no private /mcp overlay. */
+    fun attachMotherMcpScreenshot() {
+        R5MotherMcpCaptureAdapter(
+            activity = activity,
+            ctx = ctx,
+            renderer = renderer,
+            authorized = {
+                val principal = verifiedClientId()
+                val active = consent.snapshot() as? SessionConsentCore.State.Active
+                active != null &&
+                    ready &&
+                    canUse(principal, active.generation, active) &&
+                    principal != "localhost"
+            },
+            privateOwned = { ready && ownership.status() == WebViewOwnershipState.Host.PRIVATE },
+            sameTab = { id -> currentTabId == id },
+        ).attach()
     }
 
     /** A single authenticated command ingress for HTTP and validated MCP envelopes. */
@@ -310,17 +328,7 @@ class R5AgentCoordinator(
         client: String?,
         expectedGeneration: String?,
         active: SessionConsentCore.State.Active?,
-    ): Boolean =
-        !closed &&
-            client != null &&
-            expectedGeneration != null &&
-            active != null &&
-            !active.locked &&
-            active.principalId == client &&
-            active.generation == expectedGeneration &&
-            activity.getSystemService(PowerManager::class.java).isInteractive &&
-            !activity.getSystemService(KeyguardManager::class.java).isDeviceLocked &&
-            AgentSessionNotification.canNotify(activity)
+    ): Boolean = R5AgentAuthorization.permits(activity, client, expectedGeneration, active, closed)
 
     /** Called from Activity lifecycle, not from a remote JSON argument. */
     fun onPause() {

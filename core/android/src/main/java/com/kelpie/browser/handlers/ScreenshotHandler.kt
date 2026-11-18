@@ -88,6 +88,9 @@ class ScreenshotHandler(
 
     private suspend fun screenshot(body: Map<String, Any?>): Map<String, Any?> {
         val fullPage = body["fullPage"] as? Boolean ?: false
+        if (fullPage && ctx.motherPrivateAgentActive?.invoke() == true) {
+            return errorResponse("SCREENSHOT_FAILED", "Full-page capture is unavailable for an offscreen owned WebView")
+        }
         val format = body["format"] as? String ?: "png"
         val quality = (body["quality"] as? Int) ?: 80
         val resolution =
