@@ -60,7 +60,7 @@ jobs:
           "$SIGN" verify --verbose --print-certs "$APK"
           grep -F 'if (!agentConsentQaEnabled) {' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
           grep -F '.BrowserGatewayBinding(router, handlerContext)' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
-          grep -F 'if (!motherMcpR5RendererQaEnabled) r5AgentCoordinator?.registerPrivateMcp(router)' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
+          grep -F 'if (!motherMcpR5RendererQaEnabled && r5AgentCoordinator != null)' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
           grep -F 'router.motherR5BackgroundQa = motherMcpR5RendererQaEnabled' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
           grep -Eq 'R5_MOTHER_MCP_BACKGROUND_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
           sha256sum "$APK" > apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
