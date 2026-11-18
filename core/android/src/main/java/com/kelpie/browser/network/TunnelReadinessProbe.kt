@@ -35,7 +35,7 @@ internal object TunnelReadinessProbe {
     private fun getStatus(path: String): Int? {
         val url = URL("http://127.0.0.1:$DIAGNOSTIC_PORT$path")
         val connection =
-            (url.openConnection(Proxy(Proxy.Type.DIRECT, InetSocketAddress("127.0.0.1", DIAGNOSTIC_PORT))) as HttpURLConnection)
+            (url.openConnection(Proxy.NO_PROXY) as HttpURLConnection)
         return try {
             connection.requestMethod = "GET"
             connection.instanceFollowRedirects = false
