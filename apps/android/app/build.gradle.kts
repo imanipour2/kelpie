@@ -20,8 +20,10 @@ val r5AgentQa = providers.gradleProperty("kelpieR5BackgroundAgentQaProfile").orN
 val r5PrivateBetaQa = providers.gradleProperty("kelpieR5PrivateBetaQaProfile").orNull == "true"
 // Isolated upstream-connection compatibility probe; does not replace the R5 beta.
 val r5MotherConnectionQa = providers.gradleProperty("kelpieR5MotherConnectionQaProfile").orNull == "true"
-val anyIsolatedQa = anyP4Qa || r5SourceQa || r5AgentQa || r5PrivateBetaQa || r5MotherConnectionQa
-require(listOf(parallelP4Qa, existingP4Qa, r5SourceQa, r5AgentQa, r5PrivateBetaQa, r5MotherConnectionQa).count { it } <= 1) {
+// Side-by-side QA when GitHub debug signer differs from the already-paired mother APK.
+val r5MotherNextQa = providers.gradleProperty("kelpieR5MotherNextQaProfile").orNull == "true"
+val anyIsolatedQa = anyP4Qa || r5SourceQa || r5AgentQa || r5PrivateBetaQa || r5MotherConnectionQa || r5MotherNextQa
+require(listOf(parallelP4Qa, existingP4Qa, r5SourceQa, r5AgentQa, r5PrivateBetaQa, r5MotherConnectionQa, r5MotherNextQa).count { it } <= 1) {
     "Isolated Android QA profiles are mutually exclusive"
 }
 
@@ -54,6 +56,9 @@ android {
         } else if (r5MotherConnectionQa) {
             versionCode = 39
             versionName = "0.2.19-r5-mother-background-qa"
+        } else if (r5MotherNextQa) {
+            versionCode = 39
+            versionName = "0.2.19-r5-mother-background-sidecar-qa"
         }
         buildConfigField("int", "LOCAL_HTTP_PORT", "8420")
         buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")
@@ -67,7 +72,7 @@ android {
         getByName("debug") {
             if (anyP4Qa) {
                 manifest.srcFile("src/privateCaptureQa/AndroidManifest.xml")
-            } else if (r5SourceQa || r5AgentQa || r5PrivateBetaQa || r5MotherConnectionQa) {
+            } else if (r5SourceQa || r5AgentQa || r5PrivateBetaQa || r5MotherConnectionQa || r5MotherNextQa) {
                 manifest.srcFile("src/r5SourceQa/AndroidManifest.xml")
             }
         }
@@ -113,6 +118,14 @@ android {
                 // The separate P4/R5 capture and agent branches remain intact.
                 applicationIdSuffix = ".r5motherverify"
                 buildConfigField("int", "LOCAL_HTTP_PORT", "18462")
+                buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")
+                buildConfigField("boolean", "R5_NATIVE_CONSENT_QA_ENABLED", "true")
+                buildConfigField("boolean", "R5_BACKGROUND_AGENT_QA_ENABLED", "true")
+                buildConfigField("boolean", "R5_MOTHER_MCP_BACKGROUND_QA_ENABLED", "true")
+            } else if (r5MotherNextQa) {
+                // Signer-safe parallel install; old app data and active tunnel stay intact.
+                applicationIdSuffix = ".r5mothernextverify"
+                buildConfigField("int", "LOCAL_HTTP_PORT", "18463")
                 buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")
                 buildConfigField("boolean", "R5_NATIVE_CONSENT_QA_ENABLED", "true")
                 buildConfigField("boolean", "R5_BACKGROUND_AGENT_QA_ENABLED", "true")
