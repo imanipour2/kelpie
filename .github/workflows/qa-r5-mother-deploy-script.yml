@@ -1,0 +1,52 @@
+name: QA S24 Mother Deployment Script (No Device / No Install)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/qa/kelpie-s24-mother-deploy.ps1'
+      - '.github/workflows/qa-r5-mother-deploy-script.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  powershell-parse-and-gates:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6.0.3
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: PowerShell syntax, flow and safety gate review
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $path = 'scripts/qa/kelpie-s24-mother-deploy.ps1'
+          $tokens = $null
+          $parseErrors = $null
+          $ast = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path), [ref]$tokens, [ref]$parseErrors)
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | ForEach-Object { Write-Error $_ }
+            throw 'PowerShell deployment script must parse without errors.'
+          }
+          $source = Get-Content -LiteralPath $path -Raw
+          foreach ($needle in @(
+            "com.kelpie.browser.r5motherverify",
+            "com.kelpie.browser.r5betaverify",
+            "Verify-Apk",
+            "VerifiedApk",
+            "new_pairing_verified",
+            "remote_tabs_and_screenshot_pass",
+            "background_features_pass",
+            "physical_25_cycles_pass",
+            "owner_approves_old_package_deletion",
+            "Read-Host",
+            "adb"
+          )) {
+            if (-not $source.Contains($needle)) { throw "Missing expected acceptance or provenance marker: $needle" }
+          }
+          if ($source -match '(?im)^\s*(?:(?:&\s*)?adb\s+uninstall|Remove-Item\s+-Recurse)') {
+            throw 'Disallowed unconditional removal detected.'
+          }
+          Write-Host 'PASS: syntax parsed, manual owner acceptance and essential gates remain present.'
