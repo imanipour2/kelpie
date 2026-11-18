@@ -66,7 +66,7 @@ android {
         getByName("debug") {
             if (anyP4Qa) {
                 manifest.srcFile("src/privateCaptureQa/AndroidManifest.xml")
-            } else if (r5SourceQa || r5AgentQa || r5PrivateBetaQa || r5MotherConnectionQa) {
+            } else if (r5SourceQa || r5AgentQa || r5PrivateBetaQa) {
                 manifest.srcFile("src/r5SourceQa/AndroidManifest.xml")
             }
         }
