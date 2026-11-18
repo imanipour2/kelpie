@@ -1,6 +1,7 @@
 package com.kelpie.browser.agent.execution
 
 import com.kelpie.browser.agent.session.AndroidAgentProcessSession
+import com.kelpie.browser.agent.session.R5ObservedAgentClients
 import com.kelpie.browser.agent.session.SessionConsentCore
 import com.kelpie.browser.network.Router
 import com.kelpie.browser.network.verifiedClientId
@@ -189,6 +190,9 @@ internal class R5PrivateMcpBridge(
             )
         }
         if (!actionTool && action == "capabilities") {
+            // Metadata reads never authorize browser access. Record only a
+            // recent uniquely paired principal for explicit on-device setup.
+            R5ObservedAgentClients.registry.noteVerified(principal)
             val active = AndroidAgentProcessSession.snapshot() as? SessionConsentCore.State.Active
             val owned = active != null && active.principalId == principal && !active.locked && browserReady()
             return toolResult(
