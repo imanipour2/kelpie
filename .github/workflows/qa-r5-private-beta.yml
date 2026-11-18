@@ -79,7 +79,7 @@ jobs:
           grep -Eq 'PRIVATE_CAPTURE_QA_ENABLED[[:space:]]*=[[:space:]]*false;' "$APP"
           grep -Eq 'R5_NATIVE_CONSENT_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
           "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.browser.r5betaverify'"
-          "$AAPT" dump badging "$APK" | grep -F "versionCode='34' versionName='0.2.14-r5-private-beta-qa'"
+          "$AAPT" dump badging "$APK" | grep -F "versionCode='35' versionName='0.2.15-r5-easyconnect-qa'"
           "$SIGN" verify --verbose --print-certs "$APK"
           ! "$AAPT" dump permissions "$APK" | grep -F 'android.permission.RECORD_AUDIO'
           native_count=0
@@ -104,8 +104,8 @@ jobs:
           {
             echo "source_commit=$(git rev-parse HEAD)"
             echo "package=com.kelpie.browser.r5betaverify"
-            echo "version=0.2.14-r5-private-beta-qa"
-            echo "versionCode=34"
+            echo "version=0.2.15-r5-easyconnect-qa"
+            echo "versionCode=35"
             echo "port=18461"
             echo "agent_routes=OWNER_GATED_R5_PRIVATE_BETA_TAB_OPERATIONS"
             echo "signature=debug-only"
