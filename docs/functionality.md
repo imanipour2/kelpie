@@ -950,3 +950,39 @@ startup-choice improvement does NOT turn on its private background renderer,
 does NOT fix blank gray background screenshots, and has not been installed
 or verified on the owner's phone. Retaining upstream standard MCP without
 overriding it with `R5PrivateMcpBridge` remains a separate integration task.
+
+
+### Native R5 renderer behind standard mother MCP (private Android QA only)
+
+The owner-directed `r5motherverify` QA app v0.2.19 (versionCode 39, same port
+18462) enables native first-entry background opt-in and one process-local
+owner-consented agent session. Existing mother `BrowserGatewayBinding`,
+standard `/mcp`, Ed25519 pairing and the same Termux outbound tunnel remain
+in place; `R5PrivateMcpBridge` is **not** registered over them. Only one
+recently verified non-localhost agent can be approved by an affirmative native
+tap, and native STOP, lock suspension, process death and pairing revocation
+retain their distinct meanings.
+
+The real Kelpie WebView remains in the visible host until the Activity pauses.
+When a valid process session exists, HOME initiates the native VirtualDisplay
+transfer. An authenticated call to the existing `tab.screenshot` receives a
+nonce-verified ImageReader PNG only from the transferred WebView. If transfer,
+principal, STOP notification, fresh pixels or device state is invalid, the
+screenshot operation **fails**, rather than returning the uniform gray
+`WebView.draw(Canvas)` bitmap previously observed on S24. Full-page offscreen
+screenshot is not supported in this QA mode. Standard browsing through mother
+MCP remains gated by the same owner-approved principal while WebView ownership
+is private, and authority is rechecked before result delivery.
+
+The device-local **Connection Status** screen uses colon-delimited labels,
+weight hierarchy, green ✓ for verified local success, red × for proven local
+failures, and neutral ? for missing or stale evidence. Color is never the
+only indication. It displays actual owner process consent separately from
+local tunnel readiness and never labels unproven ChatGPT remote control as
+connected. Owners can open native **Manage AI agent approval** from this panel.
+
+Source/CI are not proof of on-device behavior. This feature must not replace
+the installed QA APK, decommission the former beta, or ship publicly until
+fresh background screenshots, STOP, lock, reboot/network and 25-cycle physical
+S24 acceptance pass, along with Android/iOS parity or approved exception.
+Details: [EF-OPS-KELPIE-MOTHER-R5-RENDERER-AND-STATUS-20261118](qa/EF-OPS-KELPIE-MOTHER-R5-RENDERER-AND-STATUS-20261118.md).
