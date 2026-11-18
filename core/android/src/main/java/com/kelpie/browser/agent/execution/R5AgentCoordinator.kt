@@ -49,6 +49,7 @@ import java.util.UUID
 class R5AgentCoordinator(
     private val activity: ComponentActivity,
     private val ctx: HandlerContext,
+    private val deferPrivateUntilBackground: Boolean = false,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val transferMutex = Mutex()
@@ -151,7 +152,9 @@ class R5AgentCoordinator(
                     currentGeneration = state.generation
                     ownership = WebViewOwnershipState()
                     runtime = newRuntime()
-                    scope.launch { activateRenderer(state) }
+                    if (!deferPrivateUntilBackground || !activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                        scope.launch { activateRenderer(state) }
+                    }
                 } else if (ownership.status() == WebViewOwnershipState.Host.SUSPENDED) {
                     // Unlock updates safetyEpoch but does NOT create a new generation.
                     // Activity may already be RESUMED, so onResume will not re-fire.
