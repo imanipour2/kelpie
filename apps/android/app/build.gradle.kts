@@ -18,8 +18,10 @@ val anyP4Qa = parallelP4Qa || existingP4Qa
 val r5SourceQa = providers.gradleProperty("kelpieR5SourceQaProfile").orNull == "true"
 val r5AgentQa = providers.gradleProperty("kelpieR5BackgroundAgentQaProfile").orNull == "true"
 val r5PrivateBetaQa = providers.gradleProperty("kelpieR5PrivateBetaQaProfile").orNull == "true"
-val anyIsolatedQa = anyP4Qa || r5SourceQa || r5AgentQa || r5PrivateBetaQa
-require(listOf(parallelP4Qa, existingP4Qa, r5SourceQa, r5AgentQa, r5PrivateBetaQa).count { it } <= 1) {
+// Isolated upstream-connection compatibility probe; does not replace the R5 beta.
+val r5MotherConnectionQa = providers.gradleProperty("kelpieR5MotherConnectionQaProfile").orNull == "true"
+val anyIsolatedQa = anyP4Qa || r5SourceQa || r5AgentQa || r5PrivateBetaQa || r5MotherConnectionQa
+require(listOf(parallelP4Qa, existingP4Qa, r5SourceQa, r5AgentQa, r5PrivateBetaQa, r5MotherConnectionQa).count { it } <= 1) {
     "Isolated Android QA profiles are mutually exclusive"
 }
 
@@ -49,6 +51,9 @@ android {
         } else if (r5PrivateBetaQa) {
             versionCode = 37
             versionName = "0.2.17-r5-loopback-pair-qa"
+        } else if (r5MotherConnectionQa) {
+            versionCode = 38
+            versionName = "0.2.18-r5-mother-connection-qa"
         }
         buildConfigField("int", "LOCAL_HTTP_PORT", "8420")
         buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")
@@ -101,6 +106,15 @@ android {
                 buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")
                 buildConfigField("boolean", "R5_NATIVE_CONSENT_QA_ENABLED", "true")
                 buildConfigField("boolean", "R5_BACKGROUND_AGENT_QA_ENABLED", "true")
+            } else if (r5MotherConnectionQa) {
+                // Side-by-side mother-architecture baseline: standard Android MCP gateway
+                // and upstream Ed25519 computer trust, without R5 session overlays.
+                // The separate P4/R5 capture and agent branches remain intact.
+                applicationIdSuffix = ".r5motherverify"
+                buildConfigField("int", "LOCAL_HTTP_PORT", "18462")
+                buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")
+                buildConfigField("boolean", "R5_NATIVE_CONSENT_QA_ENABLED", "false")
+                buildConfigField("boolean", "R5_BACKGROUND_AGENT_QA_ENABLED", "false")
             }
         }
         release {
