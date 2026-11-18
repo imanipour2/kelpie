@@ -1,0 +1,25 @@
+name: R5 MCP Principal Doctor (Offline, No Device)
+on:
+  pull_request:
+    paths:
+      - 'scripts/qa/r5-mcp-principal-doctor.py'
+      - 'scripts/qa/tests/test_r5_mcp_principal_doctor.py'
+      - '.github/workflows/qa-r5-principal-doctor.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  standalone-diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6.0.3
+      - uses: actions/setup-python@v6.1.0
+        with:
+          python-version: '3.12'
+      - name: Validate syntax without phone or secret
+        run: python3 -m py_compile scripts/qa/r5-mcp-principal-doctor.py scripts/qa/tests/test_r5_mcp_principal_doctor.py
+      - name: Run offline principal identity contract fixtures
+        run: python3 -m unittest discover -s scripts/qa/tests -p test_r5_mcp_principal_doctor.py -v
