@@ -56,7 +56,7 @@ jobs:
           grep -Eq 'R5_BACKGROUND_AGENT_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
           grep -Eq 'PRIVATE_CAPTURE_QA_ENABLED[[:space:]]*=[[:space:]]*false;' "$APP"
           "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.browser.r5motherverify'"
-          "$AAPT" dump badging "$APK" | grep -F "versionCode='38' versionName='0.2.19-r5-mother-background-qa'"
+          "$AAPT" dump badging "$APK" | grep -F "versionCode='39' versionName='0.2.19-r5-mother-background-qa'"
           "$SIGN" verify --verbose --print-certs "$APK"
           grep -F 'if (!agentConsentQaEnabled) {' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
           grep -F '.BrowserGatewayBinding(router, handlerContext)' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
@@ -67,7 +67,7 @@ jobs:
           {
             echo "source_commit=$(git rev-parse HEAD)"
             echo "package=com.kelpie.browser.r5motherverify"
-            echo "version=0.2.18-r5-mother-connection-qa"
+            echo "version=0.2.19-r5-mother-background-qa"
             echo "versionCode=39"
             echo "port=18462"
             echo "connection=UPSTREAM_BROWSER_GATEWAY_WITH_R5_PRIVATE_RENDERER_QA"
