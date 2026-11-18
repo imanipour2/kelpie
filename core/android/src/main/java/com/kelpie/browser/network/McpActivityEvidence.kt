@@ -20,15 +20,17 @@ internal object McpActivityEvidence {
         }
 }
 
-/** A successful readiness check does not establish remote identity or tool access. */
+/** HTTP status is only local evidence and never proves remote agent identity. */
 internal fun tunnelReadyLabel(
-    healthOk: Boolean,
-    readyOk: Boolean,
+    healthStatus: Int?,
+    readyStatus: Int?,
 ): String =
     when {
-        !healthOk -> "Not reachable"
-        readyOk -> "Ready locally"
-        else -> "Running; not ready"
+        healthStatus == null -> "Diagnostics unavailable"
+        healthStatus != 200 -> "Diagnostics unhealthy (HTTP $healthStatus)"
+        readyStatus == null -> "Running; readiness unknown"
+        readyStatus != 200 -> "Running; not ready (HTTP $readyStatus)"
+        else -> "Ready locally"
     }
 
 /** Only a fresh verified non-localhost request is meaningful; none proves control. */
