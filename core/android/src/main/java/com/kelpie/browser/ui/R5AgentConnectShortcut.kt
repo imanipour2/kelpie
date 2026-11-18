@@ -1,7 +1,6 @@
 package com.kelpie.browser.ui
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -11,7 +10,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kelpie.browser.agent.session.AgentSessionCoordinator
@@ -29,33 +27,27 @@ internal fun R5AgentConnectShortcut(
     R5ObservedAgentExpiryEffect(coordinator, clients.isNotEmpty())
     if (active != null || pending != null) return
 
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
         Text(
             text =
                 when (clients.size) {
                     0 -> "AI agent not yet paired"
-                    1 -> "Verified AI agent ready"
+                    1 -> "Verified agent " + clients.single().take(8) + "... ready"
                     else -> "Choose a verified agent"
                 },
             style = MaterialTheme.typography.labelMedium,
         )
-        TextButton(
-            onClick = {
-                if (clients.size != 1 || !coordinator.requestFromNativeUi()) onOpenCenter()
-            },
-            modifier = Modifier.heightIn(min = 48.dp),
-        ) {
-            Text(
-                when (clients.size) {
-                    0 -> "Pair / Connect"
-                    1 -> "Connect"
-                    else -> "Choose"
-                },
-            )
+        if (clients.size == 1) {
+            // The single owner gesture begins and approves this process session.
+            // Multiple clients never use the one-tap shortcut.
+            R5OneTapConsentAction(coordinator, clients.single(), compact = true)
+        } else {
+            TextButton(
+                onClick = onOpenCenter,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) {
+                Text(if (clients.isEmpty()) "Pair / Connect" else "Choose")
+            }
         }
     }
 }

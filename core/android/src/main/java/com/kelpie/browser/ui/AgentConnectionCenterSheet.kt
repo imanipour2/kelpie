@@ -46,7 +46,6 @@ internal fun AgentConnectionCenterSheet(
     val pending by coordinator.pending.collectAsState()
     val observedClients by coordinator.observedAgents.collectAsState()
     R5ObservedAgentExpiryEffect(coordinator, observedClients.isNotEmpty())
-    var requestError by remember { mutableStateOf(false) }
     var provider by remember { mutableStateOf(R5AgentProvider.CHATGPT) }
     var chatGptTunnel by remember { mutableStateOf(true) }
     var endpoint by remember { mutableStateOf("") }
@@ -67,7 +66,7 @@ internal fun AgentConnectionCenterSheet(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Connect an AI agent")
-        Text("The browser stays on this phone. Pairing and local consent are separate steps.")
+        Text("The browser stays on this phone. Pair once; one owner tap allows this app session, with STOP always available.")
         Text(
             when {
                 session?.locked == true -> "Native session: SUSPENDED (device locked)"
@@ -95,16 +94,15 @@ internal fun AgentConnectionCenterSheet(
                 }
                 1 -> {
                     Text("Recently verified agent ID: " + observedClients.single().take(8) + "...")
-                    Button(
-                        onClick = {
-                            requestError = !coordinator.requestFromNativeUi()
-                            if (!requestError) onDismiss()
-                        },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                    ) { Text("Request owner approval") }
+                    R5OneTapConsentAction(
+                        coordinator = coordinator,
+                        principal = observedClients.single(),
+                        onGranted = onDismiss,
+                    )
                     Text(
-                        "This button only opens a separate native consent prompt. " +
-                            "No browser access is granted until you tap Approve.",
+                        "One tap authorizes ordinary browsing, tabs, DOM, typing and " +
+                            "Kelpie WebView screenshots for this active app session. " +
+                            "STOP immediately revokes access. Sensitive actions need separate approval.",
                     )
                 }
                 else -> {
@@ -113,9 +111,6 @@ internal fun AgentConnectionCenterSheet(
                             "explicitly from the intended AI client; Kelpie will not choose for you.",
                     )
                 }
-            }
-            if (requestError) {
-                Text("No current verified agent or Kelpie is locked. Recheck the connection and try again.")
             }
         }
         HorizontalDivider()
@@ -202,7 +197,7 @@ internal fun AgentConnectionCenterSheet(
             },
         ) { Text("Open " + provider.title + " setup guide") }
         HorizontalDivider()
-        Text("3. Finish in your chosen AI client, then approve the real Kelpie request.")
+        Text("3. Finish pairing in your chosen AI client, then allow one native Kelpie session.")
         Text(
             "The client must discover MCP tools and pass authentication. " +
                 "A successful native consent is not proof of a connected remote agent.",
