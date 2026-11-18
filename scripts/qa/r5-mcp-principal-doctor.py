@@ -146,6 +146,27 @@ def classify_session(data):
     return "SESSION_STATUS_FAILED"
 
 
+def renderer_class(data):
+    """Do not expose any consent generation or principal identifier."""
+    if data.get("success") is not True or not str(data.get("status", "")).startswith("ACTIVE_"):
+        return "NOT_EVALUABLE"
+    enabled = data.get("browserOperationsEnabled")
+    if enabled is True:
+        return "ENABLED"
+    if enabled is False:
+        return "DISABLED"
+    return "UNKNOWN"
+
+
+def capabilities_class(data):
+    status = data.get("nativeSession")
+    if status == "READY" and isinstance(data.get("consentGeneration"), str) and data["consentGeneration"]:
+        return "READY_GENERATION_PRESENT"
+    if status == "OWNER_CONSENT_OR_RENDERER_REQUIRED" and data.get("consentGeneration") is None:
+        return "NOT_READY"
+    return "UNEXPECTED_OR_MALFORMED"
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", default=DEFAULT_BASE)
@@ -163,6 +184,7 @@ def main():
             "request": {"version": 1, "method": "session.status", "params": {}}}}
         status_data = call_result(mcp(opener, base, authorization, "tools/call", 52, payload))
         print("LOCAL_SESSION_STATUS=" + classify_session(status_data))
+        print("LOCAL_BROWSER_OPERATIONS=" + renderer_class(status_data))
         if classify_session(status_data).startswith("ELIGIBLE_PRINCIPAL_CONFIRMED"):
             metadata = {"name": "kelpie_browser_control", "arguments": {
                 "request": {"version": 1, "method": "capabilities", "params": {}}}}
@@ -170,6 +192,7 @@ def main():
             print("LOCAL_CAPABILITIES=" + (
                 "RECEIVED" if cap.get("version") == 1 and "nativeSession" in cap
                 else "INVALID"))
+            print("LOCAL_CAPABILITIES_SESSION=" + capabilities_class(cap))
     except DiagnosticFailure as error:
         # Deliberately do not print request, response, Authorization or file data.
         print("LOCAL_DIAG_ERROR=" + str(error))
