@@ -88,7 +88,18 @@ internal class R5PrivateMcpBridge(
                                 "method" to
                                     mapOf(
                                         "type" to "string",
-                                        "enum" to (listOf("capabilities", "documentation", "session.request", "session.status", "session.stop", "tabs.list", "tab.snapshot", "tab.screenshot") + R5PrivateMcpActions.methods),
+                                        "enum" to ((
+                                            listOf(
+                                                "capabilities",
+                                                "documentation",
+                                                "session.request",
+                                                "session.status",
+                                                "session.stop",
+                                                "tabs.list",
+                                                "tab.snapshot",
+                                                "tab.screenshot",
+                                            ) + R5PrivateMcpActions.methods
+                                        )),
                                     ),
                                 "tabId" to mapOf("type" to "string"),
                                 "params" to mapOf("type" to "object"),
@@ -187,7 +198,15 @@ internal class R5PrivateMcpBridge(
                     "version" to 1,
                     "nativeSession" to if (owned) "READY" else "OWNER_CONSENT_OR_RENDERER_REQUIRED",
                     "consentGeneration" to if (owned) active?.generation else null,
-                    "methods" to listOf("session.request", "session.status", "session.stop", "tabs.list", "tab.snapshot", "tab.screenshot"),
+                    "methods" to
+                        listOf(
+                            "session.request",
+                            "session.status",
+                            "session.stop",
+                            "tabs.list",
+                            "tab.snapshot",
+                            "tab.screenshot",
+                        ),
                     "mutationToolsAvailable" to owned,
                     "mutationTool" to R5PrivateMcpContract.ACTION_TOOL,
                 ),
