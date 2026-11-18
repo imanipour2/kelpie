@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,6 +26,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.kelpie.browser.agent.session.AndroidAgentProcessSession
+import com.kelpie.browser.agent.session.SessionConsentCore
 import com.kelpie.browser.device.DeviceInfo
 import com.kelpie.browser.network.McpActivityEvidence
 import com.kelpie.browser.network.NetworkServiceState
@@ -50,6 +53,7 @@ internal fun tunnelTone(healthStatus: Int?, readyStatus: Int?): ConnectionTone =
 internal fun ConnectionStatusSheet(
     deviceInfo: DeviceInfo,
     onShowPairedComputers: () -> Unit,
+    onManageAgent: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
     var result by remember { mutableStateOf<TunnelReadinessSnapshot?>(null) }
@@ -58,6 +62,7 @@ internal fun ConnectionStatusSheet(
     var advanced by remember { mutableStateOf(false) }
     var mcpAgeMs by remember { mutableStateOf<Long?>(null) }
     val scope = rememberCoroutineScope()
+    val nativeConsent by AndroidAgentProcessSession.active.collectAsState()
 
     fun updateEvidence() {
         mcpAgeMs = McpActivityEvidence.elapsedSinceLastRequestMs()
@@ -111,7 +116,21 @@ internal fun ConnectionStatusSheet(
             mcpLabel,
             if (mcpAgeMs != null && mcpAgeMs!! in 0L..120_000L) ConnectionTone.GOOD else ConnectionTone.UNKNOWN,
         )
+        StatusDetail(
+            "Owner consent",
+            when {
+                nativeConsent == null -> "Not approved"
+                nativeConsent?.locked == true -> "Paused — device locked"
+                else -> "Approved for this app session"
+            },
+            if (nativeConsent?.locked == false) ConnectionTone.GOOD else ConnectionTone.UNKNOWN,
+        )
         StatusDetail("AI browser control", "Not tested by this panel", ConnectionTone.UNKNOWN)
+        if (onManageAgent != null) {
+            TextButton(onClick = onManageAgent, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                Text("Manage AI agent approval")
+            }
+        }
         Text(
             "If the tunnel is ready but tabs are blocked, check the agent identity and permissions.",
             style = MaterialTheme.typography.bodySmall,
