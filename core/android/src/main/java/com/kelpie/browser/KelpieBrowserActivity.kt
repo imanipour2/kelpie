@@ -6,8 +6,8 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import com.kelpie.browser.agent.session.AgentSessionNotification
-import com.kelpie.browser.agent.session.R5BackgroundOptInStore
 import com.kelpie.browser.agent.session.AndroidAgentProcessSession
+import com.kelpie.browser.agent.session.R5BackgroundOptInStore
 import com.kelpie.browser.agent.session.R5ObservedAgentClients
 import com.kelpie.browser.agent.session.R5StartupGateState
 import com.kelpie.browser.agent.session.shouldPromptForR5BackgroundOptIn
