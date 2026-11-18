@@ -6,8 +6,8 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.nio.file.Files
 import java.io.File
+import java.nio.file.Files
 
 class R5PrivateAgentAuthenticationTest {
     private val temp = Files.createTempDirectory("r5-agent-auth-test").toFile()
