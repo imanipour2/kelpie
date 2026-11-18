@@ -53,6 +53,16 @@ class DoctorContractTests(unittest.TestCase):
         self.assertEqual(doctor.classify_session({"version": 1, "nativeSession": "READY"}),
                          "SESSION_STATUS_FAILED")
 
+    def test_renderer_readiness_separate_from_native_consent(self):
+        self.assertEqual(doctor.renderer_class({"success": True, "status": "ACTIVE_AGENT_SESSION",
+            "browserOperationsEnabled": False}), "DISABLED")
+        self.assertEqual(doctor.renderer_class({"success": True, "status": "ACTIVE_AGENT_SESSION",
+            "browserOperationsEnabled": True}), "ENABLED")
+        self.assertEqual(doctor.capabilities_class({"nativeSession": "OWNER_CONSENT_OR_RENDERER_REQUIRED",
+            "consentGeneration": None}), "NOT_READY")
+        self.assertEqual(doctor.capabilities_class({"nativeSession": "READY",
+            "consentGeneration": "unprinted-secret"}), "READY_GENERATION_PRESENT")
+
     def test_catalog_reports_missing_session_schema(self):
         schema = {"name": "kelpie_browser_control", "inputSchema": {
             "properties": {"method": {"enum": [
