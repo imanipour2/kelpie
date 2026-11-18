@@ -1,7 +1,7 @@
 package com.kelpie.browser.ui
 
-import android.content.pm.PackageManager
 import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
