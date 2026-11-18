@@ -42,9 +42,11 @@ class HandlerContext(
 
     /** QA-only: refuse ordinary remote commands while one WebView has private ownership. */
     var privateCaptureRestricted: (() -> Boolean)? = null
+
     /** R5 owner consent is required to read a privately hosted owned WebView. */
     var motherPrivateAgentActive: (() -> Boolean)? = null
     var motherGatewayAuthorization: (suspend () -> Boolean)? = null
+
     /** Null means deny private capture; never draw the suspended activity as a fallback. */
     var motherPrivateScreenshot: (suspend () -> Map<String, Any?>?)? = null
     var remoteDocumentGuard: (() -> Boolean)? = null
