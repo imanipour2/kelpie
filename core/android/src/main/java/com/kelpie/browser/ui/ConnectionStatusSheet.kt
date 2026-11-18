@@ -41,7 +41,10 @@ import java.util.Date
 /** Text and symbols accompany every color: never treat tunnel health as agent authorization. */
 internal enum class ConnectionTone { GOOD, BAD, UNKNOWN }
 
-internal fun tunnelTone(healthStatus: Int?, readyStatus: Int?): ConnectionTone =
+internal fun tunnelTone(
+    healthStatus: Int?,
+    readyStatus: Int?,
+): ConnectionTone =
     when {
         healthStatus == null || (healthStatus == 200 && readyStatus == null) -> ConnectionTone.UNKNOWN
         healthStatus != 200 || readyStatus != 200 -> ConnectionTone.BAD
