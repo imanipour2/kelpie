@@ -26,8 +26,11 @@ import com.kelpie.browser.network.McpActivityEvidence
 import com.kelpie.browser.network.NetworkServiceState
 import com.kelpie.browser.network.TunnelReadinessProbe
 import com.kelpie.browser.network.TunnelReadinessSnapshot
+import com.kelpie.browser.network.mcpActivityLabel
 import com.kelpie.browser.network.tunnelReadyLabel
 import kotlinx.coroutines.launch
+import java.text.DateFormat
+import java.util.Date
 
 /**
  * Device-local, read-only connectivity diagnostics.
@@ -41,6 +44,7 @@ internal fun ConnectionStatusSheet(
 ) {
     var result by remember { mutableStateOf<TunnelReadinessSnapshot?>(null) }
     var refreshing by remember { mutableStateOf(false) }
+    var lastCheckedAt by remember { mutableStateOf<String?>(null) }
     var advanced by remember { mutableStateOf(false) }
     var mcpAgeMs by remember { mutableStateOf<Long?>(null) }
     val scope = rememberCoroutineScope()
@@ -54,6 +58,7 @@ internal fun ConnectionStatusSheet(
         refreshing = true
         updateEvidence()
         result = TunnelReadinessProbe.check()
+        lastCheckedAt = DateFormat.getTimeInstance(DateFormat.MEDIUM).format(Date())
         updateEvidence()
         refreshing = false
     }
@@ -84,14 +89,7 @@ internal fun ConnectionStatusSheet(
                 else -> tunnelReadyLabel(health, ready)
             },
         )
-        StatusDetail(
-            "MCP request activity",
-            when {
-                mcpAgeMs == null -> "No authenticated request observed in this process"
-                mcpAgeMs!! > 120_000L -> "Last observed more than 2 minutes ago (stale)"
-                else -> "Authenticated request observed recently (not an agent-control proof)"
-            },
-        )
+        StatusDetail("MCP request activity", mcpActivityLabel(mcpAgeMs))
         StatusDetail("AI browser control", "Not verified by this local diagnostic")
         Text(
             "If ChatGPT can reach capabilities but cannot list tabs, check the actual agent permissions " +
@@ -103,6 +101,7 @@ internal fun ConnectionStatusSheet(
                 scope.launch {
                     updateEvidence()
                     result = TunnelReadinessProbe.check()
+                    lastCheckedAt = DateFormat.getTimeInstance(DateFormat.MEDIUM).format(Date())
                     updateEvidence()
                     refreshing = false
                 }
@@ -128,7 +127,7 @@ internal fun ConnectionStatusSheet(
             StatusDetail("Readiness endpoint", "GET /readyz")
             StatusDetail(
                 "Probe timestamp",
-                if (result == null) "Not checked" else "Latest result in this open panel",
+                lastCheckedAt ?: "Not checked",
             )
             StatusDetail("HTTP health", result?.healthStatus?.toString() ?: "No HTTP response")
             StatusDetail("HTTP readiness", result?.readyStatus?.toString() ?: "No HTTP response")
