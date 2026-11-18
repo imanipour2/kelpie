@@ -344,7 +344,8 @@ class HTTPServer(
         if (method == "mcp" && principal.clientId != "localhost") {
             McpActivityEvidence.noteAuthenticatedMcpRequest()
             if (router.motherR5BackgroundQa) {
-                com.kelpie.browser.agent.session.R5ObservedAgentClients.registry.noteVerified(principal.clientId)
+                com.kelpie.browser.agent.session.R5ObservedAgentClients.registry
+                    .noteVerified(principal.clientId)
             }
         }
         val (status, result) =
