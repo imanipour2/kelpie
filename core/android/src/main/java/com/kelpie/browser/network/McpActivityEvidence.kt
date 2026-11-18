@@ -30,3 +30,11 @@ internal fun tunnelReadyLabel(
         readyOk -> "Ready locally"
         else -> "Running; not ready"
     }
+
+/** Only a fresh verified non-localhost request is meaningful; none proves control. */
+internal fun mcpActivityLabel(ageMs: Long?): String =
+    when {
+        ageMs == null || ageMs < 0L -> "No authenticated request observed in this process"
+        ageMs > 120_000L -> "Last observed more than 2 minutes ago (stale)"
+        else -> "Authenticated request observed recently (not an agent-control proof)"
+    }
