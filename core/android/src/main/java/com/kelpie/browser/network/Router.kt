@@ -49,6 +49,16 @@ class Router {
         bypassRecordingGate: Boolean = false,
         fromGateway: Boolean = false,
     ): Pair<Int, Map<String, Any?>> {
+        // During mother+R5 private ownership, even direct legacy /v1 routes
+        // must carry the same currently approved principal. Ordinary foreground
+        // mother operations retain the standard pairing contract.
+        if (motherR5BackgroundQa &&
+            method !in setOf("mcp", "agent-session-request", "agent-session-status", "agent-session-stop", "get-device-info") &&
+            handlerContext?.motherPrivateAgentActive?.invoke() == true &&
+            handlerContext?.motherGatewayAuthorization?.invoke() != true
+        ) {
+            return 403 to errorResponse("PERMISSION_REQUIRED", "Private browser requires native owner-authorized agent")
+        }
         // This QA build has no real agent browser-action authorization adapter.
         // Reject legacy routes, including nested MCP and any gateway bypass.
         if (consentOnlyQa &&
