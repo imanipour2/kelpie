@@ -340,6 +340,8 @@ class HTTPServer(
                 return
             }
         }
+        // Metadata only: never retain principal, token, MCP args, origin, tab or URL.
+        if (method == "mcp") McpActivityEvidence.noteAuthenticatedMcpRequest()
         val (status, result) =
             kotlinx.coroutines.withContext(AuthenticatedClientContext.fromVerifiedDecision(principal)) {
                 router.handle(method, body)
