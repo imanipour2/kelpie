@@ -890,3 +890,35 @@ The owner-consented R5 MCP facade supports `tabs.new` (unselected/background), `
 ### R5 owner-only first-entry background choice (2026-11-18 draft; not released)
 
 Only the isolated Android `r5betaverify` QA build displays a non-dismissible native first-entry dialog **before** creating any KelpieBrowserSession or local HTTP listener. The owner may **Allow & continue** (then separately pair and approve one authenticated AI principal) or **No — bye bye** (revoke agent session, stop Kelpie-owned network service and close the task without touching Termux). Returning from ChatGPT into the same Activity does not ask again. No consent survives a new Activity/process session; there is no automated approval, cross-app capture, or guarantee of unrestricted Android background execution. The in-browser **Pair / Connect** shortcut remains visible when no paired agent has yet been authenticated and opens the honest setup screen rather than implying control. This is an Android-only source candidate under the owner-approved CDG; PR QA, physical S24 tests and platform-parity gate remain open. See [R5 first-entry QA](qa/EF-OPS-KELPIE-R5-FIRST-ENTRY-CONSENT-20261118.md).
+
+## Connection Status (Android private QA; source-only)
+
+The Android browser More menu includes a **Connection Status** panel (in the isolated
+`kelpieR5MotherConnectionQaProfile` test build). It reports the Kelpie-owned
+HTTP service state and the app's configured port, and offers an explicit
+**Check again** action for two loopback-only, unauthenticated tunnel-client
+diagnostic endpoints: `http://127.0.0.1:8080/healthz` and `/readyz`.
+Port 8080 is a fixed **probe target**, not proof of the owner's actual Termux
+configuration. Failure means *local diagnostics unavailable*, not necessarily
+that the OpenAI remote tunnel is down.
+
+The panel also shows whether a non-localhost, middleware-authenticated MCP
+request has been observed recently within the current process. This in-memory
+timestamp never includes the account, principal, token, request payload,
+browser URL or tab content. The explicit **AI browser control: Not verified**
+state avoids treating tunnel health or a successful MCP handshake as proof of
+ChatGPT's permission to operate tabs. Only a real, independently verified
+end-to-end browser command can establish that.
+
+**Advanced diagnostics** expands only when requested. **Trusted computers**
+opens the existing key trust/revocation UI; no new pairing, proxy, listener,
+server control, Termux shell action, credential storage, automatic polling,
+background service, restart button or browser control grant is introduced.
+The comparison QA app runs side-by-side with R5 port 18461 on port **18462**;
+no APK installation or tunnel reconfiguration follows from a source change.
+
+Security and release evidence:
+[EF-OPS-KELPIE-UPSTREAM-CONNECTION-BASELINE-20261118](qa/EF-OPS-KELPIE-UPSTREAM-CONNECTION-BASELINE-20261118.md)
+and [Issue #98](https://github.com/imanipour2/enerfoam-website/issues/98).
+Android/iOS platform parity or a scoped approved exception remains a
+separate pre-merge gate.
