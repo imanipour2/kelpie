@@ -78,9 +78,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          report_boot_failure() {
+            local status=$?
+            trap - EXIT
+            if [ "$status" -ne 0 ]; then
+              echo "::error::Isolated emulator boot failed (exit $status)"
+              if [ -f "$RUNNER_TEMP/kelpie-emulator.log" ]; then
+                tail -n 200 "$RUNNER_TEMP/kelpie-emulator.log" || true
+              fi
+            fi
+            exit "$status"
+          }
+          trap report_boot_failure EXIT
           ADB="$ANDROID_HOME/platform-tools/adb"
-          "$ADB" start-server
-          test "$("$ADB" devices | awk 'NR>1 && NF {n++} END {print n+0}')" = 0
+          timeout --kill-after=2s 10s "$ADB" start-server
+          devices_readback="$(timeout --kill-after=2s 10s "$ADB" devices)"
+          test "$(printf '%s\n' "$devices_readback" | awk 'NR>1 && NF {n++} END {print n+0}')" = 0
           printf 'no\n' | avdmanager create avd --force --name kelpie-wave1-api34 \
             --package "system-images;android-34;google_apis;x86_64" \
             --path "$RUNNER_TEMP/kelpie-wave1-device"
@@ -90,15 +103,29 @@ jobs:
             -port 5554 -no-window -no-snapshot -no-audio -no-boot-anim \
             -gpu software -accel on -memory 2048 -cores 2 \
             > "$RUNNER_TEMP/kelpie-emulator.log" 2>&1 &
-          timeout 480 bash -c 'until [ "$("$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 2; done'
-          test "$("$ADB" devices | awk 'NR>1 && NF {print $1}')" = emulator-5554
-          test "$("$ADB" -s emulator-5554 shell getprop ro.boot.qemu | tr -d '\r')" = 1
-          test "$("$ADB" -s emulator-5554 shell getprop ro.build.version.sdk | tr -d '\r')" = 34
-          "$ADB" -s emulator-5554 shell input keyevent KEYCODE_WAKEUP
-          "$ADB" -s emulator-5554 shell wm dismiss-keyguard
-          "$ADB" -s emulator-5554 shell settings put global window_animation_scale 0
-          "$ADB" -s emulator-5554 shell settings put global transition_animation_scale 0
-          "$ADB" -s emulator-5554 shell settings put global animator_duration_scale 0
+          KELPIE_EMULATOR_PID=$!
+          export KELPIE_EMULATOR_PID
+          timeout --kill-after=2s 480s bash -c '
+            set -euo pipefail
+            while kill -0 "$KELPIE_EMULATOR_PID" 2>/dev/null; do
+              boot_value="$(timeout --kill-after=2s 5s "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" || boot_value=""
+              if [ "$boot_value" = 1 ]; then exit 0; fi
+              sleep 2
+            done
+            echo "Emulator process exited before Android boot completed" >&2
+            exit 1
+          '
+          devices_readback="$(timeout --kill-after=2s 10s "$ADB" devices)"
+          test "$(printf '%s\n' "$devices_readback" | awk 'NR>1 && NF {print $1}')" = emulator-5554
+          emulator_identity="$(timeout --kill-after=2s 10s "$ADB" -s emulator-5554 shell getprop ro.boot.qemu | tr -d '\r')"
+          test "$emulator_identity" = 1
+          emulator_sdk="$(timeout --kill-after=2s 10s "$ADB" -s emulator-5554 shell getprop ro.build.version.sdk | tr -d '\r')"
+          test "$emulator_sdk" = 34
+          timeout --kill-after=2s 10s "$ADB" -s emulator-5554 shell input keyevent KEYCODE_WAKEUP
+          timeout --kill-after=2s 10s "$ADB" -s emulator-5554 shell wm dismiss-keyguard
+          timeout --kill-after=2s 10s "$ADB" -s emulator-5554 shell settings put global window_animation_scale 0
+          timeout --kill-after=2s 10s "$ADB" -s emulator-5554 shell settings put global transition_animation_scale 0
+          timeout --kill-after=2s 10s "$ADB" -s emulator-5554 shell settings put global animator_duration_scale 0
       - name: Execute all 11 new Wave 1 Android fixture tests
         working-directory: apps/android
         shell: bash
@@ -151,8 +178,8 @@ jobs:
         shell: bash
         run: |
           if [ -x "$ANDROID_HOME/platform-tools/adb" ]; then
-            "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 logcat -d '*:W' > "$RUNNER_TEMP/kelpie-fixture-logcat.log" 2>&1 || true
-            "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 emu kill || true
+            timeout --kill-after=2s 15s "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 logcat -d '*:W' > "$RUNNER_TEMP/kelpie-fixture-logcat.log" 2>&1 || true
+            timeout --kill-after=2s 10s "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 emu kill || true
           fi
       - uses: actions/upload-artifact@v4.6.2
         if: always()

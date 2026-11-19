@@ -200,6 +200,48 @@ environment repairs, not weakened TLS or altered production build rules.
 
 ## Single candidate and remaining installation gates
 
+### First exact-head CI execution and runtime follow-up
+
+The first functional head, `24af91bce6ae8b56c2f9adfcc2712b9e374ee165`,
+completed the [actual contracts job](https://github.com/imanipour2/kelpie/actions/runs/44557671919/job/135678045755):
+94/94 shared, 664/664 CLI, 31/31 real Chromium cases, 3/3 native CTest targets,
+and native-selector DOM conformance. The Chromium run had zero failed, cancelled
+or skipped cases. The original local mDNS environment restriction is covered
+by this successful complete hosted CLI execution.
+
+Its [designated MotherNext build](https://github.com/imanipour2/kelpie/actions/runs/44557672094)
+also passed. Independent artifact-byte inspection found version 41, the same
+package, 83,341,221 APK bytes, SHA-256
+`0dc2aa9fcd7faebff0570fd066edd476bffce83a3b67af936cc12631f88b7d1d`, and a
+valid v2 signature with certificate
+`b7914248633e63424e15345a73364ce4c8bbcb5d8b53aec1855aaa19aa3296cc`.
+The artifact and manifest hashes matched; v3/v3.1 were false. This certificate
+does **not** match the installed certificate. This first artifact is historical
+once a later source/CI correction is pushed; it is not silently relabeled as
+the final candidate.
+
+The new Android fixture job reached APK assembly but its emulator boot exhausted
+the 480-second bound. Instrumentation did not execute and the missing-XML gate
+correctly failed. A second demonstrated workflow defect then blocked evidence
+publication: offline-device diagnostic ADB calls had no timeout. The follow-up
+binds each ADB operation to a deadline, detects an exited emulator process, and
+prints the synthetic boot log on failure. All 11 fixture cases and the zero-skip
+gate remain required. No boot root cause is asserted before the actual emulator
+log is available.
+
+Both Apple jobs failed before any build step: the hosted runner was not acquired
+after multiple attempts, with provider annotations identifying macOS arm64
+capacity constraints. This is runner admission evidence, not a Swift/iOS compile
+failure. Subsequent exact-head attempts must still run those checks; they are
+not waived. The final combined-head results and selected artifact are recorded
+in PR #71 and the execution document after readback.
+
+Additional protocol reference read during wire verification:
+[MCP Streamable HTTP, 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports).
+The genuine `notifications/initialized` fixture omits `id`, expects 202 with
+an exactly empty body, and retains invalid-origin and invalid-token refusals.
+No protocol upgrade or package/port change was inferred from newer references.
+
 This is the pre-CI source snapshot; final exact-head results are appended to PR #71
 and the execution document after actual readback, without rebuilding a different
 artifact merely to update this report. The designated candidate producer is
