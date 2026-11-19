@@ -32,6 +32,8 @@ class MobileTabHandler(
             when {
                 id == null -> errorResponse("MISSING_PARAM", "id required")
                 tabs == null -> errorResponse("NO_TAB_STORE", "Tab store not available")
+                ctx.motherPrivateAgentActive?.invoke() == true ->
+                    errorResponse("PRIVATE_RENDERER_OWNED", "Cannot delete partitions during a private R5 session")
                 else -> PartitionRegistry.delete(id, tabs)
             }
         }
@@ -71,6 +73,9 @@ class MobileTabHandler(
 
     private fun newTab(body: Map<String, Any?>): Map<String, Any?> {
         val tabStore = ctx.tabStore ?: return errorResponse("NO_TAB_STORE", "Tab store not available")
+        if (ctx.motherPrivateAgentActive?.invoke() == true) {
+            return errorResponse("PRIVATE_RENDERER_OWNED", "Use the verified R5 tab command while the renderer is private")
+        }
         val url = body["url"] as? String
         val tab =
             try {
@@ -89,7 +94,7 @@ class MobileTabHandler(
         )
     }
 
-    private fun switchTab(body: Map<String, Any?>): Map<String, Any?> {
+    private suspend fun switchTab(body: Map<String, Any?>): Map<String, Any?> {
         val tabStore = ctx.tabStore ?: return errorResponse("NO_TAB_STORE", "Tab store not available")
         val tabId =
             parseTabId(body)
@@ -97,7 +102,16 @@ class MobileTabHandler(
         val tab =
             tabStore.tabs.value.firstOrNull { it.id == tabId }
                 ?: return errorResponse("TAB_NOT_FOUND", "No tab with id $tabId")
-        tabStore.selectTab(tabId)
+        if (ctx.motherPrivateAgentActive?.invoke() == true) {
+            // Mother MCP must not change only the selected index while R5 owns a different private WebView.
+            // The native callback checks principal, owner consent, STOP/lock and performs the same R5 rehost.
+            val switched = ctx.motherPrivateTabSwitch?.invoke(tabId) == true
+            if (!switched || tabStore.activeTabId.value != tabId) {
+                return errorResponse("RENDERER_NOT_READY", "Private tab ownership/viewport was not verified")
+            }
+        } else {
+            tabStore.selectTab(tabId)
+        }
         return successResponse(
             mapOf(
                 "tab" to tabInfo(tab = tab, activeTabId = tabStore.activeTabId.value),
@@ -108,6 +122,9 @@ class MobileTabHandler(
 
     private fun closeTab(body: Map<String, Any?>): Map<String, Any?> {
         val tabStore = ctx.tabStore ?: return errorResponse("NO_TAB_STORE", "Tab store not available")
+        if (ctx.motherPrivateAgentActive?.invoke() == true) {
+            return errorResponse("PRIVATE_RENDERER_OWNED", "Use the verified R5 tab command while the renderer is private")
+        }
         val tabId =
             parseTabId(body)
                 ?: return errorResponse("MISSING_PARAM", "tabId (UUID string) is required")
