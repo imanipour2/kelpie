@@ -7,6 +7,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -246,6 +247,31 @@ internal object ForegroundWebViewCapture {
                 }
             } ?: false
         if (!visual) return false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val observer = view.viewTreeObserver
+            if (!view.isAttachedToWindow || !view.isHardwareAccelerated || !observer.isAlive) return false
+            var callback: Runnable? = null
+            return try {
+                val committed =
+                    withTimeoutOrNull(2500L) {
+                        suspendCancellableCoroutine<Boolean> { continuation ->
+                            val next = Runnable { if (continuation.isActive) continuation.resume(true) }
+                            callback = next
+                            observer.registerFrameCommitCallback(next)
+                            view.postInvalidateOnAnimation()
+                        }
+                    } ?: false
+                // Submission is only a scheduling fence; acquired pixels still prove content and identity.
+                committed &&
+                    view.isAttachedToWindow &&
+                    view.isHardwareAccelerated &&
+                    observer.isAlive &&
+                    view.viewTreeObserver === observer
+            } finally {
+                callback?.let { if (observer.isAlive) observer.unregisterFrameCommitCallback(it) }
+            }
+        }
+        // API 28 has no frame-commit callback; retain its existing draw and acquired-pixel gates.
         var listener: ViewTreeObserver.OnDrawListener? = null
         return try {
             withTimeoutOrNull(2500L) {

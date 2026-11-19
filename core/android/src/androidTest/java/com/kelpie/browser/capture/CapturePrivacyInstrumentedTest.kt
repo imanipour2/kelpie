@@ -67,36 +67,39 @@ class CapturePrivacyInstrumentedTest {
             }
         }
 
+    /** Three required fresh starts exercise frame submission and detached teardown. */
     @Test
     fun foregroundPixelCopyReturnsOnlyTheRegisteredFixture() =
         runBlocking {
-            withFixtureActivity { activity, view ->
-                WebViewCapturePrivacy.loadReviewedFixtureForTesting(view)
-                val privacy = WebViewCapturePrivacy.inspect(view)
-                val frame = ForegroundWebViewCapture.copy(view, activity) { !activity.isFinishing }
-                assertNotNull(frame)
-                try {
-                    val bitmap = checkNotNull(frame).bitmap
-                    assertEquals(0xfff2ce41.toInt(), bitmap.getPixel(bitmap.width / 2, bitmap.height / 4))
-                    assertEquals(0xff4cd378.toInt(), bitmap.getPixel(bitmap.width / 2, bitmap.height * 3 / 4))
-                    val scaleX = bitmap.width.toDouble() / privacy.viewportWidth
-                    val scaleY = bitmap.height.toDouble() / privacy.viewportHeight
-                    // Both halves of the 48x24 CSS-pixel witness must be black in actual output pixels.
-                    for (cssFromRight in listOf(36, 12)) {
-                        assertEquals(
-                            0xff000000.toInt(),
-                            bitmap.getPixel((bitmap.width - cssFromRight * scaleX).toInt(), (12 * scaleY).toInt()),
-                        )
+            repeat(3) {
+                withFixtureActivity { activity, view ->
+                    WebViewCapturePrivacy.loadReviewedFixtureForTesting(view)
+                    val privacy = WebViewCapturePrivacy.inspect(view)
+                    val frame = ForegroundWebViewCapture.copy(view, activity) { !activity.isFinishing }
+                    assertNotNull(frame)
+                    try {
+                        val bitmap = checkNotNull(frame).bitmap
+                        assertEquals(0xfff2ce41.toInt(), bitmap.getPixel(bitmap.width / 2, bitmap.height / 4))
+                        assertEquals(0xff4cd378.toInt(), bitmap.getPixel(bitmap.width / 2, bitmap.height * 3 / 4))
+                        val scaleX = bitmap.width.toDouble() / privacy.viewportWidth
+                        val scaleY = bitmap.height.toDouble() / privacy.viewportHeight
+                        // Both halves of the 48x24 CSS-pixel witness must be black in actual output pixels.
+                        for (cssFromRight in listOf(36, 12)) {
+                            assertEquals(
+                                0xff000000.toInt(),
+                                bitmap.getPixel((bitmap.width - cssFromRight * scaleX).toInt(), (12 * scaleY).toInt()),
+                            )
+                        }
+                        assertEquals("DOCUMENT_PIXEL_PAIR", frame.metadata["freshnessProof"])
+                        assertEquals(true, frame.metadata["proofRegionsRedacted"])
+                        assertEquals(false, frame.metadata.containsKey("producerTimestampNanos"))
+                    } finally {
+                        frame?.bitmap?.recycle()
                     }
-                    assertEquals("DOCUMENT_PIXEL_PAIR", frame.metadata["freshnessProof"])
-                    assertEquals(true, frame.metadata["proofRegionsRedacted"])
-                    assertEquals(false, frame.metadata.containsKey("producerTimestampNanos"))
-                } finally {
-                    frame?.bitmap?.recycle()
+                    withContext(Dispatchers.Main.immediate) { view.loadUrl("about:blank") }
+                    awaitDocument(view, "about:blank")
+                    assertEquals("NEEDS_HUMAN", refuse { WebViewCapturePrivacy.inspect(view) }.code)
                 }
-                withContext(Dispatchers.Main.immediate) { view.loadUrl("about:blank") }
-                awaitDocument(view, "about:blank")
-                assertEquals("NEEDS_HUMAN", refuse { WebViewCapturePrivacy.inspect(view) }.code)
             }
         }
 
@@ -180,6 +183,7 @@ class PrivacyFixtureActivity : Activity() {
     }
 
     override fun onDestroy() {
+        (view.parent as? ViewGroup)?.removeView(view)
         view.destroy()
         super.onDestroy()
     }

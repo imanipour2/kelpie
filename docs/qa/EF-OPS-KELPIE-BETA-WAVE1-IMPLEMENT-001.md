@@ -41,7 +41,7 @@ gap. No extra decision authority or duplicate historical master was created.
 | Correction | Root cause | Production files / reused boundary | Executable evidence | Device acceptance still required |
 | --- | --- | --- | --- | --- |
 | CI baseline | Eight Android workflows independently stopped at formatting in four files; macOS failed to acquire a runner | Existing ktlint configuration; no checks disabled | Per-job log/excerpt and full 37b9 retest in [CI baseline](wave1-ci-baseline-20261119.md) | CI is not an installed APK |
-| Windows shutdown | The armed close-retry timer had no shell handler; actual 0e trace has one close poll, no subsequent owner Tick, and a responsive native window. A separate reentry defect allowed duplicate teardown | `Win32Shell`, `WindowsApp`, `CloseLifecycle`, three modal-return lifetime guards, opt-in numeric `ShutdownTrace` | Reentry unit PASS; new native nested-dialog timer test and held-HTTP-worker process test retain drain/readiness assertions and require exit code zero; actual new-head Windows run PENDING | Independent desktop regression scope; no S24/device changes |
+| Windows shutdown | The armed close-retry timer had no shell handler; actual 0e trace has one close poll, no subsequent owner Tick, and a responsive native window. Separate reentry/scheduler gaps allowed overlapping work | `Win32Shell`, `WindowsApp`, `CloseLifecycle`, reused CEF scheduler guard, three modal-return lifetime guards, opt-in numeric `ShutdownTrace` | Actual 2c hosted Windows PASS: all 75 targets, including both packaged-process tests, native modal timer and production scheduler guard; next combined-head readback still required | Independent desktop regression scope; no S24/device changes |
 | Recurring dependency resolution | Some runners reported missing published Maven POMs before Kotlin compilation; the same source/profile subsequently passed. HTTP/cache/image cause is not proven | Existing Background workflow plus bounded failure-only `maven-central-failure-evidence.py`; original tasks, versions, repositories and TLS preserved | 0e attempt 1 failed, attempt 2 passed build and lint; diagnostic parser/limits/failure-propagation checks PASS, hosted diagnostic execution PENDING a real failure | No APK or device change follows a diagnostic success |
 | Metadata and consent | Browser grant was tested at the wrong boundary; private state could deadlock negotiation while foreground could bypass owner authority | `HTTPServer`, `Router`, `AuthenticatedRequestDispatcher`, `R5McpBootstrapGate`, `AgentSessionCoordinator`, existing native consent reducer | Dispatcher suspended-race tests; exact-method gate tests; compiled real HTTP/JNI wire fixture | Authenticated metadata at STOP/lock, one native prompt and actual response delivery |
 | Principal and protocol | R5 invalid/missing bearer could fall back to localhost; mother/private protocol sets were conflated | `AuthMiddleware`, `AccountPairingAuthorization`, `AuthenticatedClientContext`, `R5RequestAuthorization`, `BrowserGatewayBinding` | Original `AccountPairingTests` retained; scoped protocol/authentication matrix and real native gateway tests | Same live paired client and current bearer, without exposing/resetting credentials |
@@ -51,7 +51,7 @@ gap. No extra decision authority or duplicate historical master was created.
 | Action identity/effect | Callback/value equality did not prove the same document or DOM node was acted upon | `VerifiedNativeBrowserAdapter`, `R5WebViewActionScripts`, `R5ElementActionProofScripts`, reused `InteractionScripts` | JVM document replacement/pre-dispatch assertions PASS; all 31 production-JS Chromium fixtures PASS on 0e, zero skips | Real click/type/select/scroll and uncertain-effect receipts |
 | Queued action/navigation | Queued work could outlive its original grant; an old completed DOM or dispatch-only receipt did not prove navigation | `BrowserOperationGuard`, `HandlerContext`, `BrowserGatewayBinding`, `NavigationHandler`, `NavigationEffectProof`, `ScrollEffectEvidence` | 4 queued-guard, 9 navigation-oracle and 5 scroll-oracle JVM tests PASS; both actual WebView navigation cases PASS on isolated API 34, including 0e | Actual native navigation/history, lock races and physical touch/scroll effects |
 | Private frame freshness | New native overlay did not prove a new document frame; callbacks could race STOP; row padding/recycling assumptions were unsafe | One `PrivateWebViewDisplay`, `R5PrivateFrameAcquisition`, `R5RgbaFrameBuffer`, `R5PageFrameProof`, `R5FrameProofVerifier`, existing OneShot/epoch helpers | JVM stride/proof/gray/cancellation/200-race checks PASS; both actual Surface/ImageReader cases, including 25 synthetic frames, PASS on 0e | 25 fresh WebView frames; 50 display create/release cycles; no resource growth |
-| Foreground frame freshness | Canvas/visual callback success was not proof of the copied producer frame | `ForegroundWebViewCapture`, same document proof/blank detector/OneShot holder, `HandlerContextCapture` | Acquired-pixel proof, exact viewport/owner/secure/native-overlay admission and cancellation tests; six actual privacy/foreground cases PASS on 0e | PixelCopy errors/late callback, actual S24 surfaces, foreground transitions |
+| Foreground frame freshness | Canvas/visual callback success was not proof of the copied producer frame; OnDraw posting did not wait for actual frame submission | `ForegroundWebViewCapture`, same document proof/blank detector/OneShot holder, bounded API 29+ frame-commit wait, exact fixture detach cleanup | 0e six-case privacy suite PASS; 2c rejected one incomplete foreground frame and correctly failed 10/11 total. The follow-up preserves every pixel/privacy assertion and requires new actual Android execution | PixelCopy errors/late callback, actual S24 surfaces, foreground transitions |
 | Privacy | Raw form/URL/title/selector data and unproved page pixels could leave through different handlers | Shared `ObservationPrivacyScripts`, `WebViewCapturePrivacy`, `CapturePrivacyEvidence`, `TabMetadataPrivacy`; `ScreenshotHandler`, `LLMHandler`, tab/navigation handlers | JVM and actual Chromium/privacy fixtures PASS on 0e; screenshot aliases share the same gate | Real-site reliable pixel redaction remains unimplemented; real pages are refused |
 | Renderer/lifecycle | Dead WebViews and late callbacks could retain/revive obsolete references | `TabStore`, `TabWebViewClients`, `HandlerContext.nativeRendererGone`, `R5AgentCoordinator`, stateless `R5LifecycleSignals` | Exact-instance callback guards, native retirement and cancellation/ownership JVM tests; 11 actual API 34 cases PASS, but no claim of complete physical lifecycle coverage | Real/peer renderer death, HOME, rotation, lock, networking, Doze and reboot |
 | Native First/status | Termux fallback was presented too early; local readiness was confused with remote connection | `AgentConnectionCenterSheet`, `R5TermuxOwnerReconnect`, `ConnectionStatusSheet`, `McpActivityEvidence` | Explicit opt-in/fixed-command tests; degraded-probe truth tests | Owner one-tap journey; Termux callback on Android 17 if separately enabled |
@@ -487,7 +487,7 @@ failure. Subsequent exact-head attempts must still run those checks; they are
 not waived. The final combined-head results and selected artifact are recorded
 in PR #71 and the execution document after readback.
 
-### Latest completed pre-fix matrix and bounded Maven evidence
+### The 0e pre-fix matrix and bounded Maven evidence
 
 The complete `0e51119d5cc998a5b8d308368ebeeb6a0a67b5dc` matrix finished
 with **13 successful workflows, 3 failed workflows and 1 existing conditional
@@ -538,6 +538,74 @@ inherited POM identity and malformed/UTF-16/DTD rejection. A valid UTF-8 POM wit
 Persian text still parses. These checks validate safe evidence collection; they
 do not claim a hosted Maven failure has been reproduced or fixed. The next
 complete source head must run the original matrix before final artifact review.
+
+### Actual Windows success and an Android frame-admission follow-up
+
+The complete `2c3f50fbbb0ad5143698d1826956e4bb38798c32` matrix finished
+with 13 successful workflows, three failed workflows and the existing formatter
+skip. The [Windows job](https://github.com/imanipour2/kelpie/actions/runs/44580425202/job/135759267908)
+built with MSVC and passed **all 75 CTest targets**. The original packaged close
+test passed in 10.88 seconds, held-transport mode in 10.59 seconds, actual native
+modal shell test in 0.66 seconds and scheduler test in 0.01 seconds. Thus the
+timer/lifetime/pump correction now has actual Windows execution evidence. It
+retains the original exit/readiness checks and adds the zero-exit check.
+
+All retained Android build profiles and the 88-case deployment guard passed.
+Background Android passed its original build and lint on attempt 1; its
+failure-only Maven diagnostic correctly did not run. The contracts job again
+passed 94 shared, 664 CLI, 31 actual Chromium and three native CTest targets plus
+selector conformance. Both Apple workflows again failed before acquiring a
+runner. No retry is substituted for the source follow-up below.
+
+The [actual Android runtime job](https://github.com/imanipour2/kelpie/actions/runs/44580424896/job/135759267914)
+executed all 11 cases: **10 PASS, 1 FAIL, zero errors/skips**. The failed case was
+`foregroundPixelCopyReturnsOnlyTheRegisteredFixture`, which received
+`ScreenshotRefusal: Blank, gray or transparent frame was refused`. The strict
+XML gate correctly failed. Artifact `14559895927` independently matched ZIP
+SHA-256 `7b978056d12bfb856f7442ce75ff30183defae453c4883a08929b69b890b93db`.
+This head's APK is not selected as the final candidate of the next source tree.
+
+Source order establishes PixelCopy success and both opaque current document
+nonce samples before the content check refused the rest of the frame. The
+existing refusal does not distinguish uniform content from a nonopaque grid
+sample, and the artifact contains no captured image; those details are not
+invented. Four Chromium tile-memory-limit warnings occurred in that same case.
+They are correlated evidence, not a proved allocation root cause. A surface
+commit-timeout warning also appears in a prior passing case, so it is not a
+sufficient explanation. The emulator actually uses a 320x640 display at 160 dpi;
+large S24-resolution pressure is not assumed.
+
+Two concrete source/fixture lifecycle defects are addressed without weakening
+frame admission. On API 29+, the existing WebView visual-state wait is followed
+by the bounded real `registerFrameCommitCallback`, registered before redraw on
+the original live observer. Attached/hardware-rendering requirements and
+cancellation/timeout callback removal are explicit. This replaces OnDraw plus
+`view.post` within the same 2500 ms wait budget; API 28 retains its existing draw
+branch and the same acquired-pixel checks. Frame submission alone never grants
+image admission: current authority/bounds, opaque nonce pair, unchanged blank
+detector, pre/post privacy and output masking remain mandatory.
+
+The isolated fixture now removes its WebView from its parent on Main before
+destroying it, matching the actual warning and platform lifetime contract. The
+positive case requires three fresh Activity starts and every original assertion
+on every start; the first exception fails immediately. Its dimensions, public
+colors, exact output-pixel/masking assertions and all 11 test methods remain.
+No capture-until-success loop, arbitrary sleep, software Canvas
+fallback, renderer/GPU/memory change or test deletion is introduced. The
+[official ViewTreeObserver reference](https://developer.android.com/reference/android/view/ViewTreeObserver#registerFrameCommitCallback(java.lang.Runnable))
+(API 29, read 2026-11-19) specifically recommends frame-commit callbacks with
+PixelCopy and limits them to hardware rendering. The
+[official WebView destroy contract](https://developer.android.com/reference/android/webkit/WebView#destroy())
+(API 1, read 2026-11-19) requires prior removal from the view system. Actual
+execution of this follow-up remains a new exact-head gate; it does not claim
+that a callback guarantees complete page content or cures a proved tile-budget
+cause.
+
+Two independent source reviews and diff checks passed. The local Android SDK
+was unavailable, and a bounded attempt to fetch the pinned ktlint 1.5.0 CLI
+timed out at connection. No local formatting, compilation or Android runtime
+pass is fabricated for this follow-up; the required hosted matrix must execute
+all of them on the new source commit.
 
 Additional protocol reference read during wire verification:
 [MCP Streamable HTTP, 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports).
