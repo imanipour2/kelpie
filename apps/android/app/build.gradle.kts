@@ -20,7 +20,7 @@ val r5AgentQa = providers.gradleProperty("kelpieR5BackgroundAgentQaProfile").orN
 val r5PrivateBetaQa = providers.gradleProperty("kelpieR5PrivateBetaQaProfile").orNull == "true"
 // Isolated upstream-connection compatibility probe; does not replace the R5 beta.
 val r5MotherConnectionQa = providers.gradleProperty("kelpieR5MotherConnectionQaProfile").orNull == "true"
-// Side-by-side QA when GitHub debug signer differs from the already-paired mother APK.
+// Existing MotherNext package: updates require verified signer, recovery and owner gates.
 val r5MotherNextQa = providers.gradleProperty("kelpieR5MotherNextQaProfile").orNull == "true"
 val anyIsolatedQa = anyP4Qa || r5SourceQa || r5AgentQa || r5PrivateBetaQa || r5MotherConnectionQa || r5MotherNextQa
 require(listOf(parallelP4Qa, existingP4Qa, r5SourceQa, r5AgentQa, r5PrivateBetaQa, r5MotherConnectionQa, r5MotherNextQa).count { it } <= 1) {
@@ -57,8 +57,8 @@ android {
             versionCode = 39
             versionName = "0.2.19-r5-mother-background-qa"
         } else if (r5MotherNextQa) {
-            versionCode = 40
-            versionName = "0.2.20-r5-mother-viewport-sidecar-qa"
+            versionCode = 41
+            versionName = "0.2.21-r5-wave1-qa"
         }
         buildConfigField("int", "LOCAL_HTTP_PORT", "8420")
         buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")
@@ -123,7 +123,7 @@ android {
                 buildConfigField("boolean", "R5_BACKGROUND_AGENT_QA_ENABLED", "true")
                 buildConfigField("boolean", "R5_MOTHER_MCP_BACKGROUND_QA_ENABLED", "true")
             } else if (r5MotherNextQa) {
-                // Signer-safe parallel install; old app data and active tunnel stay intact.
+                // Preserve the installed identity and port; no parallel-install fallback.
                 applicationIdSuffix = ".r5mothernextverify"
                 buildConfigField("int", "LOCAL_HTTP_PORT", "18463")
                 buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")

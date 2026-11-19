@@ -5,6 +5,8 @@ on:
     paths:
       - 'scripts/qa/kelpie-s24-mother-deploy.ps1'
       - 'scripts/qa/kelpie-s24-mothernext-18463.ps1'
+      - 'scripts/qa/tests/test_mothernext_gates.ps1'
+      - '.github/workflows/qa-r5-mother-sidecar.yml'
       - '.github/workflows/qa-r5-mother-deploy-script.yml'
   workflow_dispatch:
 
@@ -68,7 +70,14 @@ jobs:
             "READ_ONLY_PASS",
             "Get-FileHash",
             "ApkSigner",
-            "versionCode"
+            "versionCode",
+            "ReviewedManifestSha256",
+            "ReviewedEvidenceSha256",
+            "COLD_RESTORE_NOT_PROVEN",
+            "ROLLBACK_NOT_PROVEN",
+            "CI_NOT_GREEN",
+            "EXISTING_SINGLE_APK_REQUIRED_NO_PARALLEL_INSTALL",
+            "BETA_INSTALL_NO_GO"
           )) {
             if (-not $newSource.Contains($marker)) { throw "MotherNext safety requirement missing: $marker" }
           }
@@ -81,3 +90,6 @@ jobs:
             throw 'MotherNext must never uninstall or clear app data.'
           }
           Write-Host 'PASS: original deployment and 18463 signer/backup gates parse correctly.'
+      - name: Exercise exact candidate, signer, restore, rollback and install authorization gates
+        shell: pwsh
+        run: ./scripts/qa/tests/test_mothernext_gates.ps1
