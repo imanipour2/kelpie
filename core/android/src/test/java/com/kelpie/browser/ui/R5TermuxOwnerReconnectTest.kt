@@ -29,11 +29,15 @@ class R5TermuxOwnerReconnectTest {
 
     @Test
     fun dispatchIsNotAnApprovalOrAConnectedResult() {
-        assertTrue(R5TermuxOwnerReconnect.Dispatch.entries.contains(
-            R5TermuxOwnerReconnect.Dispatch.QUEUED_NOT_CONFIRMED,
-        ))
-        assertFalse(R5TermuxOwnerReconnect.Dispatch.entries.any {
-            it.name == "APPROVED" || it.name == "CONNECTED"
-        })
+        assertTrue(
+            R5TermuxOwnerReconnect.Dispatch.entries.contains(
+                R5TermuxOwnerReconnect.Dispatch.QUEUED_NOT_CONFIRMED,
+            ),
+        )
+        assertFalse(
+            R5TermuxOwnerReconnect.Dispatch.entries.any {
+                it.name == "APPROVED" || it.name == "CONNECTED"
+            },
+        )
     }
 }

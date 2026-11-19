@@ -12,17 +12,17 @@ class R5AgentControlPlaneRoutesTest {
             assertTrue(R5AgentControlPlaneRoutes.isConsentMethod(method))
         }
         for (
-            method in listOf(
-                "agent-command",
-                "agent-tabs",
-                "agent-runtime-status",
-                "agent-capture-capabilities",
-                "browser-control",
-                "mcp",
-                "agent-session-approve",
-                "agent-session-request-extra",
-                "Agent-Session-Request",
-            )
+        method in listOf(
+            "agent-command",
+            "agent-tabs",
+            "agent-runtime-status",
+            "agent-capture-capabilities",
+            "browser-control",
+            "mcp",
+            "agent-session-approve",
+            "agent-session-request-extra",
+            "Agent-Session-Request",
+        )
         ) {
             assertFalse(R5AgentControlPlaneRoutes.isConsentMethod(method))
         }

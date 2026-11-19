@@ -18,6 +18,5 @@ internal object R5AgentControlPlaneRoutes {
     fun mayRespondWithoutOwnerGrant(
         method: String,
         verifiedClientId: String?,
-    ): Boolean =
-        isConsentMethod(method) && R5AgentPrincipalPolicy.eligible(verifiedClientId)
+    ): Boolean = isConsentMethod(method) && R5AgentPrincipalPolicy.eligible(verifiedClientId)
 }

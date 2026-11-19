@@ -98,7 +98,7 @@ internal fun R5TermuxOwnerReconnectAction() {
             if (queuedAt == attempt) {
                 message =
                     "هنوز درخواست تأیید در Kelpie مشاهده نشده است. " +
-                        "مجوز Termux، اسکریپت ثابت و هویت عامل را بررسی کنید؛ اتصال را فرض نکنید."
+                    "مجوز Termux، اسکریپت ثابت و هویت عامل را بررسی کنید؛ اتصال را فرض نکنید."
             }
         }
     }
@@ -117,12 +117,12 @@ internal fun R5TermuxOwnerReconnectAction() {
                             queuedAt = now
                             message =
                                 "فرمان به Termux تحویل شد؛ هنوز اتصال تأیید نشده است. " +
-                                    "فقط اگر پنجره تأیید Kelpie ظاهر شد، هویت عامل را بررسی و تأیید کنید."
+                                "فقط اگر پنجره تأیید Kelpie ظاهر شد، هویت عامل را بررسی و تأیید کنید."
                         }
                         R5TermuxOwnerReconnect.Dispatch.PERMISSION_REQUIRED -> {
                             message =
                                 "مجوز «Run commands in Termux environment» باید از تنظیمات مجوزهای Kelpie " +
-                                    "اعطا شود؛ Termux نیز باید allow-external-apps=true داشته باشد."
+                                "اعطا شود؛ Termux نیز باید allow-external-apps=true داشته باشد."
                         }
                         R5TermuxOwnerReconnect.Dispatch.TERMUX_UNAVAILABLE -> {
                             message = "سرویس Termux موجود در دسترس نیست. برنامه دیگری نصب نکنید."
