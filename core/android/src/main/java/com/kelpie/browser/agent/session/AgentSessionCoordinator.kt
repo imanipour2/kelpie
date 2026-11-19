@@ -181,8 +181,7 @@ class AgentSessionCoordinator(
      * must recheck the EXACT principal the user saw before the tap. Never
      * silently switch to a newly observed principal during an OS prompt.
      */
-    fun beginOneTapFromNativeUi(expectedPrincipal: String): Boolean =
-        beginOneTapFromNativeUiWithReason(expectedPrincipal) == NativeOneTapResult.GRANTED
+    fun beginOneTapFromNativeUi(expectedPrincipal: String): Boolean = beginOneTapFromNativeUiWithReason(expectedPrincipal) == NativeOneTapResult.GRANTED
 
     /**
      * A native owner tap is the only approval entrypoint. Categorical failures
