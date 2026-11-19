@@ -339,7 +339,9 @@ class R5AgentCoordinator(
             }
             if (stillBackground()) {
                 renderer.setActivityVisible(false)
-            } else if (renderer.state.value == PrivateWebViewDisplay.State.PRIVATE_DISPLAY) {
+            } else if (activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+                renderer.state.value == PrivateWebViewDisplay.State.PRIVATE_DISPLAY
+            ) {
                 // onResume may have run while the asynchronous handoff was still
                 // in progress. Never leave an old background transfer active
                 // in the foreground, even though frame capture is already fenced.
