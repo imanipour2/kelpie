@@ -38,6 +38,7 @@ internal fun R5OneTapConsentAction(
     val context = LocalContext.current
     var pendingPrincipal by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+
     fun report(result: NativeOneTapResult) {
         if (result == NativeOneTapResult.GRANTED) {
             error = null
