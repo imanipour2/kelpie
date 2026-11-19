@@ -46,6 +46,7 @@ class HandlerContext(
     /** R5 owner consent is required to read a privately hosted owned WebView. */
     var motherPrivateAgentActive: (() -> Boolean)? = null
     var motherGatewayAuthorization: (suspend () -> Boolean)? = null
+
     /** The native R5 owner/renderer gate must rehost before mother MCP selects a private tab. */
     var motherPrivateTabSwitch: (suspend (String) -> Boolean)? = null
 
