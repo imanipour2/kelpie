@@ -9,6 +9,20 @@ package com.kelpie.browser.network
 internal object R5McpBootstrapGate {
     private val controlMethods = setOf("initialize", "notifications/initialized", "ping", "tools/list")
 
+    /**
+     * Mirrors the HTTPServer delivery check. The owner grant is not required
+     * for authenticated protocol metadata; actions are checked separately.
+     */
+    fun requiresNativeGrantAtDelivery(
+        outerMethod: String,
+        inner: Map<String, Any?>,
+        verifiedClientId: String?,
+        privateAtIngress: Boolean,
+        privateAtEgress: Boolean,
+    ): Boolean =
+        (privateAtIngress || privateAtEgress) &&
+            !maySkipNativeSession(outerMethod, inner, verifiedClientId)
+
     fun maySkipNativeSession(
         outerMethod: String,
         inner: Map<String, Any?>,
