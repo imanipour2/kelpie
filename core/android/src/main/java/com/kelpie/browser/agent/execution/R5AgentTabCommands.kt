@@ -100,7 +100,13 @@ internal class R5AgentTabCommands(
                         val before = nativePort.nativeTargetForBinding(active.id) ?: return@withLock false
                         setReady(false)
                         if (!renderer.switchPrivateWebView(target.webView)) {
-                            setReady(renderer.canDeliverFrame())
+                            val restored = renderer.canDeliverFrame()
+                            setReady(restored)
+                            if (!restored) {
+                                // The rollback could not prove that the old native owner still renders.
+                                AndroidAgentProcessSession.stop()
+                                AgentSessionNotification.hide(activity)
+                            }
                             return@withLock false
                         }
                         // The tab index is changed only after the physical reparent succeeds.
