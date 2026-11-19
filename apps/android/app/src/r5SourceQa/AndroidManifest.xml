@@ -5,12 +5,6 @@
     <!-- R5 source-only QA must never acquire microphone permission. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" tools:node="remove" />
 
-    <!-- Optional owner-only bridge: never granted automatically, no public builds. -->
-    <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
-    <queries>
-        <package android:name="com.termux" />
-    </queries>
-
     <application>
         <receiver
             android:name="com.kelpie.browser.agent.session.AgentSessionStopReceiver"
