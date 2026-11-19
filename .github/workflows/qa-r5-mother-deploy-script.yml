@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'scripts/qa/kelpie-s24-mother-deploy.ps1'
+      - 'scripts/qa/kelpie-s24-mothernext-18463.ps1'
       - '.github/workflows/qa-r5-mother-deploy-script.yml'
   workflow_dispatch:
 
@@ -48,25 +49,35 @@ jobs:
           if ($source -match '(?im)^\s*(?:(?:&\s*)?adb\s+uninstall|Remove-Item\s+-Recurse)') {
             throw 'Disallowed unconditional removal detected.'
           }
-          foreach ($needle in @(
-            "MotherNext18463",
+          $next='scripts/qa/kelpie-s24-mothernext-18463.ps1'
+          $nextTokens=$null
+          $nextErrors=$null
+          $nextAst=[System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $next),[ref]$nextTokens,[ref]$nextErrors)
+          if ($nextErrors.Count -gt 0) {
+            $nextErrors | ForEach-Object { Write-Error $_ }
+            throw '18463 preflight script must parse without errors.'
+          }
+          $newSource=Get-Content -LiteralPath $next -Raw
+          foreach ($marker in @(
             "com.kelpie.browser.r5mothernextverify",
-            "expectedVersionCode=40",
-            "CompareInstalledSigner",
             "SIGNER_MISMATCH",
+            "OwnerAuthorizesInstall",
             "OwnerBackupConfirmed",
-            "InspectInstalledSigner",
-            "RetireOld is disabled"
+            "expectedApkHash",
+            "expectedCert",
+            "READ_ONLY_PASS",
+            "Get-FileHash",
+            "ApkSigner",
+            "versionCode"
           )) {
-            if (-not $source.Contains($needle)) { throw "Missing R5 MotherNext signer safety gate: $needle" }
+            if (-not $newSource.Contains($marker)) { throw "MotherNext safety requirement missing: $marker" }
           }
-          # Source-only: detect the specific unsafe ordering without contacting ADB.
-          $installBlock = $source.Split("  'Install' {")[1].Split("  'Verify' {")[0]
-          if ($installBlock.IndexOf('CompareInstalledSigner') -lt 0 -or
-              $installBlock.IndexOf('CompareInstalledSigner') -gt $installBlock.IndexOf("'install','-r'")) {
-            throw 'Installer must compare the installed cert before adb install.'
+          $installAt=$newSource.IndexOf("ADB @('install'")
+          $certAt=$newSource.IndexOf("SIGNER_MISMATCH")
+          if ($installAt -lt 0 -or $certAt -lt 0 -or $certAt -ge $installAt) {
+            throw 'Install must be after the installed signing certificate comparison.'
           }
-          if ($installBlock.IndexOf('OwnerBackupConfirmed') -lt 0) {
-            throw 'Existing private app data must not be overwritten without owner backup gate.'
+          if ($newSource -match '(?im)^\s*(?:&\s*)?adb\s+uninstall|\bpm\s+clear\b') {
+            throw 'MotherNext must never uninstall or clear app data.'
           }
-          Write-Host 'PASS: parser, legacy acceptance and MotherNext signer/backup gates.'
+          Write-Host 'PASS: original deployment and 18463 signer/backup gates parse correctly.'
