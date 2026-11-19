@@ -77,7 +77,14 @@ class Router {
             return 403 to errorResponse("PERMISSION_REQUIRED", "Private WebView capture owns the browser")
         }
         val gateway = browserGateway
-        if (gateway != null && !fromGateway && !bypassRecordingGate && method !in setOf("browser-control", "mcp", "ai-infer", "ai-record", "ai-cancel", "abort-script", "get-script-status")) {
+        // Native consent request/status/STOP must not acquire a WebView gateway lease:
+        // requiring an existing private-owner grant here deadlocks first approval.
+        if (gateway != null &&
+            !fromGateway &&
+            !bypassRecordingGate &&
+            !R5AgentControlPlaneRoutes.isConsentMethod(method) &&
+            method !in setOf("browser-control", "mcp", "ai-infer", "ai-record", "ai-cancel", "abort-script", "get-script-status")
+        ) {
             return gateway.legacy(method) { handle(method, body, bypassRecordingGate, fromGateway = true) }
         }
         val handler =
