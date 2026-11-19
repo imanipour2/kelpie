@@ -58,7 +58,9 @@ internal object AndroidAgentProcessSession {
         val prior = core.snapshot()
         core.stop()
         if (prior != SessionConsentCore.State.Off) {
-            Log.i("R5ConsentState", "consent stopped from " + stateKind(prior))
+            // Retain only the static Kotlin caller method, never principal/token data.
+            val owner = Throwable().stackTrace.getOrNull(1)?.methodName ?: "unknown"
+            Log.i("R5ConsentState", "consent stopped from " + stateKind(prior) + " via " + owner)
         }
         publish()
     }
