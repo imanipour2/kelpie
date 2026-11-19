@@ -20,11 +20,14 @@ internal data class TunnelControlPlaneStatus(
 internal fun parseControlPlaneStatus(json: String): TunnelControlPlaneStatus? {
     val data = HttpJson.parseJsonBody(json) ?: return null
     val status = (data["status"] as? String)?.takeIf { it in setOf("ok", "degraded", "unknown") } ?: return null
-    val reason = (data["reason_code"] as? String)?.takeIf {
-        it in setOf("network_error", "auth_error", "unauthorized", "forbidden", "timeout", "unavailable")
-    }
-    val failures = ((data["details"] as? Map<*, *>)?.get("consecutive_failures") as? Number)
-        ?.toInt()?.coerceIn(0, 9999)
+    val reason =
+        (data["reason_code"] as? String)?.takeIf {
+            it in setOf("network_error", "auth_error", "unauthorized", "forbidden", "timeout", "unavailable")
+        }
+    val failures =
+        ((data["details"] as? Map<*, *>)?.get("consecutive_failures") as? Number)
+            ?.toInt()
+            ?.coerceIn(0, 9999)
     return TunnelControlPlaneStatus(status, reason, failures)
 }
 
@@ -54,7 +57,6 @@ internal object TunnelReadinessProbe {
                 controlPlane = getControlPlaneStatus(),
             )
         }
-
 
     /**
      * A local, unauthenticated, read-only administrative health snapshot.
