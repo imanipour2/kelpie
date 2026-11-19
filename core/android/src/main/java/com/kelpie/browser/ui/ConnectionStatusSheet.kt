@@ -91,6 +91,24 @@ internal fun ConnectionStatusSheet(
     val tunnelStatus =
         if (refreshing) ConnectionTone.UNKNOWN else tunnelTone(result?.healthStatus, result?.readyStatus)
     val mcpLabel = mcpActivityLabel(mcpAgeMs)
+    val controlPlane = result?.controlPlane
+    val pollLabel =
+        when {
+            refreshing -> "Checking"
+            controlPlane == null -> "Unknown — diagnostic unavailable"
+            controlPlane.status == "ok" -> "Local poller reports OK (remote not proven)"
+            controlPlane.status == "degraded" -> {
+                val count = controlPlane.consecutiveFailures
+                if (count != null) "Degraded — $count consecutive poll failures" else "Degraded — poll failures"
+            }
+            else -> "Unknown — remote polling not confirmed"
+        }
+    val pollTone =
+        when (controlPlane?.status) {
+            "ok" -> ConnectionTone.UNKNOWN
+            "degraded" -> ConnectionTone.DEGRADED
+            else -> ConnectionTone.UNKNOWN
+        }
 
     Column(
         modifier =
@@ -114,6 +132,7 @@ internal fun ConnectionStatusSheet(
         )
         StatusDetail("Browser port", deviceInfo.port.toString(), ConnectionTone.UNKNOWN)
         StatusDetail("Local tunnel diagnostics", tunnelLabel, tunnelStatus)
+        StatusDetail("Command polling", pollLabel, pollTone)
         StatusDetail("Remote tunnel", "Not verified by this probe", ConnectionTone.UNKNOWN)
         StatusDetail(
             "MCP traffic",
@@ -174,6 +193,7 @@ internal fun ConnectionStatusSheet(
             StatusDetail("Last checked", lastCheckedAt ?: "Not checked", ConnectionTone.UNKNOWN)
             StatusDetail("Health HTTP", result?.healthStatus?.toString() ?: "No response", ConnectionTone.UNKNOWN)
             StatusDetail("Ready HTTP", result?.readyStatus?.toString() ?: "No response", ConnectionTone.UNKNOWN)
+            StatusDetail("Control-plane reason", controlPlane?.reasonCode ?: "Unavailable or not disclosed", ConnectionTone.UNKNOWN)
             Text(
                 "No response can also mean the diagnostic port is different or inaccessible; it is not proof the remote tunnel is down.",
                 style = MaterialTheme.typography.bodySmall,
