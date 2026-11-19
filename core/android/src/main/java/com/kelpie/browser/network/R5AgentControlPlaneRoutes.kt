@@ -1,5 +1,7 @@
 package com.kelpie.browser.network
 
+import com.kelpie.browser.agent.session.R5AgentPrincipalPolicy
+
 /**
  * Owner-consent negotiation is control-plane traffic, never a WebView action.
  *
@@ -17,7 +19,5 @@ internal object R5AgentControlPlaneRoutes {
         method: String,
         verifiedClientId: String?,
     ): Boolean =
-        isConsentMethod(method) &&
-            !verifiedClientId.isNullOrBlank() &&
-            verifiedClientId != "localhost"
+        isConsentMethod(method) && R5AgentPrincipalPolicy.eligible(verifiedClientId)
 }
