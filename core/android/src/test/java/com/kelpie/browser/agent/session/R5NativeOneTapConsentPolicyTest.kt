@@ -22,6 +22,29 @@ class R5NativeOneTapConsentPolicyTest {
     )
 
     @Test
+    fun typedDenialsExplainEachFailedNativeGateWithoutChangingAuthorization() {
+        fun reason(
+            principal: String? = "paired-client-1",
+            observed: String? = "paired-client-1",
+            resumed: Boolean = true,
+            visible: Boolean = true,
+            unlocked: Boolean = true,
+            stopEnabled: Boolean = true,
+        ) = nativeOneTapRejection(principal, observed, resumed, visible, unlocked, stopEnabled)
+
+        assertEquals(null, reason())
+        assertEquals(NativeOneTapResult.INVALID_CLIENT, reason(principal = "localhost"))
+        assertEquals(NativeOneTapResult.CLIENT_EXPIRED, reason(observed = null))
+        assertEquals(NativeOneTapResult.CLIENT_CHANGED, reason(observed = "paired-client-2"))
+        assertEquals(NativeOneTapResult.ACTIVITY_NOT_RESUMED, reason(resumed = false))
+        assertEquals(NativeOneTapResult.ACTIVITY_NOT_VISIBLE, reason(visible = false))
+        assertEquals(NativeOneTapResult.DEVICE_LOCKED, reason(unlocked = false))
+        assertEquals(NativeOneTapResult.STOP_NOTIFICATION_UNAVAILABLE, reason(stopEnabled = false))
+        assertTrue(allowed())
+        assertFalse(allowed(observed = null))
+    }
+
+    @Test
     fun allowsOneFreshVerifiedPrincipalWithAllNativeOwnerGates() {
         assertTrue(allowed())
     }
