@@ -98,9 +98,13 @@ class PrivateWebViewDisplay(
     suspend fun start(original: WebView): Boolean =
         withContext(Dispatchers.Main.immediate) {
             if (stateFlow.value != State.IDLE || isLocked() || !activityVisible || !viewportReadiness.cssReady(original)) {
+                Log.w("KelpieR5Transfer", "START_PRECONDITION_DENIED")
                 return@withContext false
             }
-            val cssScroll = R5WebViewScrollRestoration.read(original) ?: return@withContext false
+            val cssScroll = R5WebViewScrollRestoration.read(original) ?: run {
+                Log.w("KelpieR5Transfer", "CSS_SCROLL_WITNESS_MISSING")
+                return@withContext false
+            }
             if (stateFlow.value != State.IDLE || isLocked() || !activityVisible) return@withContext false
             val generation = ownershipGeneration.incrementAndGet()
             previousCssScroll = cssScroll
@@ -120,6 +124,7 @@ class PrivateWebViewDisplay(
                         !original.isAttachedToWindow && current()
                     } == true
                 if (!detached) {
+                    Log.w("KelpieR5Transfer", "COMPOSE_RELEASE_TIMEOUT")
                     if (ownershipGeneration.get() == generation) releaseAndRestore(State.FAILED)
                     return@withContext false
                 }
@@ -148,6 +153,7 @@ class PrivateWebViewDisplay(
                 host.setContentView(proof?.host(original) ?: original)
                 host.show()
                 if (!viewportReadiness.awaitCommittedViewport(original, ++visualRequestId, ::current) || !current()) {
+                    Log.w("KelpieR5Transfer", "PRIVATE_VIEWPORT_COMMIT_FAILED")
                     if (ownershipGeneration.get() == generation) releaseAndRestore(State.FAILED)
                     return@withContext false
                 }
@@ -158,6 +164,7 @@ class PrivateWebViewDisplay(
                 if (ownershipGeneration.get() == generation) releaseAndRestore(State.FAILED)
                 throw error
             } catch (_: RuntimeException) {
+                Log.w("KelpieR5Transfer", "PRIVATE_DISPLAY_RUNTIME_FAILURE")
                 if (ownershipGeneration.get() == generation) releaseAndRestore(State.FAILED)
                 false
             }
