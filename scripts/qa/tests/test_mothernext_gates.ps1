@@ -85,6 +85,8 @@ function global:Invoke-RestMethod {
   if ($Uri -notmatch '^https://api.github.com/repos/imanipour2/kelpie/actions/runs\?head_sha=[a-f0-9]{40}&per_page=100$') {
     throw 'Test forbids unexpected network destination.'
   }
+  $state=Get-Content (Join-Path $global:KelpieGuardFixture 'state.json') -Raw | ConvertFrom-Json
+  if ($state.tamperDuringCi) { 'changed after first evidence read' | Set-Content (Join-Path $global:KelpieGuardFixture $state.tamperDuringCi) }
   return Get-Content (Join-Path $global:KelpieGuardFixture 'ci.json') -Raw | ConvertFrom-Json
 }
 $source='a'*40
@@ -98,6 +100,8 @@ function New-Fixture {
   'test-installed-rollback-bytes' | Set-Content (Join-Path $fixture 'rollback.apk')
   'encrypted fixture backup, no real user data' | Set-Content (Join-Path $fixture 'backup.bin')
   'fixture test record with exact measured assertions' | Set-Content (Join-Path $fixture 'record.txt')
+  'fixture candidate physical acceptance record' | Set-Content (Join-Path $fixture 'acceptance.txt')
+  'fixture candidate transport and native consent record' | Set-Content (Join-Path $fixture 'transport.txt')
   Remove-Item (Join-Path $fixture 'commands.jsonl') -ErrorAction SilentlyContinue
   $candidateHash=Hash (Join-Path $fixture 'candidate.apk')
   $installedHash=Hash (Join-Path $fixture 'rollback.apk')
@@ -131,22 +135,31 @@ function New-Fixture {
     coldRestore=@{status='PASS';backupSha256=(Hash (Join-Path $fixture 'backup.bin'));dataBeforeSha256=('d'*64);dataAfterSha256=('d'*64);testedUtc=$stamp;record=$record};
     rollback=@{status='PASS';fromCandidateSha256=$candidateHash;toInstalledArtifactSha256=$installedHash;
       versionDowngradeVerified=$true;retainsData=$true;testedUtc=$stamp;record=$record};
-    deviceAcceptance=@{status='PASS';sourceCommit=$source;candidateSha256=$candidateHash;testedUtc=$stamp;checks=$checks;record=$record;
+    deviceAcceptance=@{status='PASS';sourceCommit=$source;candidateSha256=$candidateHash;testedUtc=$stamp;checks=$checks;
+      record=@{path='acceptance.txt';sha256=(Hash (Join-Path $fixture 'acceptance.txt'))};
       tabSwitchCycles=20;distinctTabs=3;freshFrames=25;displayCreateReleaseCycles=50};
     transport=@{sourceCommit=$source;candidateSha256=$candidateHash;browserPort=18463;diagnosticPort=8080;existingTunnelPreserved=$true;
       remoteAuthenticatedJourney='PASS';nativeConsentRoundTrip='PASS';healthStatus=200;readyStatus=503;
-      probeClassification='PROBE_DEGRADED_REMOTE_UNKNOWN';testedUtc=$stamp;record=$record}}
+      probeClassification='PROBE_DEGRADED_REMOTE_UNKNOWN';testedUtc=$stamp;
+      record=@{path='transport.txt';sha256=(Hash (Join-Path $fixture 'transport.txt'))}}}
   $script:state=@{candidatePackage=$package;candidateHash=$candidateHash;candidateCert=$cert;rollbackCert=$cert;
     installedHash=$installedHash;code=40;name='0.2.20-r5-mother-viewport-sidecar-qa';model='SM-S928B';installed=$true;
     installCalls=0;hashReads=0;changeDuringPreflight=$false;installFails=$false;packages=@($package);termuxInstalled=$true;
-    freeKiB=1000000;inventoryReads=0;inventoryChanges=$false}
+    freeKiB=1000000;inventoryReads=0;inventoryChanges=$false;tamperDuringCi=''}
   $script:arguments=@{Apk=(Join-Path $fixture 'candidate.apk');CandidateManifest=(Join-Path $fixture 'manifest.json');
     ReviewedSourceCommit=$source;ReviewedManifestSha256='';RecoveryEvidence=(Join-Path $fixture 'evidence.json');
     ReviewedEvidenceSha256='';RollbackApk=(Join-Path $fixture 'rollback.apk');Adb=(Join-Path $fixture 'adb.ps1');
     OwnerAuthorizesInstall=$true;Phase='Install'}
 }
-function Run-Case([string]$name,[scriptblock]$change,[string]$expected,[int]$expectedInstalls=0) {
+function Run-Case([string]$name,[scriptblock]$change,[string]$expected,[int]$expectedInstalls=0,[switch]$PostInstall) {
   New-Fixture
+  if ($PostInstall) {
+    $arguments.Phase='PostInstall'
+    $arguments.OwnerAuthorizesInstall=$false
+    $state.installedHash=$state.candidateHash
+    $state.code=41
+    $state.name='0.2.21-r5-wave1-qa'
+  }
   & $change
   Json (Join-Path $fixture 'state.json') $state
   Json (Join-Path $fixture 'ci.json') $ci
@@ -162,11 +175,27 @@ function Run-Case([string]$name,[scriptblock]$change,[string]$expected,[int]$exp
   Assert ($result.installCalls -eq $expectedInstalls) "${name}: unauthorized install count $($result.installCalls)"
   $commands=if (Test-Path (Join-Path $fixture 'commands.jsonl')) { Get-Content (Join-Path $fixture 'commands.jsonl') -Raw } else { '' }
   Assert ($commands -notmatch '"(?:uninstall|pull|clear|forward|reverse)"') "${name}: prohibited ADB operation"
+  if ($arguments.Phase -ne 'PostInstall') {
+    Assert (-not $output.Contains('POST_INSTALL_ACCEPTANCE_PASS')) "${name}: premature acceptance claim"
+  }
+  Assert (-not $output.Contains('BETA_INSTALL_GO')) "${name}: a phase must not claim every governance/install/acceptance gate passed"
+  $script:caseCount++
   Write-Host "PASS: $name"
 }
+$script:caseCount=0
 try {
-  Run-Case 'reviewed gates read only' { $arguments.Phase='Preflight' } 'BETA_INSTALL_GO'
-  Run-Case 'same package authorized update readback' {} 'INSTALL_COMPLETED' 1
+  Run-Case 'reviewed gates read only without install authorization' { $arguments.Phase='Preflight';$arguments.OwnerAuthorizesInstall=$false } 'PREFLIGHT_READY'
+  Run-Case 'preflight owner flag cannot perform install' { $arguments.Phase='Preflight' } 'PREFLIGHT_READY'
+  Run-Case 'preflight requires no postinstall candidate evidence' {
+    $arguments.Phase='Preflight';$arguments.OwnerAuthorizesInstall=$false
+    $evidence.Remove('deviceAcceptance');$evidence.Remove('transport')
+  } 'PREFLIGHT_READY'
+  Run-Case 'same package authorized update readback is pending acceptance' {} 'INSTALLED_PENDING_ACCEPTANCE' 1
+  Run-Case 'first install is possible before candidate acceptance' {
+    $evidence.Remove('deviceAcceptance');$evidence.Remove('transport')
+  } 'INSTALLED_PENDING_ACCEPTANCE' 1
+  Run-Case 'postinstall acceptance is read only without install authorization' {} 'POST_INSTALL_ACCEPTANCE_PASS' -PostInstall
+  Run-Case 'postinstall owner flag cannot perform install' { $arguments.OwnerAuthorizesInstall=$true } 'POST_INSTALL_ACCEPTANCE_PASS' -PostInstall
   Run-Case 'backup checkbox cannot replace restore evidence' { $arguments.RecoveryEvidence='';$arguments.OwnerBackupConfirmed=$true } 'RECOVERY_EVIDENCE_REQUIRED'
   Run-Case 'backup checkbox cannot replace failed restore' { $arguments.OwnerBackupConfirmed=$true;$evidence.coldRestore.status='FAIL' } 'COLD_RESTORE_NOT_PROVEN'
   Run-Case 'explicit owner approval independent' { $arguments.OwnerAuthorizesInstall=$false } 'OWNER_AUTHORIZATION_REQUIRED'
@@ -182,7 +211,7 @@ try {
   Run-Case 'recovery must bind exact candidate' { $evidence.candidateSha256='e'*64 } 'RECOVERY_CANDIDATE_MISMATCH'
   Run-Case 'changed evidence file' { 'tampered' | Set-Content (Join-Path $fixture 'record.txt') } 'EVIDENCE_FILE_CHANGED'
   Run-Case 'changed backup archive' { 'tampered' | Set-Content (Join-Path $fixture 'backup.bin') } 'EVIDENCE_FILE_CHANGED'
-  Run-Case 'failed device privacy behavior' { $evidence.deviceAcceptance.checks.privateCaptureUsableAndRedacted=$false } 'DEVICE_ACCEPTANCE_GATE_MISSING'
+  Run-Case 'failed device privacy behavior' { $evidence.deviceAcceptance.checks.privateCaptureUsableAndRedacted=$false } 'DEVICE_ACCEPTANCE_GATE_MISSING' -PostInstall
   Run-Case 'wrong physical device' { $evidence.device.serialSha256='e'*64 } 'RECOVERY_DEVICE_MISMATCH'
   Run-Case 'stale recovery trial' { $evidence.coldRestore.testedUtc=[DateTimeOffset]::UtcNow.AddDays(-8).ToString('o') } 'RECOVERY_EVIDENCE_STALE'
   Run-Case 'same HEAD CI failure' { $ci.workflow_runs[0].conclusion='failure' } 'CI_NOT_GREEN'
@@ -190,21 +219,58 @@ try {
   Run-Case 'missing CI workflow' { $ci.workflow_runs=@($ci.workflow_runs | Select-Object -Skip 1);$ci.total_count-- } 'REQUIRED_CI_WORKFLOW_MISSING'
   Run-Case 'candidate must come from exact CI run attempt' { $manifest.ciRunAttempt=2 } 'CANDIDATE_CI_RUN_MISMATCH'
   Run-Case 'install rechecks installed bytes' { $state.changeDuringPreflight=$true } 'INSTALLED_APK_CHANGED_DURING_PREFLIGHT'
-  Run-Case 'signer check alone never GO' { $arguments.Phase='InspectSigner' } 'SIGNER_CHECK_ONLY'
+  Run-Case 'signer check alone never GO or requires install authorization' { $arguments.Phase='InspectSigner';$arguments.OwnerAuthorizesInstall=$false } 'SIGNER_CHECK_ONLY'
   Run-Case 'failed install never reports success or auto rollback' { $state.installFails=$true } 'ADB_READ_OR_INSTALL_FAILED' 1
   Run-Case 'multiple Kelpie packages in user0' { $state.packages+=@('com.kelpie.browser.parallel') } 'SINGLE_EXISTING_KELPIE_USER0_REQUIRED'
   Run-Case 'package inventory refreshed immediately before install' { $state.inventoryChanges=$true } 'SINGLE_EXISTING_KELPIE_USER0_REQUIRED'
   Run-Case 'existing Termux is required without installation fallback' { $state.termuxInstalled=$false } 'EXISTING_TERMUX_USER0_REQUIRED'
   Run-Case 'insufficient data storage preserves current app' { $state.freeKiB=1 } 'INSUFFICIENT_DATA_STORAGE'
-  Run-Case 'twenty tab switches required' { $evidence.deviceAcceptance.tabSwitchCycles=19 } 'PHYSICAL_CYCLE_GATE_NOT_PROVEN'
-  Run-Case 'at least three distinct tabs required' { $evidence.deviceAcceptance.distinctTabs=2 } 'PHYSICAL_CYCLE_GATE_NOT_PROVEN'
-  Run-Case 'twenty five fresh frames required' { $evidence.deviceAcceptance.freshFrames=24 } 'PHYSICAL_CYCLE_GATE_NOT_PROVEN'
-  Run-Case 'fifty display create release cycles required' { $evidence.deviceAcceptance.displayCreateReleaseCycles=49 } 'PHYSICAL_CYCLE_GATE_NOT_PROVEN'
-  Run-Case 'transport uses existing browser port' { $evidence.transport.browserPort=8420 } 'TRANSPORT_EVIDENCE_BINDING_MISMATCH'
-  Run-Case 'readiness 503 cannot claim remote ready' { $evidence.transport.probeClassification='PROBE_READY_LOCAL_REMOTE_UNKNOWN' } 'PROBE_IS_NOT_REMOTE_TUNNEL_PROOF'
-  Run-Case 'local health cannot prove remote authenticated transport' { $evidence.transport.remoteAuthenticatedJourney='UNKNOWN' } 'AUTHENTICATED_TRANSPORT_NOT_PROVEN'
-  Run-Case 'fresh transport experiment required' { $evidence.transport.testedUtc=[DateTimeOffset]::UtcNow.AddMinutes(-16).ToString('o') } 'TRANSPORT_EVIDENCE_STALE'
-  Write-Host 'PASS: 39 real-script negative/positive gate scenarios; all Android boundaries mocked.'
+  Run-Case 'twenty tab switches required' { $evidence.deviceAcceptance.tabSwitchCycles=19 } 'PHYSICAL_CYCLE_GATE_NOT_PROVEN' -PostInstall
+  Run-Case 'at least three distinct tabs required' { $evidence.deviceAcceptance.distinctTabs=2 } 'PHYSICAL_CYCLE_GATE_NOT_PROVEN' -PostInstall
+  Run-Case 'twenty five fresh frames required' { $evidence.deviceAcceptance.freshFrames=24 } 'PHYSICAL_CYCLE_GATE_NOT_PROVEN' -PostInstall
+  Run-Case 'fifty display create release cycles required' { $evidence.deviceAcceptance.displayCreateReleaseCycles=49 } 'PHYSICAL_CYCLE_GATE_NOT_PROVEN' -PostInstall
+  Run-Case 'transport uses existing browser port' { $evidence.transport.browserPort=8420 } 'TRANSPORT_EVIDENCE_BINDING_MISMATCH' -PostInstall
+  Run-Case 'readiness 503 cannot claim remote ready' { $evidence.transport.probeClassification='PROBE_READY_LOCAL_REMOTE_UNKNOWN' } 'PROBE_IS_NOT_REMOTE_TUNNEL_PROOF' -PostInstall
+  Run-Case 'local health cannot prove remote authenticated transport' { $evidence.transport.remoteAuthenticatedJourney='UNKNOWN' } 'AUTHENTICATED_TRANSPORT_NOT_PROVEN' -PostInstall
+  Run-Case 'fresh transport experiment required' { $evidence.transport.testedUtc=[DateTimeOffset]::UtcNow.AddMinutes(-16).ToString('o') } 'TRANSPORT_EVIDENCE_STALE' -PostInstall
+  Run-Case 'old installed version is not candidate acceptance' {
+    $state.installedHash=$evidence.installed.artifactSha256;$state.code=40;$state.name=$evidence.installed.versionName
+  } 'POST_INSTALL_CANDIDATE_NOT_INSTALLED' -PostInstall
+  Run-Case 'installed candidate code alone cannot prove exact bytes' { $state.installedHash='e'*64 } 'POST_INSTALL_CANDIDATE_NOT_INSTALLED' -PostInstall
+  Run-Case 'installed candidate bytes alone cannot prove version' { $state.code=40 } 'POST_INSTALL_CANDIDATE_NOT_INSTALLED' -PostInstall
+  Run-Case 'postinstall requires original baseline not candidate overwrite' {
+    $evidence.installed.artifactSha256=$state.candidateHash;$evidence.installed.versionCode=41
+  } 'ORIGINAL_ROLLBACK_BASELINE_REQUIRED' -PostInstall
+  Run-Case 'postinstall retains recovery proof' { $evidence.coldRestore.status='FAIL' } 'COLD_RESTORE_NOT_PROVEN' -PostInstall
+  Run-Case 'postinstall retains rollback proof' { $evidence.rollback.retainsData=$false } 'ROLLBACK_NOT_PROVEN' -PostInstall
+  Run-Case 'postinstall retains signer equality' { $state.rollbackCert='b'*64 } 'SIGNER_MISMATCH' -PostInstall
+  Run-Case 'postinstall retains exact HEAD CI' { $ci.workflow_runs[0].conclusion='failure' } 'CI_NOT_GREEN' -PostInstall
+  Run-Case 'postinstall missing candidate acceptance refuses' { $evidence.Remove('deviceAcceptance') } 'DEVICE_ACCEPTANCE_NOT_PROVEN' -PostInstall
+  Run-Case 'postinstall failed acceptance refuses' { $evidence.deviceAcceptance.status='FAIL' } 'DEVICE_ACCEPTANCE_NOT_PROVEN' -PostInstall
+  Run-Case 'postinstall acceptance from another source refuses' { $evidence.deviceAcceptance.sourceCommit='b'*40 } 'DEVICE_ACCEPTANCE_NOT_PROVEN' -PostInstall
+  Run-Case 'postinstall acceptance from another artifact refuses' { $evidence.deviceAcceptance.candidateSha256='e'*64 } 'DEVICE_ACCEPTANCE_NOT_PROVEN' -PostInstall
+  Run-Case 'postinstall changed acceptance record refuses' { 'changed' | Set-Content (Join-Path $fixture 'acceptance.txt') } 'EVIDENCE_FILE_CHANGED' -PostInstall
+  Run-Case 'postinstall stale acceptance refuses' { $evidence.deviceAcceptance.testedUtc=[DateTimeOffset]::UtcNow.AddDays(-8).ToString('o') } 'DEVICE_ACCEPTANCE_EVIDENCE_STALE' -PostInstall
+  Run-Case 'postinstall future acceptance refuses' { $evidence.deviceAcceptance.testedUtc=[DateTimeOffset]::UtcNow.AddMinutes(1).ToString('o') } 'DEVICE_ACCEPTANCE_EVIDENCE_STALE' -PostInstall
+  foreach ($check in @('controlPlaneNoGrant','grantSeparation','stopInflight','lockResumeEpoch','tabTransferAck','documentIdentity',
+    'staleFrameRejected','lifecycle25Cycles','realBehavior','rotation','homeResume','screenOffOn','processRestart',
+    'pairingPreserved','browserStateRestored','sensitiveActionsNeedHuman')) {
+    Run-Case "postinstall requires $check" { $evidence.deviceAcceptance.checks[$check]=$false } 'DEVICE_ACCEPTANCE_GATE_MISSING' -PostInstall
+  }
+  Run-Case 'postinstall missing transport refuses' { $evidence.Remove('transport') } 'AUTHENTICATED_TRANSPORT_NOT_PROVEN' -PostInstall
+  Run-Case 'postinstall transport from another source refuses' { $evidence.transport.sourceCommit='b'*40 } 'TRANSPORT_EVIDENCE_BINDING_MISMATCH' -PostInstall
+  Run-Case 'postinstall transport from another artifact refuses' { $evidence.transport.candidateSha256='e'*64 } 'TRANSPORT_EVIDENCE_BINDING_MISMATCH' -PostInstall
+  Run-Case 'postinstall preserves diagnostic port' { $evidence.transport.diagnosticPort=9090 } 'TRANSPORT_EVIDENCE_BINDING_MISMATCH' -PostInstall
+  Run-Case 'postinstall requires existing tunnel preservation' { $evidence.transport.existingTunnelPreserved=$false } 'TRANSPORT_EVIDENCE_BINDING_MISMATCH' -PostInstall
+  Run-Case 'postinstall native consent round trip required' { $evidence.transport.nativeConsentRoundTrip='UNKNOWN' } 'AUTHENTICATED_TRANSPORT_NOT_PROVEN' -PostInstall
+  Run-Case 'postinstall changed transport record refuses' { 'changed' | Set-Content (Join-Path $fixture 'transport.txt') } 'EVIDENCE_FILE_CHANGED' -PostInstall
+  Run-Case 'postinstall future transport refuses' { $evidence.transport.testedUtc=[DateTimeOffset]::UtcNow.AddMinutes(1).ToString('o') } 'TRANSPORT_EVIDENCE_STALE' -PostInstall
+  Run-Case 'postinstall rechecks current candidate bytes' { $state.changeDuringPreflight=$true } 'INSTALLED_APK_CHANGED_DURING_PREFLIGHT' -PostInstall
+  Run-Case 'install rechecks referenced recovery record after CI' { $state.tamperDuringCi='record.txt' } 'EVIDENCE_FILE_CHANGED'
+  Run-Case 'install rechecks reviewed evidence index after CI' { $state.tamperDuringCi='evidence.json' } 'EVIDENCE_CHANGED_DURING_PREFLIGHT'
+  Run-Case 'postinstall rechecks referenced acceptance record after CI' { $state.tamperDuringCi='acceptance.txt' } 'EVIDENCE_FILE_CHANGED' -PostInstall
+  Run-Case 'postinstall rechecks referenced transport record after CI' { $state.tamperDuringCi='transport.txt' } 'EVIDENCE_FILE_CHANGED' -PostInstall
+  Write-Host "PASS: $script:caseCount real-script negative/positive gate scenarios; all Android boundaries mocked."
 } finally {
   Remove-Item Function:\Get-Command -ErrorAction SilentlyContinue
   Remove-Item Function:\Invoke-RestMethod -ErrorAction SilentlyContinue

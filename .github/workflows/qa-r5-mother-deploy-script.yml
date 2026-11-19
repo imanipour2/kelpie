@@ -67,7 +67,11 @@ jobs:
             "OwnerBackupConfirmed",
             "expectedApkHash",
             "expectedCert",
-            "READ_ONLY_PASS",
+            "PREFLIGHT_READY",
+            "INSTALLED_PENDING_ACCEPTANCE",
+            "POST_INSTALL_ACCEPTANCE_PASS",
+            "Assert-PostInstallEvidence",
+            "POST_INSTALL_CANDIDATE_NOT_INSTALLED",
             "Get-FileHash",
             "ApkSigner",
             "versionCode",
@@ -90,6 +94,6 @@ jobs:
             throw 'MotherNext must never uninstall or clear app data.'
           }
           Write-Host 'PASS: original deployment and 18463 signer/backup gates parse correctly.'
-      - name: Exercise exact candidate, signer, restore, rollback and install authorization gates
+      - name: Exercise preinstall safety, owner authorization and read-only postinstall acceptance
         shell: pwsh
         run: ./scripts/qa/tests/test_mothernext_gates.ps1

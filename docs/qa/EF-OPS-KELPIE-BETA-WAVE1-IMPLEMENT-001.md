@@ -53,7 +53,7 @@ gap. No extra decision authority or duplicate historical master was created.
 | Privacy | Raw form/URL/title/selector data and unproved page pixels could leave through different handlers | Shared `ObservationPrivacyScripts`, `WebViewCapturePrivacy`, `CapturePrivacyEvidence`, `TabMetadataPrivacy`; `ScreenshotHandler`, `LLMHandler`, tab/navigation handlers | Pure JVM privacy/document/geometry tests PASS; production-JS Chromium fixtures PENDING CI; screenshot aliases share the same gate | Real-site reliable pixel redaction remains unimplemented; real pages are refused |
 | Renderer/lifecycle | Dead WebViews and late callbacks could retain/revive obsolete references | `TabStore`, `TabWebViewClients`, `HandlerContext.nativeRendererGone`, `R5AgentCoordinator`, stateless `R5LifecycleSignals` | Exact-instance callback guards, native retirement, cancellation/ownership tests; instrumentation COMPILED / NOT_RUN_ON_ANDROID | Real/peer renderer death, HOME, rotation, lock, networking, Doze and reboot |
 | Native First/status | Termux fallback was presented too early; local readiness was confused with remote connection | `AgentConnectionCenterSheet`, `R5TermuxOwnerReconnect`, `ConnectionStatusSheet`, `McpActivityEvidence` | Explicit opt-in/fixed-command tests; degraded-probe truth tests | Owner one-tap journey; Termux callback on Android 17 if separately enabled |
-| Candidate/install safety | Stale hard-coded APK/source/cert plus backup checkbox could bypass meaningful recovery proof | MotherNext profile, existing sidecar workflow and `kelpie-s24-mothernext-18463.ps1` | Actual script with SDK/ADB/GitHub boundaries mocked; digest/signing/recovery/CI/device/storage/race negative cases | Same signer, cold restore, rollback and independent owner approval |
+| Candidate/install safety | Stale hard-coded APK/source/cert plus backup checkbox could bypass meaningful recovery proof; exact-candidate post-install acceptance was also demanded before the first installation | MotherNext profile, existing sidecar workflow and `kelpie-s24-mothernext-18463.ps1` | Actual script with SDK/ADB/GitHub boundaries mocked; digest/signing/recovery/CI/device/storage/race negative cases, with pre-install and post-install phases kept distinct | Same signer, cold restore, rollback and independent owner approval before installation; actual candidate acceptance afterward |
 
 For detailed file/test inventories see [admission and install gates](r5-wave1-admission-and-install-gates-20261119.md)
 and [capture research/acceptance](wave1-research-20261119.md). Review the PR diff
@@ -183,8 +183,12 @@ including queued authority, navigation/scroll and target-handoff tests, passed
 instrumentation compilation. The final notification-wire fixture correction was
 formatted and compiled separately. Shared/CLI production build and lint passed;
 the actual native MCP gateway, extensions and registry passed all three CTest
-targets. The installation guard passed 39 scenarios against mocked external
-boundaries. None of those checks touched the owner's installed package.
+targets. The original installation guard passed 39 scenarios against mocked
+external boundaries. The phase correction retained those cases and passed
+**88 scenarios** against the actual script, including read-only preflight
+without install authorization, candidate-bound post-install refusals and
+referenced-evidence revalidation after CI. None of those checks touched the
+owner's installed package.
 Compilation of an Android test is not its execution. Exact-head CI results,
 including the real Chromium and isolated API 34 Android fixtures, are recorded
 with the final candidate after they actually run.
@@ -249,6 +253,15 @@ and lookup precedence. The API 34 image, software graphics, KVM requirement,
 both existing ABIs, all 11 tests and zero-skip gate are preserved. This is a CI
 AVD-discovery correction; its success still requires actual hosted execution.
 
+Actual readback on `89ecc0e133928c7f3d68e164f99d49d1c3daa140` then
+proved this correction: the same
+[Android fixture job](https://github.com/imanipour2/kelpie/actions/runs/44564567815/job/135702668530)
+booted successfully in 37 seconds (16:19:37-16:20:14 UTC), before APK assembly.
+That establishes AVD registration and boot, not an instrumented-test pass.
+The complete contracts job again passed 94 shared, 664 CLI, 31 Chromium and
+3 native CTest cases plus selector conformance. Final Android execution and
+the following install-phase correction require their own exact-head readback.
+
 Both Apple jobs failed before any build step: the hosted runner was not acquired
 after multiple attempts, with provider annotations identifying macOS arm64
 capacity constraints. This is runner admission evidence, not a Swift/iOS compile
@@ -288,12 +301,22 @@ and whole CI matrix must agree.
 
 The strengthened existing PowerShell guard reads the actual device, exact app
 inventory, free space and installed byte digest; verifies local rollback bytes
-and signer; validates independently reviewed recovery/device/transport records;
-and checks every required exact-head CI workflow. Integrity checks cannot turn
-a fabricated JSON PASS into evidence. No such bundle was manufactured here.
-Read-only preflight cannot bypass those gates. The Install phase contains only
-a same-package in-place update after all gates and a distinct owner flag; a
-failure never triggers an automatic uninstall or destructive rollback.
+and signer; validates independently reviewed recovery records; and checks every
+required exact-head CI workflow. The execution document's F04 and independent
+gate F require native consent, readiness and real candidate E2E acceptance after
+installation. Requiring those candidate-bound records before the only install
+command created a circular gate. They therefore belong to a separate read-only
+post-install acceptance phase, retaining their exact source/hash, physical
+thresholds, evidence checks and refusal cases. Preflight does not claim that
+later phase has passed and does not itself require permission to install.
+
+The Install phase contains only a same-package in-place update after the
+pre-install safety gates and a distinct owner flag. Successful installation is
+reported as pending post-install acceptance, never as full behavior acceptance.
+Integrity checks cannot turn a fabricated JSON PASS into evidence; no such
+bundle was manufactured here. A failure never triggers an automatic uninstall
+or destructive rollback. This phase correction is source/test work only; no
+installation or candidate acceptance phase was executed on the owner's phone.
 
 **BETA_INSTALL_NO_GO** therefore preserves the current device installation.
 The source work and completed local JVM validation can be reviewed now. The

@@ -1,8 +1,8 @@
 # Existing R5 MotherNext 18463 only. Never auto-run from CI or use a parallel package.
-# Read-only preflight; Installation requires the separately reviewed evidence and owner flag.
+# Read-only preflight/acceptance; installation requires reviewed recovery and the owner flag.
 [CmdletBinding()]
 param(
-  [ValidateSet('Preflight','InspectSigner','Install')][string]$Phase='Preflight',
+  [ValidateSet('Preflight','InspectSigner','Install','PostInstall')][string]$Phase='Preflight',
   [Parameter(Mandatory=$true)][string]$Apk,
   [Parameter(Mandatory=$true)][string]$CandidateManifest,
   [Parameter(Mandatory=$true)][ValidatePattern('^[0-9a-f]{40}$')][string]$ReviewedSourceCommit,
@@ -163,6 +163,13 @@ function Assert-RecoveryEvidence($evidence,$installed,[string]$evidenceDir) {
     $evidence.rollback.toInstalledArtifactSha256 -ceq $installed.Sha256 -and
     $evidence.rollback.versionDowngradeVerified -eq $true -and $evidence.rollback.retainsData -eq $true) 'ROLLBACK_NOT_PROVEN'
   Assert-EvidenceFile $evidence.rollback.record $evidenceDir
+  foreach ($stamp in @($evidence.backup.createdUtc,$evidence.coldRestore.testedUtc,$evidence.rollback.testedUtc)) {
+    $time=[DateTimeOffset]::Parse($stamp)
+    Require ($time -le [DateTimeOffset]::UtcNow -and $time -ge [DateTimeOffset]::UtcNow.AddDays(-7)) 'RECOVERY_EVIDENCE_STALE'
+  }
+}
+function Assert-PostInstallEvidence($evidence,[string]$evidenceDir) {
+  Require ($null -ne $evidence.PSObject.Properties['deviceAcceptance']) 'DEVICE_ACCEPTANCE_NOT_PROVEN'
   Require ($evidence.deviceAcceptance.status -ceq 'PASS' -and
     $evidence.deviceAcceptance.sourceCommit -ceq $ReviewedSourceCommit -and
     $evidence.deviceAcceptance.candidateSha256 -ceq $actual) 'DEVICE_ACCEPTANCE_NOT_PROVEN'
@@ -176,6 +183,10 @@ function Assert-RecoveryEvidence($evidence,$installed,[string]$evidenceDir) {
     Require (($measurement -is [int] -or $measurement -is [long]) -and $measurement -ge $threshold[1]) 'PHYSICAL_CYCLE_GATE_NOT_PROVEN'
   }
   Assert-EvidenceFile $evidence.deviceAcceptance.record $evidenceDir
+  $acceptanceTime=[DateTimeOffset]::Parse($evidence.deviceAcceptance.testedUtc)
+  Require ($acceptanceTime -le [DateTimeOffset]::UtcNow -and
+    $acceptanceTime -ge [DateTimeOffset]::UtcNow.AddDays(-7)) 'DEVICE_ACCEPTANCE_EVIDENCE_STALE'
+  Require ($null -ne $evidence.PSObject.Properties['transport']) 'AUTHENTICATED_TRANSPORT_NOT_PROVEN'
   Require ($evidence.transport.sourceCommit -ceq $ReviewedSourceCommit -and
     $evidence.transport.candidateSha256 -ceq $actual -and $evidence.transport.browserPort -eq 18463 -and
     $evidence.transport.diagnosticPort -eq 8080 -and $evidence.transport.existingTunnelPreserved -eq $true) 'TRANSPORT_EVIDENCE_BINDING_MISMATCH'
@@ -192,10 +203,6 @@ function Assert-RecoveryEvidence($evidence,$installed,[string]$evidenceDir) {
   Require ($transportTime -le [DateTimeOffset]::UtcNow -and
     $transportTime -ge [DateTimeOffset]::UtcNow.AddMinutes(-15)) 'TRANSPORT_EVIDENCE_STALE'
   Assert-EvidenceFile $evidence.transport.record $evidenceDir
-  foreach ($stamp in @($evidence.backup.createdUtc,$evidence.coldRestore.testedUtc,$evidence.rollback.testedUtc,$evidence.deviceAcceptance.testedUtc)) {
-    $time=[DateTimeOffset]::Parse($stamp)
-    Require ($time -le [DateTimeOffset]::UtcNow -and $time -ge [DateTimeOffset]::UtcNow.AddDays(-7)) 'RECOVERY_EVIDENCE_STALE'
-  }
 }
 try {
   $manifest=Read-ReviewedJson $CandidateManifest $ReviewedManifestSha256
@@ -230,35 +237,55 @@ try {
   Require ($ready.Count -eq 1) 'EXACTLY_ONE_AUTHORIZED_DEVICE_REQUIRED'
   $script:device=($ready[0] -split '\s+')[0]
   $installed=Read-InstalledIdentity
-  Assert-InstallStorage
-  Require ($installed.Code -lt $expectedCode) 'DOWNGRADE_OR_REINSTALL_REFUSED'
+  $evidence=$null
+  if ($Phase -eq 'PostInstall') {
+    Require ($installed.Sha256 -ceq $actual -and $installed.Code -eq $expectedCode -and
+      $installed.Name -ceq $expectedName) 'POST_INSTALL_CANDIDATE_NOT_INSTALLED'
+    Require (-not [string]::IsNullOrWhiteSpace($RecoveryEvidence)) 'RECOVERY_EVIDENCE_REQUIRED_NOT_OWNER_BACKUP_CHECKBOX'
+    $evidence=Read-ReviewedJson $RecoveryEvidence $ReviewedEvidenceSha256
+    # Schema v1 keeps installed as the ORIGINAL baseline after an in-place update.
+    $baseline=@{Sha256=$evidence.installed.artifactSha256;Code=$evidence.installed.versionCode;Name=$evidence.installed.versionName}
+    Require ($baseline.Code -lt $expectedCode) 'ORIGINAL_ROLLBACK_BASELINE_REQUIRED'
+  } else {
+    Assert-InstallStorage
+    Require ($installed.Code -lt $expectedCode) 'DOWNGRADE_OR_REINSTALL_REFUSED'
+    $baseline=$installed
+  }
   Require (-not [string]::IsNullOrWhiteSpace($RollbackApk)) 'LOCAL_ROLLBACK_APK_REQUIRED_NO_ADB_PULL'
   $rollbackFile=(Resolve-Path -LiteralPath $RollbackApk).Path
-  Require ((File-Sha256 $rollbackFile) -ceq $installed.Sha256) 'ROLLBACK_APK_NOT_INSTALLED_BYTES'
+  Require ((File-Sha256 $rollbackFile) -ceq $baseline.Sha256) 'ROLLBACK_APK_NOT_INSTALLED_BYTES'
   $oldIdentity=Apk-Identity $rollbackFile
-  Require ($oldIdentity.Package -ceq $pkg -and $oldIdentity.Code -eq $installed.Code -and
-    $oldIdentity.Name -ceq $installed.Name) 'ROLLBACK_APK_IDENTITY_MISMATCH'
+  Require ($oldIdentity.Package -ceq $pkg -and $oldIdentity.Code -eq $baseline.Code -and
+    $oldIdentity.Name -ceq $baseline.Name) 'ROLLBACK_APK_IDENTITY_MISMATCH'
   Require ((ApkSigner $rollbackFile) -ceq $candidateCert) 'SIGNER_MISMATCH_DO_NOT_UNINSTALL'
-  Write-Host 'SIGNER_MATCH: local rollback APK equals installed base.apk; candidate signer is identical.'
+  Write-Host 'SIGNER_MATCH: local rollback APK equals the original baseline; candidate signer is identical.'
   Write-Host "CANDIDATE: source $ReviewedSourceCommit / APK SHA256 $actual / package $pkg / port 18463"
   if ($Phase -eq 'InspectSigner') { Stop-NoGo 'SIGNER_CHECK_ONLY_RECOVERY_AND_RUNTIME_GATES_NOT_RUN' }
   Require (-not [string]::IsNullOrWhiteSpace($RecoveryEvidence)) 'RECOVERY_EVIDENCE_REQUIRED_NOT_OWNER_BACKUP_CHECKBOX'
-  $evidence=Read-ReviewedJson $RecoveryEvidence $ReviewedEvidenceSha256
+  if ($null -eq $evidence) { $evidence=Read-ReviewedJson $RecoveryEvidence $ReviewedEvidenceSha256 }
   $evidenceDir=Split-Path -Parent (Resolve-Path -LiteralPath $RecoveryEvidence).Path
-  Assert-RecoveryEvidence $evidence $installed $evidenceDir
+  Assert-RecoveryEvidence $evidence $baseline $evidenceDir
+  if ($Phase -eq 'PostInstall') { Assert-PostInstallEvidence $evidence $evidenceDir }
   Assert-CurrentCi $manifest
-  Require $OwnerAuthorizesInstall.IsPresent 'OWNER_AUTHORIZATION_REQUIRED'
+  if ($Phase -eq 'Install') { Require $OwnerAuthorizesInstall.IsPresent 'OWNER_AUTHORIZATION_REQUIRED' }
   # Re-read identity and artifact digests immediately before any possible write.
   $current=Read-InstalledIdentity
-  Assert-InstallStorage
+  if ($Phase -ne 'PostInstall') { Assert-InstallStorage }
   Require ($current.Sha256 -ceq $installed.Sha256 -and $current.Code -eq $installed.Code -and
     $current.Name -ceq $installed.Name) 'INSTALLED_APK_CHANGED_DURING_PREFLIGHT'
-  Require ((File-Sha256 $apkFile) -ceq $actual -and (File-Sha256 $rollbackFile) -ceq $installed.Sha256 -and
+  Require ((File-Sha256 $apkFile) -ceq $actual -and (File-Sha256 $rollbackFile) -ceq $baseline.Sha256 -and
     (File-Sha256 $CandidateManifest) -ceq $ReviewedManifestSha256 -and
     (File-Sha256 $RecoveryEvidence) -ceq $ReviewedEvidenceSha256) 'EVIDENCE_CHANGED_DURING_PREFLIGHT'
-  if ($Phase -ne 'Install') {
-    Write-Host 'READ_ONLY_PASS: candidate, current package, CI and reviewed recovery/device evidence agree.'
-    Write-Host 'BETA_INSTALL_GO: all gates passed with owner authorization; no device changes performed.'
+  # Revalidate files/freshness after CI; an index digest alone does not freeze its referenced files.
+  Assert-RecoveryEvidence $evidence $baseline $evidenceDir
+  if ($Phase -eq 'PostInstall') {
+    Assert-PostInstallEvidence $evidence $evidenceDir
+    Write-Host 'POST_INSTALL_ACCEPTANCE_PASS: installed candidate, CI and reviewed recovery/device/transport records agree; read-only.'
+    return
+  }
+  if ($Phase -eq 'Preflight') {
+    Write-Host 'PREFLIGHT_READY: pre-install candidate, signer, CI and recovery checks passed; separate owner install authorization remains required.'
+    Write-Host 'POST_INSTALL_ACCEPTANCE_PENDING: candidate behavior, transport and native consent are checked after installation.'
     return
   }
   # The only device mutation in this file. No uninstall, data reset, port or tunnel command.
@@ -266,7 +293,7 @@ try {
   Require ($installOutput -match '^Success\s*$') 'INSTALL_FAILED_AFTER_AUTHORIZATION_PRESERVE_RECOVERY'
   $after=Read-InstalledIdentity
   Require ($after.Sha256 -ceq $actual -and $after.Code -eq $expectedCode -and $after.Name -ceq $expectedName) 'INSTALLED_READBACK_FAILED_DO_NOT_AUTO_ROLLBACK'
-  Write-Host 'INSTALL_COMPLETED: same package updated and APK digest read back; existing tunnel was untouched.'
+  Write-Host 'INSTALLED_PENDING_ACCEPTANCE: same package updated and APK digest read back; run read-only PostInstall with reviewed candidate behavior/transport evidence.'
 } catch {
   $reason='BETA_INSTALL_NO_GO: UNVERIFIED_PREFLIGHT_OR_INSTALL_STATE'
   if ($_.Exception.Message.StartsWith('BETA_INSTALL_NO_GO:')) { $reason=$_.Exception.Message }

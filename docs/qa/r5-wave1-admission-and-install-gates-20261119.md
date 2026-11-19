@@ -16,7 +16,8 @@ Draft PR #71, depending on #70 and #66. No main/release/phone deployment is impl
 | Error truth | Thrown messages and optimistic pending state could disclose internals or conflate dispatch with success. | Server-generated correlation ID, safe structured rejection/unknown results, exception class/stack-only diagnostic logging. Cancellation remains cancellation. |
 | Owner connection | No-observed-agent UI suggested Termux first, and its observed-client TTL could survive a revocation race. | Successful reauthenticated metadata is observed; native approval checks the running server's real pairing/native-trust store before and after granting. Termux is an explicitly confirmed optional fixed service/script, with existing permission and no token/URL/principal extras. No real Termux settings changed. |
 | Diagnostics | A health-200/readiness-503 probe was a red failure under the “Secure tunnel” label. | `ConnectionStatusSheet` and `McpActivityEvidence` report degraded local diagnostics with a separate unknown remote state. |
-| Artifact selection | Deployment script pinned a stale source/APK/certificate and accepted a backup checkbox; a missing target could allow clean installation. | Structured same-HEAD candidate manifest, reviewed digest binding, exact existing package, local rollback bytes matched against on-device `sha256sum`, signer equality, concrete recovery/physical acceptance records and an independent owner install flag. |
+| Artifact selection | Deployment script pinned a stale source/APK/certificate and accepted a backup checkbox; a missing target could allow clean installation. | Structured same-HEAD candidate manifest, reviewed digest binding, exact existing package, local rollback bytes matched against on-device `sha256sum`, signer equality, concrete recovery records and an independent owner install flag. |
+| Installation phases | The first guard required candidate-specific physical/native acceptance before installing that candidate, and required install authorization during read-only preflight. | Execution-document F04 and gate F are separate phases: pre-install safety/recovery, explicit owner-authorized in-place install, then read-only candidate acceptance. All acceptance checks are retained after installation; neither preflight nor successful installation claims final acceptance. |
 
 No ports, package suffixes, outbound tunnel settings or installed credentials
 are changed by these source corrections. Native consent remains in the existing
@@ -83,15 +84,21 @@ root task; this document does not imply they ran merely because source exists.
 ### Installation guard tests executed locally
 
 `pwsh -NoLogo -NoProfile -File scripts/qa/tests/test_mothernext_gates.ps1`
-executed **39 scenarios, all PASS**, using the actual deployment script with
-only SDK/ADB/GitHub boundaries mocked. Positive read-only readiness, authorized
-same-package update/readback, every recovery/signing/source/runtime/CI gate,
-TOCTOU installed-byte change and failure-without-auto-rollback were exercised.
+executed **88 scenarios, all PASS**, using the actual deployment script with
+only SDK/ADB/GitHub boundaries mocked. All original 39 scenarios remain covered;
+candidate physical/transport cases now run in `PostInstall`. Added cases prove
+read-only preflight without install authorization or future candidate records,
+authorized first installation with acceptance pending, and read-only acceptance
+against the actual installed candidate. Every physical check, 20/3/25/50 cycle
+threshold, candidate/source binding, fresh native/transport record and recovery
+gate remains enforced in its appropriate phase. Changed installed bytes,
+referenced evidence changed during CI, and failure without automatic rollback
+are also exercised.
 No phone, network call, Android install or real credential was involved.
 
 The unchanged legacy deployment script and new guard both passed the workflow's
 PowerShell parser and static safety checks. The workflow still runs all earlier
-checks and now executes these 39 scenarios on Windows. Local runtime was official
+checks and now executes these 88 scenarios on Windows. Local runtime was official
 PowerShell 7.5.4 Linux x64; SHA-256 verified against the release's official
 `hashes.sha256` before use:
 `1fd7983fe56ca9e6233f126925edb24bf6b6b33e356b69996d925c4db94e2fef`.
@@ -116,16 +123,22 @@ space of at least twice the candidate size plus 256 MiB, before any possible wri
 A local rollback APK must hash exactly like the installed `base.apk`; its
 identity/version and verified v2 signer must match the existing app and candidate.
 It never pulls the installed APK, installs a parallel identity, clears data,
-uninstalls an app, changes a port or configures a tunnel. It refuses clean install,
-downgrade and redundant reinstall.
+uninstalls an app, changes a port or configures a tunnel. Its installation phases
+refuse clean install, downgrade and redundant reinstall. The read-only
+`PostInstall` phase instead requires the candidate's exact installed digest and
+version; it cannot install or reinstall anything.
 
 `RecoveryEvidence` is a separately reviewed JSON evidence index with its own
 `ReviewedEvidenceSha256`. Required fields are enforced by the guard and exercised
 in `test_mothernext_gates.ps1` (synthetic fixture, never reusable phone evidence):
 
 - Exact source/candidate/package and device serial digest, model, Android/API/user.
-- Installed APK digest, version and signer matching the live readback and local
-  rollback APK.
+- Original installed APK digest, version and signer. Schema v1 `installed` always
+  describes the **original pre-install baseline**, including during `PostInstall`;
+  it must never be overwritten with candidate values. Before installation it must
+  match live readback and the local rollback APK. After installation the saved
+  rollback bytes must still match this reviewed baseline, while live readback
+  separately must match the exact candidate manifest and signer.
 - Cold backup archive and capture record: existing local files, nonempty, exact
   SHA-256, capture mode `COLD`, stopped-app evidence and installed APK binding.
 - Successful cold restore record binding the exact archive and equal before/after
@@ -133,24 +146,33 @@ in `test_mothernext_gates.ps1` (synthetic fixture, never reusable phone evidence
 - Successful rollback record binding this exact candidate to the installed APK,
   demonstrated version downgrade and retained data. A saved old APK alone is
   insufficient to establish Android rollback feasibility.
-- Actual physical acceptance for the same candidate: metadata before consent,
+- Valid nonfuture backup/restore/rollback timestamps no older than seven days.
+  Missing, stale or altered recovery evidence blocks every phase that evaluates
+  readiness or acceptance.
+
+Only `PostInstall` additionally requires these schema-v1 sections. They are
+intentionally absent or pending before the first authorized candidate install:
+
+- `deviceAcceptance`: actual physical acceptance for the same candidate: metadata before consent,
   grant separation, in-flight STOP, lock/resume epochs, acknowledged transfer,
   document identity, stale-frame refusal, usable redacted private capture,
   at least 20 tab switches across 3 tabs, 25 fresh frames, 50 VirtualDisplay
   create/release cycles, rotation, HOME/resume, screen off/on, process restart,
   preserved pairing/restored browser state and sensitive-action refusal, with hashed records.
-- Separate authenticated transport and native-consent round-trip records, bound
+- `transport`: separate authenticated transport and native-consent round-trip records, bound
   to this candidate and the unchanged 18463/8080 ports. A 200/503 local probe is
   explicitly degraded with remote state unknown; it cannot substitute for the
   authenticated journey. Transport evidence must be from the last 15 minutes.
-- Valid nonfuture recovery/device timestamps no older than seven days. Missing, stale or altered
-  evidence always blocks readiness.
+- Valid nonfuture device-acceptance timestamps no older than seven days. Missing,
+  failed, stale or altered candidate acceptance/transport evidence blocks
+  `POST_INSTALL_ACCEPTANCE_PASS`; it is never silently marked successful.
 
 These checks validate integrity and binding of reviewed test records; a JSON
 `PASS` fabricated without executing the experiment is not proof and must never
 be supplied. No real recovery/device evidence bundle was manufactured here.
 The current image-policy limitation alone prevents usable-redacted-capture
-acceptance until implemented and tested.
+acceptance until implemented and tested. Moving this check to the correct phase
+does not establish functional acceptance or change that limitation.
 
 The script reads GitHub directly for this exact HEAD and requires all 14 current
 workflow families, plus success for every additional latest workflow. The only
@@ -158,20 +180,36 @@ accepted skip is the already-existing branch-restricted formatter, when its
 branch guard applies. It binds the producer run and attempt to the manifest.
 Network failure, incomplete pagination, failed/running/skipped test CI or an
 unknown workflow state is NO_GO. A plain `OwnerBackupConfirmed` never authorizes
-installation. `OwnerAuthorizesInstall` is independent; `Preflight` remains
-read-only even with that flag, and only `Phase=Install` can perform one in-place
-`adb install -r -t` after final identity/digest readback. An install failure or
-bad post-install readback never triggers an automatic destructive rollback.
+installation. `OwnerAuthorizesInstall` is required **only** by `Phase=Install`.
+The read-only phases neither require nor infer installation permission. Final
+readback rechecks device identity/inventory, candidate/rollback/manifest/index
+digests and the referenced records/freshness after CI; an unchanged JSON index
+alone cannot establish that its referenced files remained unchanged.
+
+| Phase | Required evidence and result | Device mutation |
+|---|---|---|
+| `InspectSigner` | Exact candidate, installed original bytes, local rollback identity and matching verified signer; `SIGNER_CHECK_ONLY` remains NO_GO for installation. | None |
+| `Preflight` | Pre-install candidate, signer, original baseline, independently proven cold restore/rollback, current exact-HEAD CI and final readback; outputs `PREFLIGHT_READY`, with separate owner authorization and post-install acceptance pending. | None |
+| `Install` | The same pre-install checks plus independent `OwnerAuthorizesInstall`; exact installed candidate readback follows the update; outputs `INSTALLED_PENDING_ACCEPTANCE`. | Only one same-package `adb install -r -t` |
+| `PostInstall` | Actual installed candidate hash/version, retained original rollback/signing/recovery evidence, exact-HEAD CI, and all reviewed candidate physical/native/transport checks; outputs `POST_INSTALL_ACCEPTANCE_PASS`. | None |
+
+These are phase results, not a claim that every governance/approval gate passed.
+The execution document's gates A–E cover the applicable pre-install decisions,
+review, safe recovery and explicit owner approval. Gate F is post-install
+acceptance/readback. An install failure or bad candidate readback never triggers
+an automatic rollback, uninstall, data reset, parallel installation or tunnel change.
 
 ## Remaining physical gates
 
 No new APK was installed or pulled by this work. The root mission retains the
 actual installed APK identity and signer evidence independently from GitHub.
 A CI debug signer can differ from the installed signer; neither the manifest nor
-version bump solves that. Matching authorized signing material, actual data
-restore/rollback evidence and all physical behavior tests remain required before
-`BETA_INSTALL_GO`. Missing evidence preserves the existing phone app and means
-**BETA_INSTALL_NO_GO**.
+version bump solves that. Matching authorized signing material and actual data
+restore/rollback evidence remain pre-install blockers. Physical candidate
+behavior/transport/native-consent tests belong to post-install gate F and remain
+unproven; no preflight or update success is an acceptance certificate. This source
+correction does not authorize an install. The existing phone app is preserved and
+the mission remains **BETA_INSTALL_NO_GO** while its required evidence is missing.
 
 ## Isolated Android fixture CI scope
 
