@@ -98,6 +98,7 @@ class PrivateWebViewDisplay(
     suspend fun start(original: WebView): Boolean =
         withContext(Dispatchers.Main.immediate) {
             val traceStartMs = android.os.SystemClock.elapsedRealtime()
+
             fun trace(stage: String) {
                 val elapsed = android.os.SystemClock.elapsedRealtime() - traceStartMs
                 Log.i("KelpieR5Transfer", "stage=" + stage + " elapsedMs=" + elapsed)
