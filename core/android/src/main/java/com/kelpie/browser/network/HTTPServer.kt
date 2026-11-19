@@ -362,9 +362,14 @@ class HTTPServer(
                 // Keep initialize/ping/tool metadata alive after STOP so tunnel readiness
                 // cannot mistake an intentionally revoked owner grant for an offline server.
                 val ownerGrantRequired =
-                    !R5McpBootstrapGate.maySkipNativeSession(method, body, principal.clientId)
+                    R5McpBootstrapGate.requiresNativeGrantAtDelivery(
+                        method,
+                        body,
+                        principal.clientId,
+                        privateAtIngress,
+                        privateAtEgress,
+                    )
                 if (ownerGrantRequired &&
-                    (privateAtIngress || privateAtEgress) &&
                     router.handlerContext?.motherGatewayAuthorization?.invoke() != true
                 ) {
                     403 to errorResponse("SESSION_REVOKED", "Native private WebView approval ended before delivery")
