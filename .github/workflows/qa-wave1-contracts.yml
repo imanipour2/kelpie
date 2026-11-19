@@ -71,9 +71,6 @@ jobs:
           test -r /dev/kvm && test -w /dev/kvm
           "$ANDROID_HOME/emulator/emulator" -accel-check
           pnpm install --frozen-lockfile
-      - name: Build fixture APK with the existing ARM64 and x86_64 ABI configuration
-        working-directory: apps/android
-        run: ./gradlew --no-daemon -PkelpieR5MotherNextQaProfile=true :kelpie-browser:assembleDebugAndroidTest
       - name: Boot one isolated emulator with software graphics and no snapshot
         shell: bash
         run: |
@@ -90,13 +87,23 @@ jobs:
             exit "$status"
           }
           trap report_boot_failure EXIT
+          # Both SDK tools must use the same explicit AVD index and content directory.
+          export ANDROID_USER_HOME="$RUNNER_TEMP/kelpie-wave1-android-user"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_USER_HOME" "$ANDROID_AVD_HOME"
+          printf 'ANDROID_USER_HOME=%s\nANDROID_AVD_HOME=%s\n' "$ANDROID_USER_HOME" "$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
           ADB="$ANDROID_HOME/platform-tools/adb"
           timeout --kill-after=2s 10s "$ADB" start-server
           devices_readback="$(timeout --kill-after=2s 10s "$ADB" devices)"
           test "$(printf '%s\n' "$devices_readback" | awk 'NR>1 && NF {n++} END {print n+0}')" = 0
           printf 'no\n' | avdmanager create avd --force --name kelpie-wave1-api34 \
             --package "system-images;android-34;google_apis;x86_64" \
-            --path "$RUNNER_TEMP/kelpie-wave1-device"
+            --path "$ANDROID_AVD_HOME/kelpie-wave1-api34.avd"
+          test -s "$ANDROID_AVD_HOME/kelpie-wave1-api34.ini"
+          test -s "$ANDROID_AVD_HOME/kelpie-wave1-api34.avd/config.ini"
+          avd_readback="$(timeout --kill-after=2s 15s "$ANDROID_HOME/emulator/emulator" -list-avds)"
+          printf '%s\n' "$avd_readback"
+          test "$avd_readback" = kelpie-wave1-api34
           # Official SDK flags: developer.android.com/studio/run/emulator-commandline
           # software replaces deprecated swiftshader_indirect on current emulator releases.
           nohup "$ANDROID_HOME/emulator/emulator" -avd kelpie-wave1-api34 \
@@ -126,11 +133,19 @@ jobs:
           timeout --kill-after=2s 10s "$ADB" -s emulator-5554 shell settings put global window_animation_scale 0
           timeout --kill-after=2s 10s "$ADB" -s emulator-5554 shell settings put global transition_animation_scale 0
           timeout --kill-after=2s 10s "$ADB" -s emulator-5554 shell settings put global animator_duration_scale 0
+      - name: Build fixture APK with the existing ARM64 and x86_64 ABI configuration
+        working-directory: apps/android
+        run: ./gradlew --no-daemon -PkelpieR5MotherNextQaProfile=true :kelpie-browser:assembleDebugAndroidTest
       - name: Execute all 11 new Wave 1 Android fixture tests
         working-directory: apps/android
         shell: bash
         run: |
           set -euo pipefail
+          # Assembly can outlast the emulator screen timeout; verify and wake this same fixture again.
+          devices_readback="$(timeout --kill-after=2s 10s "$ANDROID_HOME/platform-tools/adb" devices)"
+          test "$(printf '%s\n' "$devices_readback" | awk 'NR>1 && NF {print $1, $2}')" = 'emulator-5554 device'
+          timeout --kill-after=2s 10s "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell input keyevent KEYCODE_WAKEUP
+          timeout --kill-after=2s 10s "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell wm dismiss-keyguard
           ./gradlew --no-daemon -PkelpieR5MotherNextQaProfile=true \
             -Pandroid.testInstrumentationRunnerArguments.class=com.kelpie.browser.network.R5ControlPlaneWireTest,com.kelpie.browser.capture.R5ImageReaderCaptureInstrumentedTest,com.kelpie.browser.capture.CapturePrivacyInstrumentedTest,com.kelpie.browser.handlers.NavigationHandlerInstrumentedTest \
             :kelpie-browser:connectedDebugAndroidTest

@@ -226,8 +226,28 @@ correctly failed. A second demonstrated workflow defect then blocked evidence
 publication: offline-device diagnostic ADB calls had no timeout. The follow-up
 binds each ADB operation to a deadline, detects an exited emulator process, and
 prints the synthetic boot log on failure. All 11 fixture cases and the zero-skip
-gate remain required. No boot root cause is asserted before the actual emulator
-log is available.
+gate remain required. That first attempt's missing emulator log was not used to
+invent a GPU, SDK or product-code cause.
+
+The bounded follow-up on `b667bff9882c2f6dc99e69a531a77fdb5e046c28`
+then exposed the actual registration/discovery failure in
+[job 135693786121](https://github.com/imanipour2/kelpie/actions/runs/44561116013/job/135693786121):
+emulator 37.2.13.0 reported `Unknown AVD name [kelpie-wave1-api34]` and a missing
+`kelpie-wave1-api34.ini` in its searched AVD home. It exited before Android boot;
+none of the 11 instrumented cases ran. Artifact `14548429900` was published
+and its ZIP SHA-256 independently verified as
+`a535105cc8ddfd27578d881c88b31a6624a3ef0cb3c08fbc81ad14a83bd99e43`.
+The empty class counts correctly failed the required-test gate.
+
+This follow-up gives `avdmanager` and `emulator` the same task-local
+`ANDROID_USER_HOME` and `ANDROID_AVD_HOME`, verifies both generated INI files and
+the exact `emulator -list-avds` name before launch, and proves boot before the
+long APK assembly. The official
+[Android SDK environment-variable reference](https://developer.android.com/tools/variables),
+updated 2026-10-05 and read 2026-11-19, documents these preference/AVD locations
+and lookup precedence. The API 34 image, software graphics, KVM requirement,
+both existing ABIs, all 11 tests and zero-skip gate are preserved. This is a CI
+AVD-discovery correction; its success still requires actual hosted execution.
 
 Both Apple jobs failed before any build step: the hosted runner was not acquired
 after multiple attempts, with provider annotations identifying macOS arm64
