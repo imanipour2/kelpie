@@ -52,12 +52,10 @@ class ForegroundFrameAcquisitionTest {
         }
 
     @Test
-    fun aConstantStaleProducerExhaustsTheCapWithoutReturningPixels() =
-        runTest { requireCapRefusal(ForegroundFrameRejection.DOCUMENT_PIXEL_PROOF) }
+    fun aConstantStaleProducerExhaustsTheCapWithoutReturningPixels() = runTest { requireCapRefusal(ForegroundFrameRejection.DOCUMENT_PIXEL_PROOF) }
 
     @Test
-    fun aConstantGrayProducerExhaustsTheCapWithoutReturningPixels() =
-        runTest { requireCapRefusal(ForegroundFrameRejection.BLANK_CONTENT) }
+    fun aConstantGrayProducerExhaustsTheCapWithoutReturningPixels() = runTest { requireCapRefusal(ForegroundFrameRejection.BLANK_CONTENT) }
 
     @Test
     fun deadlineCoversTheWholeAcquisitionInsteadOfRestartingForEveryCandidate() =
