@@ -92,6 +92,7 @@ class PrivateWebViewDisplay(
     @Volatile private var active = false
 
     @Volatile private var activityVisible = true
+    private val viewportReadiness = R5PrivateViewportReadiness { isLocked() }
 
     /** Native lifecycle owns this flag; a remote client cannot change it. */
     fun setActivityVisible(visible: Boolean) {
@@ -109,7 +110,7 @@ class PrivateWebViewDisplay(
         withContext(Dispatchers.Main.immediate) {
             if (stateFlow.value != State.IDLE || isLocked() || !activityVisible ||
                 original.width <= 0 || original.height <= 0 || !original.isAttachedToWindow ||
-                !readCssViewportReady(original)
+                !viewportReadiness.cssReady(original)
             ) {
                 return@withContext false
             }
@@ -203,7 +204,7 @@ class PrivateWebViewDisplay(
             }
             // Being attached is not sufficient: the Alibaba S24 failure showed DOM access
             // and a logical selected tab while the physical/CSS viewport remained 0x0.
-            val attached = waitForRenderableViewport(next)
+            val attached = viewportReadiness.awaitCommittedViewport(next, ++visualRequestId)
             if (!attached || isLocked()) {
                 proof.swapWebView(next, old)
                 active = old.isAttachedToWindow && !isLocked()
@@ -418,50 +419,6 @@ class PrivateWebViewDisplay(
     /** QA-only lifecycle category; never log URLs, pixels, tokens or user inputs. */
     private fun noteRestore(code: String) {
         if (useNativeFrameProof) Log.i("KelpieR5Restore", code)
-    }
-
-    /**
-     * A private tab must have native + CSS dimensions and a committed visual state
-     * before it can become selected. No screenshots/URLs or credentials are logged.
-     */
-    private suspend fun waitForRenderableViewport(next: WebView): Boolean {
-        val laidOut =
-            withTimeoutOrNull(3_000L) {
-                while (!isLocked()) {
-                    if (next.isAttachedToWindow && next.width > 0 && next.height > 0 &&
-                        readCssViewportReady(next)
-                    ) {
-                        return@withTimeoutOrNull true
-                    }
-                    delay(80)
-                }
-                false
-            } ?: false
-        if (!laidOut || isLocked()) return false
-        val committed = CompletableDeferred<Boolean>()
-        next.postVisualStateCallback(
-            ++visualRequestId,
-            object : WebView.VisualStateCallback() {
-                override fun onComplete(requestId: Long) {
-                    if (!committed.isCompleted) committed.complete(true)
-                }
-            },
-        )
-        val visualReady = withTimeoutOrNull(2_000L) { committed.await() } == true
-        return visualReady && !isLocked() && next.isAttachedToWindow &&
-            next.width > 0 && next.height > 0 && readCssViewportReady(next)
-    }
-
-    /** Boolean-only page evidence: never export or persist DOM values. */
-    private suspend fun readCssViewportReady(webView: WebView): Boolean {
-        val result = CompletableDeferred<String>()
-        webView.evaluateJavascript(
-            "window.innerWidth > 0 && window.innerHeight > 0 && " +
-                "document.documentElement.getBoundingClientRect().width > 0",
-        ) { raw ->
-            if (!result.isCompleted) result.complete(raw)
-        }
-        return withTimeoutOrNull(500L) { result.await() } == "true"
     }
 
     /** Only document-local CSS values are used, never cross-display native pixels. */
