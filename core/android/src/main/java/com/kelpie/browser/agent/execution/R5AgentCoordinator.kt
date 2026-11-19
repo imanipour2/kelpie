@@ -48,6 +48,7 @@ class R5AgentCoordinator(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val transferMutex = Mutex()
+
     // Monotonic main-thread epoch invalidates old background handoffs on resume.
     private var lifecycleVisibilityEpoch = 0L
     private val released = MutableStateFlow(false)
@@ -341,7 +342,9 @@ class R5AgentCoordinator(
                     " grantActive=" + (active != null) +
                     " rendererIdle=" + (renderer.state.value == PrivateWebViewDisplay.State.IDLE),
             )
-            if (stillBackground() && active != null && !active.locked &&
+            if (stillBackground() &&
+                active != null &&
+                !active.locked &&
                 renderer.state.value == PrivateWebViewDisplay.State.IDLE
             ) {
                 activateRenderer(active)
