@@ -33,3 +33,21 @@ Date: 2026-11-19. Status: OWNER-DIRECTED DEVELOPMENT / REVIEW-GATED. This branch
 - **T12** iOS parity or separately approved exception, human owner acceptance and staged signed QA APK/rollback before any main merge/public release.
 
 Rollback: retain existing S24 install and untouched tunnel; revert this child branch/PR if tests regress. This artifact is not authority to deploy.
+
+
+## 2026-11-19 — S24 Termux startup SESSION_REVOKED root-cause confirmation (review-gated)
+
+**Owner's exact phone diagnostic:** Under existing `proot-distro login ubuntu`, `ef-kelpie-mcp-readonly-20261119.py` returned:
+- YAML regular and discovery Authorization are both present, identical, and equal to the new owner Authorization file.
+- Existing and new owner Authorization files have equal content. The existing runit launcher still references the old filename; **this is not itself the cause** because the two files match.
+- Local `POST http://127.0.0.1:18463/mcp` `initialize` with each of the three Authorization sources consistently returns **HTTP 403 SESSION_REVOKED**.
+- When run outside PRoot in bare Termux, config missing/not-available is expected and does **not** contradict the Ubuntu test.
+- Additional local ADB read-only comparison in this review session produced the same `HTTP 403 SESSION_REVOKED` for an anonymous and a deliberately invalid bearer `initialize`, so presence of an Authorization field alone does not prove the middleware resolved a **non-localhost verified principal**. A separate browser Origin test returned `FORBIDDEN` as expected.
+
+**Source-proven location:** Exact installed S24 APK SHA256 `3ea605c53f6e696e465256880e602a199f01530d5121f0ad5444381d7afdaf34` matches recorded PR #66 build `68ade958af66b7f6de219abd2d9f9011478f5a40`. Its `HTTPServer.handleAuthenticatedPost` unconditionally returns `403 SESSION_REVOKED` when the private agent is active and owner grant is unavailable, even for `initialize`. Draft PR #71 introduces `R5McpBootstrapGate` to admit **only protocol bootstrap metadata** for a verified non-localhost principal independently of the owner-private WebView session. `tools/call` and all browser data/actions still require owner consent.
+
+**Test hardening:** This branch now routes the post-authorization delivery check through `requiresNativeGrantAtDelivery` and tests the exact combination of private ingress/egress, paired client, localhost/unauthenticated callers, initialize/tools-list and tools-call. Source tests do not prove the existing tunnel static Bearer resolves to a paired **non-localhost** client. That remains the last key admission question before expecting a post-update `/readyz HTTP200`.
+
+**Installation blocker:** The installed APK signer SHA256 `234c761b48afa2955787dbad8dbabd3fd9f667ef3ff35cd9ee7ed127246fe287` differs from PR #71 ephemeral CI signer. Do not attempt direct `adb install -r`, substitute another package identity, auto-uninstall, wipe user data, rotate secrets, or change fixed port 18463. Existing encrypted Windows private hot snapshot was integrity-checked, including six SQLite quick-check passes, but **cold consistent restore has not been validated**. The phone remains unchanged.
+
+**Current state:** Source/QA fix in draft PR only, hardware `READINESS_503` unresolved, owner session may return `FORBIDDEN` when Termux is foreground, main not merged, beta not accepted. Publish/install gates remain pending.
