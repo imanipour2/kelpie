@@ -53,7 +53,14 @@ internal class R5MotherTabSwitch(
         cancelInFlight()
         val performed = nativeTabCommands.perform(command)
         val verified = performed && nativeTabCommands.verify(command)
-        if (!verified || !admitted() || selectedTab() != targetId) {
+        if (!R5MotherPrivateSelectionProof.accepts(
+                performed = performed,
+                nativeVerified = verified,
+                ownerStillAdmitted = admitted(),
+                selectedTabId = selectedTab(),
+                requestedTabId = targetId,
+            )
+        ) {
             if (performed) {
                 AndroidAgentProcessSession.stop()
                 AgentSessionNotification.hide(activity)
