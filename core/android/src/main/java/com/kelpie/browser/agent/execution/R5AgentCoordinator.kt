@@ -342,7 +342,7 @@ class R5AgentCoordinator(
                         val restored = renderer.verifyRestored()
                         val active = consent.snapshot() as? SessionConsentCore.State.Active
                         if (!restored) {
-                            if (active != null) AndroidAgentProcessSession.stop()
+                            if (active != null) revokeOnRendererFailure("RESTORE_VERIFY_FAILED")
                             return@withLock
                         }
                         if (active != null && !active.locked) {
@@ -396,7 +396,7 @@ class R5AgentCoordinator(
             if (!ownership.unlockNeedsReattach(active.generation)) return@withLock
             if (!ownership.bindForeground(active.generation, target.rendererIdentity)) {
                 ownership.failRenderer()
-                AndroidAgentProcessSession.stop()
+                revokeOnRendererFailure("UNLOCK_REBIND_FAILED")
                 return@withLock
             }
             val unchanged =
@@ -410,7 +410,7 @@ class R5AgentCoordinator(
             if (!unchanged) {
                 ready = false
                 ownership.failRenderer()
-                AndroidAgentProcessSession.stop()
+                revokeOnRendererFailure("UNLOCK_GENERATION_CHANGED")
                 return@withLock
             }
             ready = true
@@ -435,7 +435,7 @@ class R5AgentCoordinator(
                 ownership.failRenderer()
                 nativePort.clearPendingEvidence()
                 renderer.stop()
-                AndroidAgentProcessSession.stop()
+                revokeOnRendererFailure("PRIVATE_RENDERER_TRANSFER_FAILED")
                 return@withLock
             }
             currentTabId = tab.id
@@ -453,9 +453,20 @@ class R5AgentCoordinator(
                 ready = true
             } else if (ticket != null) {
                 ownership.failRenderer()
-                AndroidAgentProcessSession.stop()
+                revokeOnRendererFailure("FOREGROUND_RESTORE_FAILED")
             }
         }
+
+    /**
+     * An invalid renderer/ownership transition revokes the session fail-closed.
+     * Never leave a misleading STOP notification for a now-OFF authority.
+     * Reasons are fixed categories; no tab, principal, bearer or URL is logged.
+     */
+    private fun revokeOnRendererFailure(reason: String) {
+        Log.w("KelpieR5Recovery", "consent revoked after " + reason)
+        AndroidAgentProcessSession.stop()
+        AgentSessionNotification.hide(activity)
+    }
 
     private suspend fun releaseRenderer() =
         transferMutex.withLock {
