@@ -101,10 +101,11 @@ class PrivateWebViewDisplay(
                 Log.w("KelpieR5Transfer", "START_PRECONDITION_DENIED")
                 return@withContext false
             }
-            val cssScroll = R5WebViewScrollRestoration.read(original) ?: run {
-                Log.w("KelpieR5Transfer", "CSS_SCROLL_WITNESS_MISSING")
-                return@withContext false
-            }
+            val cssScroll =
+                R5WebViewScrollRestoration.read(original) ?: run {
+                    Log.w("KelpieR5Transfer", "CSS_SCROLL_WITNESS_MISSING")
+                    return@withContext false
+                }
             if (stateFlow.value != State.IDLE || isLocked() || !activityVisible) return@withContext false
             val generation = ownershipGeneration.incrementAndGet()
             previousCssScroll = cssScroll
