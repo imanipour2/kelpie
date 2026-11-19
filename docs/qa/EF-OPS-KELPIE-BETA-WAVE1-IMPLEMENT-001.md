@@ -51,7 +51,7 @@ gap. No extra decision authority or duplicate historical master was created.
 | Action identity/effect | Callback/value equality did not prove the same document or DOM node was acted upon | `VerifiedNativeBrowserAdapter`, `R5WebViewActionScripts`, `R5ElementActionProofScripts`, reused `InteractionScripts` | JVM document replacement/pre-dispatch assertions PASS; all 31 production-JS Chromium fixtures PASS on 0e, zero skips | Real click/type/select/scroll and uncertain-effect receipts |
 | Queued action/navigation | Queued work could outlive its original grant; an old completed DOM or dispatch-only receipt did not prove navigation | `BrowserOperationGuard`, `HandlerContext`, `BrowserGatewayBinding`, `NavigationHandler`, `NavigationEffectProof`, `ScrollEffectEvidence` | 4 queued-guard, 9 navigation-oracle and 5 scroll-oracle JVM tests PASS; both actual WebView navigation cases PASS on isolated API 34, including 0e | Actual native navigation/history, lock races and physical touch/scroll effects |
 | Private frame freshness | New native overlay did not prove a new document frame; callbacks could race STOP; row padding/recycling assumptions were unsafe | One `PrivateWebViewDisplay`, `R5PrivateFrameAcquisition`, `R5RgbaFrameBuffer`, `R5PageFrameProof`, `R5FrameProofVerifier`, existing OneShot/epoch helpers | JVM stride/proof/gray/cancellation/200-race checks PASS; both actual Surface/ImageReader cases, including 25 synthetic frames, PASS on 0e | 25 fresh WebView frames; 50 display create/release cycles; no resource growth |
-| Foreground frame freshness | Canvas/visual callback success was not proof of the copied producer frame; OnDraw posting did not wait for actual frame submission | `ForegroundWebViewCapture`, same document proof/blank detector/OneShot holder, bounded API 29+ frame-commit wait, exact fixture detach cleanup | 0e six-case privacy suite PASS; 2c rejected one incomplete foreground frame and correctly failed 10/11 total. The follow-up preserves every pixel/privacy assertion and requires new actual Android execution | PixelCopy errors/late callback, actual S24 surfaces, foreground transitions |
+| Foreground frame freshness | Canvas/visual callback success was not proof of the copied producer frame; OnDraw posting did not wait for actual frame submission, and one copied buffer could still fail document/content proof | `ForegroundWebViewCapture`, same document proof/blank detector/OneShot holder, bounded API 29+ frame-commit wait and same-request verified acquisition, exact fixture detach cleanup | 2c and 363a each actually failed 10/11 total; the latter passed its first two fresh positive starts before its third refusal. All pixel/privacy assertions and three required fresh starts remain; new bounded-selection negative tests and exact-head execution are required | PixelCopy errors/late callback, actual S24 surfaces, foreground transitions |
 | Privacy | Raw form/URL/title/selector data and unproved page pixels could leave through different handlers | Shared `ObservationPrivacyScripts`, `WebViewCapturePrivacy`, `CapturePrivacyEvidence`, `TabMetadataPrivacy`; `ScreenshotHandler`, `LLMHandler`, tab/navigation handlers | JVM and actual Chromium/privacy fixtures PASS on 0e; screenshot aliases share the same gate | Real-site reliable pixel redaction remains unimplemented; real pages are refused |
 | Renderer/lifecycle | Dead WebViews and late callbacks could retain/revive obsolete references | `TabStore`, `TabWebViewClients`, `HandlerContext.nativeRendererGone`, `R5AgentCoordinator`, stateless `R5LifecycleSignals` | Exact-instance callback guards, native retirement and cancellation/ownership JVM tests; 11 actual API 34 cases PASS, but no claim of complete physical lifecycle coverage | Real/peer renderer death, HOME, rotation, lock, networking, Doze and reboot |
 | Native First/status | Termux fallback was presented too early; local readiness was confused with remote connection | `AgentConnectionCenterSheet`, `R5TermuxOwnerReconnect`, `ConnectionStatusSheet`, `McpActivityEvidence` | Explicit opt-in/fixed-command tests; degraded-probe truth tests | Owner one-tap journey; Termux callback on Android 17 if separately enabled |
@@ -590,8 +590,10 @@ destroying it, matching the actual warning and platform lifetime contract. The
 positive case requires three fresh Activity starts and every original assertion
 on every start; the first exception fails immediately. Its dimensions, public
 colors, exact output-pixel/masking assertions and all 11 test methods remain.
-No capture-until-success loop, arbitrary sleep, software Canvas
-fallback, renderer/GPU/memory change or test deletion is introduced. The
+That 363a change introduced no capture-until-success loop, arbitrary sleep,
+software Canvas fallback, renderer/GPU/memory change or test deletion. Its
+single-copy availability behavior is superseded only by the bounded acquisition
+follow-up below; its pixel/privacy admission rules remain unchanged. The
 [official ViewTreeObserver reference](https://developer.android.com/reference/android/view/ViewTreeObserver#registerFrameCommitCallback(java.lang.Runnable))
 (API 29, read 2026-11-19) specifically recommends frame-commit callbacks with
 PixelCopy and limits them to hardware rendering. The
@@ -612,6 +614,99 @@ Additional protocol reference read during wire verification:
 The genuine `notifications/initialized` fixture omits `id`, expects 202 with
 an exactly empty body, and retains invalid-origin and invalid-token refusals.
 No protocol upgrade or package/port change was inferred from newer references.
+
+### Actual 363a readback and bounded acquisition follow-up
+
+The next real Android run on
+`363ac66ee3a2955ba149a6cbf44227cccb691ab5`, run `44584081350`, job
+`135772180885`, executed all **11 cases: 10 PASS, 1 FAIL, 0 errors, 0 skips**.
+Artifact `14561442005` independently matched ZIP SHA-256
+`e16f82cf266a43a74d44f82350dc90f3fb3b9997eb1f1ae0c3a4cad33ffcf353`.
+The positive foreground case started three distinct Activity instances. The
+first two completed all original exact-color, witness-mask, privacy and
+navigation-refusal assertions; the third threw the compound
+`The copied frame does not prove this document paint` refusal. Its existing
+message does not identify whether authority, visible bounds or nonce pixels
+changed. No branch-level observation is invented. Tile warnings also occurred
+in the passing second iteration, so they are not a sufficient cause. No Android
+test retry was issued, and this head's Mother APK is not selected for delivery.
+
+The remaining source assumption is narrower than the security admission rule:
+one successful PixelCopy operation was treated as the only opportunity to
+acquire a valid frame. The [official PixelCopy Window contract](https://developer.android.com/reference/android/view/PixelCopy#request(android.view.Window,%20android.graphics.Rect,%20android.graphics.Bitmap,%20android.view.PixelCopy.OnPixelCopyFinishedListener,%20android.os.Handler))
+(API 26, documentation updated 2026-08-03, read 2026-11-19) says that the most
+recently queued window buffer is copied. A frame-commit callback is a scheduling
+fence; it does not replace validation of the acquired document pixels. The
+existing private ImageReader path already discards unmatched nonce frames while
+its original request remains pending. The foreground follow-up adopts that
+bounded acquisition principle for the same immutable request, rather than
+repeating a user action or restarting a test.
+
+The follow-up keeps a maximum of **8 candidate frames** and one **2500 ms total acquisition
+deadline**, with the original view/window, grant, document, rectangle, proof
+token and sample coordinates. Each acquisition waits for a fresh committed draw.
+Authority, geometry or privacy changes abort the request; they do not authorize
+another target. Rejected bitmaps are disposed, and output still requires both
+the exact opaque nonce pair and the unchanged content check. Explicitly, the
+bounded waiting policy covers both unmatched nonces and nonce-matched incomplete
+content: 2c observed the latter and 363a observed a compound proof refusal. This
+is an availability change within unchanged image-admission rules. Permanent
+gray/stale output must exhaust the cap/deadline and deliver nothing. No pixel
+tolerance, Canvas fallback, arbitrary sleep or source-memory/GPU tuning is used.
+
+The request owns any selected bitmap across the timeout-result handoff so that
+cancellation cannot leak a frame whose coroutine result is discarded. The
+privacy receipt taken with the temporary marker installed remains immutable
+while acquiring. The original pre-marker receipt is compared again after marker
+removal. Three separate constant refusal messages distinguish revoked authority,
+changed visible geometry and unproved document pixels without logging content,
+tokens or nonce values. The positive Android fixture remains three mandatory
+fresh starts, each with every original assertion; its first failure fails CI.
+
+A narrow test-only `kotlinx-coroutines-test:1.8.0` dependency matches the existing
+production coroutine version. No existing virtual-time test facility was
+present. The [official version 1.8.0 test-module guide](https://github.com/Kotlin/kotlinx.coroutines/blob/1.8.0/kotlinx-coroutines-test/README.md)
+(read 2026-11-19) supplies `runTest` and `TestCoroutineScheduler` for deadline,
+cancellation and result-handoff experiments without wall-clock sleeps. This
+library is not added to the application's runtime dependencies. Execution of
+the ten new `ForegroundFrameAcquisitionTest` cases and the full Android fixture remains a new
+exact-head gate, not a claimed local pass.
+
+Those ten production-helper cases exercise stale-to-gray-to-valid ownership,
+constant-stale and constant-gray cap exhaustion, one deadline spanning multiple
+acquisitions, cancellation during inspection, timeout discarding an otherwise
+accepted result, caller cancellation at accepted-result delivery, terminal
+owner/privacy changes, a failed producer callback and
+a late callback after cancellation. Rejected/abandoned candidates must be
+disposed exactly once; only the verified candidate transfers to its consumer.
+The changes are confined to `ForegroundWebViewCapture.kt`, the existing
+`CapturePrivacyInstrumentedTest.kt`, the new focused unit-test file, one
+test-dependency declaration in `core/android/build.gradle.kts`, and this record.
+
+The 363a Background run `44584081351`, attempt 1, also provided the first actual
+hosted failure-only Maven diagnostics. All 13 independent HEAD probes returned
+404; 12 GET probes returned 404 with the same one-byte body digest, while the
+`ktor-server-cors:2.3.8` GET returned 200 and the exact matching POM. All curl
+processes exited zero. The diagnostic Gradle task again failed on the same
+13 coordinates. Artifact `14560931439` matched ZIP SHA-256
+`bafe48cc5a68c0a87c01eecf1e3a556b4083f284b109868e83667987f678da13`.
+Direct HTTP failures mean Gradle's cache alone cannot explain the observation.
+The same-head CaptureConsent job `135772182323` passed its unchanged shared
+dependency build, ktlint and JVM tasks. One identical-head Background job retry
+was authorized after preserving this evidence. Attempt 2, job `135777663167`,
+then passed the unchanged build/ktlint/JVM tasks in 6m10s and both Android lint
+tasks in 1m25s; it completed successfully at 18:22:29 UTC. This attempt used an
+Azure/centralus runner with image `20261111.196.1`, while attempt 1 used
+AWS/us-west-2 with image `20261111.82.6`. That comparison supports an
+environment-specific retrieval failure but does not identify a provider defect
+or prove permanent resolution of the unknown origin/CDN/proxy path. No dependency
+versions, repository URLs, TLS settings,
+cache policy or runner provider were changed to conceal this failure.
+
+The actual 363a iOS run `44584082067` acquired a runner and passed SwiftLint plus
+native and simulator scheme builds. This is build evidence, not an iOS runtime
+test or approval of Android/iOS functional parity. All final combined-head
+results still require their own readback after this new source change.
 
 This is the pre-CI source snapshot; final exact-head results are appended to PR #71
 and the execution document after actual readback, without rebuilding a different

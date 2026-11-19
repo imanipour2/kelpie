@@ -2,6 +2,7 @@ package com.kelpie.browser.capture
 
 import android.app.Activity
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -21,6 +22,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.concurrent.atomic.AtomicReference
@@ -71,11 +73,18 @@ class CapturePrivacyInstrumentedTest {
     @Test
     fun foregroundPixelCopyReturnsOnlyTheRegisteredFixture() =
         runBlocking {
-            repeat(3) {
+            repeat(3) { iteration ->
                 withFixtureActivity { activity, view ->
                     WebViewCapturePrivacy.loadReviewedFixtureForTesting(view)
                     val privacy = WebViewCapturePrivacy.inspect(view)
-                    val frame = ForegroundWebViewCapture.copy(view, activity) { !activity.isFinishing }
+                    logForegroundState(activity, view, iteration, "START")
+                    val frame =
+                        try {
+                            ForegroundWebViewCapture.copy(view, activity) { !activity.isFinishing }
+                        } catch (error: Throwable) {
+                            logForegroundState(activity, view, iteration, "REFUSED")
+                            throw error
+                        }
                     assertNotNull(frame)
                     try {
                         val bitmap = checkNotNull(frame).bitmap
@@ -93,15 +102,34 @@ class CapturePrivacyInstrumentedTest {
                         assertEquals("DOCUMENT_PIXEL_PAIR", frame.metadata["freshnessProof"])
                         assertEquals(true, frame.metadata["proofRegionsRedacted"])
                         assertEquals(false, frame.metadata.containsKey("producerTimestampNanos"))
+                        val acquisitions = frame.metadata["frameAcquisitions"] as Int
+                        assertTrue(acquisitions in 1..FOREGROUND_MAX_FRAME_CANDIDATES)
+                        Log.i("KelpieCaptureFixture", "foreground iteration=${iteration + 1} stage=VERIFIED acquisitions=$acquisitions")
                     } finally {
                         frame?.bitmap?.recycle()
                     }
                     withContext(Dispatchers.Main.immediate) { view.loadUrl("about:blank") }
                     awaitDocument(view, "about:blank")
                     assertEquals("NEEDS_HUMAN", refuse { WebViewCapturePrivacy.inspect(view) }.code)
+                    logForegroundState(activity, view, iteration, "COMPLETE")
                 }
             }
         }
+
+    /** Fixed synthetic fixture diagnostics only: no page text, nonce, pixels or URLs. */
+    private suspend fun logForegroundState(
+        activity: PrivacyFixtureActivity,
+        view: WebView,
+        iteration: Int,
+        stage: String,
+    ) = withContext(Dispatchers.Main.immediate) {
+        Log.i(
+            "KelpieCaptureFixture",
+            "foreground iteration=${iteration + 1} stage=$stage width=${view.width} height=${view.height} " +
+                "attached=${view.isAttachedToWindow} shown=${view.isShown} hardware=${view.isHardwareAccelerated} " +
+                "focused=${view.hasWindowFocus()} finishing=${activity.isFinishing} destroyed=${activity.isDestroyed}",
+        )
+    }
 
     @Test
     fun nativeOverlayCannotLeakIntoFixturePixels() =

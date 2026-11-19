@@ -20,6 +20,8 @@ import android.webkit.WebView
 import com.kelpie.browser.handlers.ScreenshotRefusal
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
@@ -87,6 +89,8 @@ internal object ForegroundWebViewCapture {
             throw ScreenshotRefusal("NO_CAPTURE_SECURE_CONTENT", "Protected windows cannot be exported")
         }
         val privacy = WebViewCapturePrivacy.inspect(view)
+        val window = activity.window
+        val decor = window.decorView
         val source = bounds(view, activity) ?: return null
         if (!admitted()) return null
         val token = proofs.next()
@@ -94,23 +98,65 @@ internal object ForegroundWebViewCapture {
         val attempt = Attempt(proof)
         active = attempt
 
-        fun current(): Boolean = active === attempt && admitted()
+        fun current(): Boolean =
+            active === attempt &&
+                !activity.isDestroyed &&
+                !activity.isFinishing &&
+                activity.window === window &&
+                window.decorView === decor &&
+                admitted()
+
+        fun requireCurrent() {
+            if (!current()) throw ScreenshotRefusal("NO_FRESH_FRAME", "Capture authority or native owner changed")
+            if (bounds(view, activity) != source) throw ScreenshotRefusal("NO_FRESH_FRAME", "Visible capture bounds changed")
+        }
+
         var bitmap: Bitmap? = null
+        var acquisitions = 0
         try {
             val samples = proof.install(view, view.width, view.height) ?: return null
-            if (!current() || !awaitDraw(view) || !current() || bounds(view, activity) != source) return null
-            val copied = copyPixels(view, activity, source, ::current) ?: return null
+            requireCurrent()
+            // The marker changes the scene once. This receipt is never renewed between candidates.
+            val armedPrivacy = WebViewCapturePrivacy.inspect(view)
+            if (privacy.rendererIdentity != armedPrivacy.rendererIdentity || privacy.documentStamp != armedPrivacy.documentStamp) {
+                throw ScreenshotRefusal("OBSERVATION_RACE", "The capture document changed while installing its paint proof")
+            }
+            val copied =
+                acquireVerifiedForegroundFrame(
+                    next = {
+                        requireCurrent()
+                        armedPrivacy.requireSameDocument(WebViewCapturePrivacy.inspect(view))
+                        requireCurrent()
+                        if (!awaitDraw(view)) {
+                            requireCurrent()
+                            throw ScreenshotRefusal("NO_FRESH_FRAME", "A committed foreground frame was not observed")
+                        }
+                        requireCurrent()
+                        armedPrivacy.requireSameDocument(WebViewCapturePrivacy.inspect(view))
+                        requireCurrent()
+                        acquisitions += 1
+                        copyPixels(view, activity, source, ::current).also { if (it == null) requireCurrent() }
+                    },
+                    rejection = { candidate ->
+                        requireCurrent()
+                        armedPrivacy.requireSameDocument(WebViewCapturePrivacy.inspect(view))
+                        requireCurrent()
+                        when {
+                            !R5FrameProofVerifier.matchesPage(token, samples, candidate.bitmap::getPixel) ->
+                                ForegroundFrameRejection.DOCUMENT_PIXEL_PROOF
+                            !R5FrameContentCheck.hasContent(
+                                candidate.bitmap.width,
+                                candidate.bitmap.height,
+                                samples.region::contains,
+                                candidate.bitmap::getPixel,
+                            ) -> ForegroundFrameRejection.BLANK_CONTENT
+                            else -> null
+                        }
+                    },
+                    dispose = { it.bitmap.recycle() },
+                )
             bitmap = copied.bitmap
             val pixels = copied.bitmap
-            if (!current() ||
-                bounds(view, activity) != source ||
-                !R5FrameProofVerifier.matchesPage(token, samples, pixels::getPixel)
-            ) {
-                throw ScreenshotRefusal("NO_FRESH_FRAME", "The copied frame does not prove this document paint")
-            }
-            if (!R5FrameContentCheck.hasContent(pixels.width, pixels.height, samples.region::contains, pixels::getPixel)) {
-                throw ScreenshotRefusal("NO_FRESH_FRAME", "Blank, gray or transparent frame was refused")
-            }
             if (!current() || !proof.remove(view) || !current()) return null
             privacy.requireSameDocument(WebViewCapturePrivacy.inspect(view))
             if (!current() || bounds(view, activity) != source) return null
@@ -133,6 +179,7 @@ internal object ForegroundWebViewCapture {
                         "frameTimestampNanos" to copied.acquiredAtNanos,
                         "freshnessProof" to "DOCUMENT_PIXEL_PAIR",
                         "proofRegionsRedacted" to true,
+                        "frameAcquisitions" to acquisitions,
                     ),
                 )
             bitmap = null
@@ -294,6 +341,56 @@ internal object ForegroundWebViewCapture {
         }
     }
 }
+
+internal enum class ForegroundFrameRejection(
+    val message: String,
+) {
+    DOCUMENT_PIXEL_PROOF("The copied frame document pixel proof did not match"),
+    BLANK_CONTENT("Blank, gray or transparent frame was refused"),
+}
+
+/**
+ * One read request may observe older Surface buffers before its document is painted.
+ * Like private ImageReader acquisition, discard unproven candidates; never replay actions.
+ * The caller pins identity/privacy/proof and supplies the next committed draw plus PixelCopy.
+ */
+internal suspend fun <T : Any> acquireVerifiedForegroundFrame(
+    next: suspend () -> T?,
+    rejection: suspend (T) -> ForegroundFrameRejection?,
+    dispose: (T) -> Unit,
+): T {
+    // Retained outside withTimeoutOrNull: prompt timeout may discard its successful result.
+    var owned: T? = null
+    var transferred = false
+    var lastRejection: ForegroundFrameRejection? = null
+    try {
+        val selected =
+            withTimeoutOrNull(FOREGROUND_ACQUISITION_TIMEOUT_MS) {
+                repeat(FOREGROUND_MAX_FRAME_CANDIDATES) {
+                    val candidate = next() ?: throw ScreenshotRefusal("NO_FRESH_FRAME", "PixelCopy did not provide a foreground frame")
+                    owned = candidate
+                    val reason = rejection(candidate)
+                    if (reason == null) return@withTimeoutOrNull candidate
+                    lastRejection = reason
+                    owned = null
+                    dispose(candidate)
+                }
+                null
+            }
+        if (selected == null) {
+            val reason = lastRejection?.message ?: "No verified foreground frame arrived"
+            throw ScreenshotRefusal("NO_FRESH_FRAME", "$reason before the bounded acquisition ended")
+        }
+        currentCoroutineContext().ensureActive()
+        transferred = true
+        return selected
+    } finally {
+        if (!transferred) owned?.let(dispose)
+    }
+}
+
+internal const val FOREGROUND_ACQUISITION_TIMEOUT_MS = 2500L
+internal const val FOREGROUND_MAX_FRAME_CANDIDATES = 8
 
 internal fun webViewActivity(view: WebView): Activity? {
     var context = view.context
