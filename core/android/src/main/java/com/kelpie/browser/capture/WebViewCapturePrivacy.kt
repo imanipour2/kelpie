@@ -139,9 +139,17 @@ internal object WebViewCapturePrivacy {
                         }
                     }
                 }
-            webView.loadDataWithBaseURL(FIXTURE_URL, REVIEWED_FIXTURE, "text/html", "UTF-8", null)
+            // A null historyUrl becomes about:blank even when onPageFinished reports baseUrl.
+            // Both native history identity and DOM identity must name this reviewed fixture.
+            webView.loadDataWithBaseURL(FIXTURE_URL, REVIEWED_FIXTURE, "text/html", "UTF-8", FIXTURE_URL)
             try {
-                withTimeout(5000L) { ready.await() }
+                withTimeout(5000L) {
+                    ready.await()
+                    // Page-finished dispatch alone is not the native/document readiness contract.
+                    // This checks URL, registered provenance, DOM location, readyState and geometry.
+                    inspect(webView)
+                    Unit
+                }
             } catch (error: Exception) {
                 reviewed.remove(webView)
                 throw error

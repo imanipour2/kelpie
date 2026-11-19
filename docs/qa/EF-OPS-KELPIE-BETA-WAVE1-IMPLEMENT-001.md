@@ -262,6 +262,37 @@ The complete contracts job again passed 94 shared, 664 CLI, 31 Chromium and
 3 native CTest cases plus selector conformance. Final Android execution and
 the following install-phase correction require their own exact-head readback.
 
+That hosted Android run subsequently executed **all 11 cases: 5 PASS, 6 FAIL,
+zero errors or skips**. The real HTTP/JNI wire case and both ImageReader cases
+passed; two privacy cases passed, four privacy cases and both navigation cases
+failed. The result ZIP `14552585393` was independently verified with SHA-256
+`e28b6aea26ccafed970c5883960cd718d2c6905e5d00cc92e268026fee49951f`.
+The XML gate correctly rejected this result rather than treating a successful
+boot or APK assembly as a runtime pass.
+
+Two concrete fixture defects were then corrected without weakening production
+admission or deleting any of the 11 cases:
+
+- Navigation's `MockWebServer.url()` resolved a canonical host name inside
+  `withContext(Main)`, producing `NetworkOnMainThreadException` before WebView
+  assertions ran. The fixture now starts/shuts down its literal loopback server
+  on IO and passes immutable URLs into Main. WebView creation, `loadUrl`, native
+  reads and the original effect assertions retain their UI-thread boundary.
+- The native reviewed-image loader supplied a null `historyUrl`, although its
+  base URL was the fixture URL. Android documents a null history entry as
+  `about:blank`; the callback alone did not establish the native URL required
+  by the unchanged privacy gate. The loader now gives both identities the same
+  explicit URL and verifies native/DOM readiness before returning. The spoof
+  test also waits for matching base/history URLs and still requires a refusal
+  for missing native provenance. This fixes test infrastructure, not real-page
+  redaction. The official
+  [in-app WebView content guide](https://developer.android.com/develop/ui/views/layout/webapps/load-local-content)
+  and [API reference](https://developer.android.com/reference/android/webkit/WebView#loadDataWithBaseURL(java.lang.String,java.lang.String,java.lang.String,java.lang.String,java.lang.String))
+  were read 2026-11-19 and applied to this fixture boundary.
+
+Runtime success of these corrections is not inferred from compilation; their
+next exact-head Android execution is recorded in PR #71 and the Drive readback.
+
 Both Apple jobs failed before any build step: the hosted runner was not acquired
 after multiple attempts, with provider annotations identifying macOS arm64
 capacity constraints. This is runner admission evidence, not a Swift/iOS compile
