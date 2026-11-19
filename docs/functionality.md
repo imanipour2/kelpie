@@ -58,6 +58,17 @@ path needs a separately reviewed connector Refresh/reconnect and hardware QA.
 See [owner-session acceptance](qa/EF-OPS-KELPIE-R5-OWNER-SESSION-ENTRY-20261118.md).
 No APK deployment, parity acceptance, main merge or public release is implied.
 
+## Android R5 owner-initiated Termux reconnect — source-only QA, 2026-11-19
+
+If no unique paired agent was observed in 120 seconds, an explicit Kelpie
+button can queue one fixed background command in the **existing** Termux.
+The command reads its existing private bearer and asks the unchanged local
+18463 session endpoint for native approval. The owner must still tap Approve.
+No token is sent by Intent, no second app/tunnel is started, and HTTP 500 does
+not itself mean approval failed. Requires explicit QA-only Termux permission,
+pre-reviewed script and S24 testing; not installed or released.
+See [architecture and acceptance gates](specs/r5-owner-initiated-termux-reconnect.md).
+
 ## Android R5 private agent QA — not released
 
 The source-only draft PR #41 adds a separate, explicitly write-capable
