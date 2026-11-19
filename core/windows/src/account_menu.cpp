@@ -24,6 +24,7 @@ std::wstring MenuLabel(const std::string& text) {
 }
 void WindowsApp::OnAccountRequested() {
   if (!account_) return;
+  const auto* original_account = account_.get();
   const auto state=account_->State();
   if (!state.signed_in && !state.signing_in) {
     if (!account_->StartSignIn(config_.profile_dir,[this](const std::string& url) {
@@ -54,6 +55,7 @@ void WindowsApp::OnAccountRequested() {
   RECT bounds{}; GetWindowRect(GetDlgItem(shell_->hwnd(),IDC_ACCOUNT_BUTTON),&bounds);
   const auto selected=TrackPopupMenu(menu,TPM_RETURNCMD|TPM_RIGHTALIGN,bounds.right,bounds.bottom,0,shell_->hwnd(),nullptr);
   DestroyMenu(menu);
+  if (IsClosing() || account_.get() != original_account) return;
   if (selected==2) account_->StartBookmarkAction("refresh");
   if (selected==3 || selected==6) { if(connection_)connection_->SignOut(); account_->SignOut(); }
   if (selected==4 && connection_)connection_->Pause(!connection_->paused());

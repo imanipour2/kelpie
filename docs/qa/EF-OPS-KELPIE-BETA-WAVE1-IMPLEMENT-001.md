@@ -41,18 +41,19 @@ gap. No extra decision authority or duplicate historical master was created.
 | Correction | Root cause | Production files / reused boundary | Executable evidence | Device acceptance still required |
 | --- | --- | --- | --- | --- |
 | CI baseline | Eight Android workflows independently stopped at formatting in four files; macOS failed to acquire a runner | Existing ktlint configuration; no checks disabled | Per-job log/excerpt and full 37b9 retest in [CI baseline](wave1-ci-baseline-20261119.md) | CI is not an installed APK |
-| Windows shutdown | Existing close-state transition allowed reentrant teardown; the observed process-exit failure is separate and its first false HTTP-drain check does not establish continued owner-loop progress | `CloseLifecycle`, Windows shutdown boundaries, opt-in `ShutdownTrace`, existing close lifecycle/control-surface tests | Old state-machine unit reproduces double persistence/teardown; guarded unit passes; 8a hosted acceptance succeeds but Windows remains 73/74, requiring numeric drain/owner-progress evidence | Independent desktop regression scope; no S24/device changes |
+| Windows shutdown | The armed close-retry timer had no shell handler; actual 0e trace has one close poll, no subsequent owner Tick, and a responsive native window. A separate reentry defect allowed duplicate teardown | `Win32Shell`, `WindowsApp`, `CloseLifecycle`, three modal-return lifetime guards, opt-in numeric `ShutdownTrace` | Reentry unit PASS; new native nested-dialog timer test and held-HTTP-worker process test retain drain/readiness assertions and require exit code zero; actual new-head Windows run PENDING | Independent desktop regression scope; no S24/device changes |
+| Recurring dependency resolution | Some runners reported missing published Maven POMs before Kotlin compilation; the same source/profile subsequently passed. HTTP/cache/image cause is not proven | Existing Background workflow plus bounded failure-only `maven-central-failure-evidence.py`; original tasks, versions, repositories and TLS preserved | 0e attempt 1 failed, attempt 2 passed build and lint; diagnostic parser/limits/failure-propagation checks PASS, hosted diagnostic execution PENDING a real failure | No APK or device change follows a diagnostic success |
 | Metadata and consent | Browser grant was tested at the wrong boundary; private state could deadlock negotiation while foreground could bypass owner authority | `HTTPServer`, `Router`, `AuthenticatedRequestDispatcher`, `R5McpBootstrapGate`, `AgentSessionCoordinator`, existing native consent reducer | Dispatcher suspended-race tests; exact-method gate tests; compiled real HTTP/JNI wire fixture | Authenticated metadata at STOP/lock, one native prompt and actual response delivery |
 | Principal and protocol | R5 invalid/missing bearer could fall back to localhost; mother/private protocol sets were conflated | `AuthMiddleware`, `AccountPairingAuthorization`, `AuthenticatedClientContext`, `R5RequestAuthorization`, `BrowserGatewayBinding` | Original `AccountPairingTests` retained; scoped protocol/authentication matrix and real native gateway tests | Same live paired client and current bearer, without exposing/resetting credentials |
 | Revocation | A new grant or unlock could accidentally validate an old asynchronous operation; unpair did not retire every native reference | `SessionConsentCore`, `AndroidAgentProcessSession`, `R5ObservedAgentClients`, `PairingStore`, `TrustedComputers` | STOP/reapprove, lock/resume, unpair, pre-dispatch credential revocation and queued-Main consent tests | STOP-in-flight and lock/unlock on the exact APK |
 | Safe dispatch/errors | Broad consent and extension aliases could expose sensitive routes; exceptions/parse failures gave misleading outcomes | `R5RemoteOperationPolicy`, `HttpJson`, existing Router and native gateway | Denied-handler counters, exact allowlists, structured unknown/correlation errors, strict JSON tests | Concurrent server/probe/MCP timestamps; historical HTTP 500 cause remains unproven |
 | Atomic tab selection | Logical selection could lead the physical WebView/viewport | `R5AgentTabCommands`, `R5PrivateTabTransaction`, `R5NativeBrowserPort`, existing transfer mutex and `WebViewOwnershipState` | Real reducer/fake-host fault injection: zero viewport, commit failure, STOP/lock, cancellation and failed rollback | 20 transfers across 3 real tabs; preserved history, forms and scroll |
-| Action identity/effect | Callback/value equality did not prove the same document or DOM node was acted upon | `VerifiedNativeBrowserAdapter`, `R5WebViewActionScripts`, `R5ElementActionProofScripts`, reused `InteractionScripts` | JVM document replacement/pre-dispatch assertions PASS; production-JS Chromium fixtures present, execution PENDING CI | Real click/type/select/scroll and uncertain-effect receipts |
-| Queued action/navigation | Queued work could outlive its original grant; an old completed DOM or dispatch-only receipt did not prove navigation | `BrowserOperationGuard`, `HandlerContext`, `BrowserGatewayBinding`, `NavigationHandler`, `NavigationEffectProof`, `ScrollEffectEvidence` | 4 queued-guard, 9 navigation-oracle and 5 scroll-oracle tests PASS in the final JVM suite; two WebView navigation fixtures COMPILED / NOT_RUN_ON_ANDROID | Actual native navigation/history, lock races and physical touch/scroll effects |
-| Private frame freshness | New native overlay did not prove a new document frame; callbacks could race STOP; row padding/recycling assumptions were unsafe | One `PrivateWebViewDisplay`, `R5PrivateFrameAcquisition`, `R5RgbaFrameBuffer`, `R5PageFrameProof`, `R5FrameProofVerifier`, existing OneShot/epoch helpers | Bounded/cropped planes, both-source nonce pixels, gray/transparent rejection, timeout/cancellation, 200 callback/STOP races; 25-frame ImageReader fixture COMPILED / NOT_RUN_ON_ANDROID | 25 fresh WebView frames; 50 display create/release cycles; no resource growth |
-| Foreground frame freshness | Canvas/visual callback success was not proof of the copied producer frame | `ForegroundWebViewCapture`, same document proof/blank detector/OneShot holder, `HandlerContextCapture` | Acquired-pixel proof, exact viewport/owner/secure/native-overlay admission, cancellation ownership; Android fixtures COMPILED / NOT_RUN_ON_ANDROID | PixelCopy errors/late callback, actual S24 surfaces, foreground transitions |
-| Privacy | Raw form/URL/title/selector data and unproved page pixels could leave through different handlers | Shared `ObservationPrivacyScripts`, `WebViewCapturePrivacy`, `CapturePrivacyEvidence`, `TabMetadataPrivacy`; `ScreenshotHandler`, `LLMHandler`, tab/navigation handlers | Pure JVM privacy/document/geometry tests PASS; production-JS Chromium fixtures PENDING CI; screenshot aliases share the same gate | Real-site reliable pixel redaction remains unimplemented; real pages are refused |
-| Renderer/lifecycle | Dead WebViews and late callbacks could retain/revive obsolete references | `TabStore`, `TabWebViewClients`, `HandlerContext.nativeRendererGone`, `R5AgentCoordinator`, stateless `R5LifecycleSignals` | Exact-instance callback guards, native retirement, cancellation/ownership tests; instrumentation COMPILED / NOT_RUN_ON_ANDROID | Real/peer renderer death, HOME, rotation, lock, networking, Doze and reboot |
+| Action identity/effect | Callback/value equality did not prove the same document or DOM node was acted upon | `VerifiedNativeBrowserAdapter`, `R5WebViewActionScripts`, `R5ElementActionProofScripts`, reused `InteractionScripts` | JVM document replacement/pre-dispatch assertions PASS; all 31 production-JS Chromium fixtures PASS on 0e, zero skips | Real click/type/select/scroll and uncertain-effect receipts |
+| Queued action/navigation | Queued work could outlive its original grant; an old completed DOM or dispatch-only receipt did not prove navigation | `BrowserOperationGuard`, `HandlerContext`, `BrowserGatewayBinding`, `NavigationHandler`, `NavigationEffectProof`, `ScrollEffectEvidence` | 4 queued-guard, 9 navigation-oracle and 5 scroll-oracle JVM tests PASS; both actual WebView navigation cases PASS on isolated API 34, including 0e | Actual native navigation/history, lock races and physical touch/scroll effects |
+| Private frame freshness | New native overlay did not prove a new document frame; callbacks could race STOP; row padding/recycling assumptions were unsafe | One `PrivateWebViewDisplay`, `R5PrivateFrameAcquisition`, `R5RgbaFrameBuffer`, `R5PageFrameProof`, `R5FrameProofVerifier`, existing OneShot/epoch helpers | JVM stride/proof/gray/cancellation/200-race checks PASS; both actual Surface/ImageReader cases, including 25 synthetic frames, PASS on 0e | 25 fresh WebView frames; 50 display create/release cycles; no resource growth |
+| Foreground frame freshness | Canvas/visual callback success was not proof of the copied producer frame | `ForegroundWebViewCapture`, same document proof/blank detector/OneShot holder, `HandlerContextCapture` | Acquired-pixel proof, exact viewport/owner/secure/native-overlay admission and cancellation tests; six actual privacy/foreground cases PASS on 0e | PixelCopy errors/late callback, actual S24 surfaces, foreground transitions |
+| Privacy | Raw form/URL/title/selector data and unproved page pixels could leave through different handlers | Shared `ObservationPrivacyScripts`, `WebViewCapturePrivacy`, `CapturePrivacyEvidence`, `TabMetadataPrivacy`; `ScreenshotHandler`, `LLMHandler`, tab/navigation handlers | JVM and actual Chromium/privacy fixtures PASS on 0e; screenshot aliases share the same gate | Real-site reliable pixel redaction remains unimplemented; real pages are refused |
+| Renderer/lifecycle | Dead WebViews and late callbacks could retain/revive obsolete references | `TabStore`, `TabWebViewClients`, `HandlerContext.nativeRendererGone`, `R5AgentCoordinator`, stateless `R5LifecycleSignals` | Exact-instance callback guards, native retirement and cancellation/ownership JVM tests; 11 actual API 34 cases PASS, but no claim of complete physical lifecycle coverage | Real/peer renderer death, HOME, rotation, lock, networking, Doze and reboot |
 | Native First/status | Termux fallback was presented too early; local readiness was confused with remote connection | `AgentConnectionCenterSheet`, `R5TermuxOwnerReconnect`, `ConnectionStatusSheet`, `McpActivityEvidence` | Explicit opt-in/fixed-command tests; degraded-probe truth tests | Owner one-tap journey; Termux callback on Android 17 if separately enabled |
 | Candidate/install safety | Stale hard-coded APK/source/cert plus backup checkbox could bypass meaningful recovery proof; exact-candidate post-install acceptance was also demanded before the first installation | MotherNext profile, existing sidecar workflow and `kelpie-s24-mothernext-18463.ps1` | Actual script with SDK/ADB/GitHub boundaries mocked; digest/signing/recovery/CI/device/storage/race negative cases, with pre-install and post-install phases kept distinct | Same signer, cold restore, rollback and independent owner approval before installation; actual candidate acceptance afterward |
 
@@ -163,6 +164,20 @@ dump at **17:04:23 UTC** reported `apkSigningVersion=2` and
 `past signatures:[]`. This is actual package-manager signing metadata, not a new
 certificate SHA-256 or an invented SigningInfo API result. The known certificate
 fingerprint remains linked through the identical previously verified APK bytes.
+
+A focused provenance audit connected that installed version to PR #66 commit
+`68ade958af66b7f6de219abd2d9f9011478f5a40` and producer run `44307266054`
+through [Issue #98's original installation evidence](https://github.com/imanipour2/enerfoam-website/issues/98#issuecomment-6979525465).
+The original workflow builds debug on a hosted Ubuntu runner and declares APK,
+digest and provenance artifacts, not a keystore or signing lineage. Its app/root
+Gradle definitions do not specify custom signing material. The
+[subsequent signing/backup readback](https://github.com/imanipour2/enerfoam-website/issues/98#issuecomment-7007131412)
+records a mismatch with the existing owner Windows debug keystore and an
+encrypted hot backup without Android restore verification. The execution F02,
+ADR and RCA provide no confirmed compatible-key location. Therefore key
+location and recoverability remain unconfirmed/unproven; permanent key loss is
+not asserted. Neither a new debug certificate nor an unverified lineage is a
+valid same-package upgrade solution.
 
 Automatic approval review rejected a proposed installed-APK export because
 metadata could be checked without copying its payload to the connector. That
@@ -385,6 +400,65 @@ not proof of the effective built version. Diagnostics record the actual compiled
 HTTP-library version; no dependency upgrade or forced worker termination is
 justified by these unrelated reports.
 
+The [actual 0e numeric diagnostic run](https://github.com/imanipour2/kelpie/actions/runs/44574930502/job/135739731271)
+again passed 73/74. It establishes a narrower, actionable failure: the accepted
+close request at 10843 ms reached one close poll at 10844 ms, with zero active
+application requests, admission closed, and the listener thread still draining.
+The compiled HTTP library reported `0.18.3`. There were no later owner Ticks or
+close polls, while a bounded `WM_NULL` probe to the owned child window succeeded.
+The two CEF pump counters were both zero at the observed poll. Those counters do
+not identify which native modal loop occupied the owner afterward.
+
+Source inspection then found that `ArmCloseRetry()` set timer `0x4B51`, but the
+shell's `WM_TIMER` handler never dispatched that timer. The shipped entry point
+uses `RunKelpieWindowsApp`, whose outer Tick also invokes standalone update UI;
+`WindowsApp::Run` is not that entry path. A native dialog can continue processing
+window messages without advancing the outer Tick. The effective fix connects
+that existing timer to a dedicated close continuation, without recursively
+calling the full Tick. HTTP and preview drains remain prerequisites; teardown
+also waits while either the direct or external CEF pump is active. The existing
+reentry guard remains. No request worker is killed and readiness is removed only
+after orderly runtime shutdown.
+
+Because the new timer can finish shutdown while native UI unwinds, three
+directly affected callers now revalidate lifetime before touching borrowed
+state: computer approval requires the same still-open runtime after MessageBox,
+the account popup checks closing/account identity, and standalone update UI
+checks closing before retry/install/skip. The reviewed
+[Microsoft WM_TIMER reference](https://learn.microsoft.com/en-us/windows/win32/winmsg/wm-timer),
+[TaskDialogIndirect reference](https://learn.microsoft.com/en-us/windows/win32/api/commctrl/nf-commctrl-taskdialogindirect)
+and [DestroyWindow reference](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-destroywindow)
+(read 2026-11-19) inform timer dispatch and modal-return lifetime handling. They
+do not prove that the update dialog was the specific dialog in the failed run.
+
+A separate source-level review found that the engine's raw pump inside Stop,
+and the Windows owner's direct Tick/fallback calls, did not acquire the existing
+external pump scheduler. Its separate native timer could therefore enter CEF
+again even though `CloseLifecycle::Advance` prevented repeated shutdown. This
+is not claimed as the observed 0e hang cause. A scope-bound borrow of the same
+`CefPumpScheduler` now covers those Windows calls and Stop; incomplete attempts
+and exception unwinding resume deferred work. A successful Stop retains the
+borrow until the scheduler callback/window are retired, then resets without
+queuing a heartbeat after CefShutdown. No second scheduler, engine/partition
+refactor or startup-policy change is introduced. The real production guard is
+tested for nested refusal, deferred retry, exception unwinding, retirement and
+failure to acquire a pump already owned by another call.
+
+The retained native shell test now runs a real auto-closing TaskDialog and must
+receive the shell close timer, preserve the drain barrier and complete exactly
+once without any host Tick. Its target uses the same Windows SDK minimum as
+production. The original packaged-process fixture is retained, and a second
+mode holds an owned loopback request body after HTTP 100, then releases it
+within the existing five-second read timeout. HTTP 100 proves transport-worker
+admission, not an application RequestLease; this deliberately covers
+`activeRequests=0` while listener completion is still false. The process must
+remain alive with readiness while held, then exit with code zero and remove
+readiness within the original 60-second limit. This second mode disables the
+diagnostic trace and verifies that no trace file was created. The suite grows
+from 74 to 75 CTest targets; no target/assertion was removed. Portable lifecycle
+checks and diff validation passed; real Win32 execution of this fix is still
+pending the next exact-head CI run.
+
 On that same `8a1563fcc310d3c4c8636b9527d49b39ae7d0831` head,
 [Wave 1 contracts and actual Android execution](https://github.com/imanipour2/kelpie/actions/runs/44570167627)
 passed: 94 shared, 664 CLI, 31 Chromium, 3 native CTest, selector conformance,
@@ -412,6 +486,58 @@ capacity constraints. This is runner admission evidence, not a Swift/iOS compile
 failure. Subsequent exact-head attempts must still run those checks; they are
 not waived. The final combined-head results and selected artifact are recorded
 in PR #71 and the execution document after readback.
+
+### Latest completed pre-fix matrix and bounded Maven evidence
+
+The complete `0e51119d5cc998a5b8d308368ebeeb6a0a67b5dc` matrix finished
+with **13 successful workflows, 3 failed workflows and 1 existing conditional
+formatter skip**. Windows is the concrete 73/74 failure above. Both Apple jobs
+again received no runner and executed zero steps; provider annotations report
+failure to acquire a hosted runner and macOS arm64 capacity notices. No Apple
+test passed and no parity waiver is inferred.
+
+[Wave 1 run 44574930532](https://github.com/imanipour2/kelpie/actions/runs/44574930532)
+passed all 94 shared, 664 CLI, 31 Chromium and 3 native CTest checks plus selector
+conformance. All 11 actual Android cases again passed with zero failures,
+errors or skips. Its result ZIP `14555414750` independently matched SHA-256
+`1dde35f230d8b2530395dd1700d9b9d2abb8668d1d566372ac4f5464964d5cf5`.
+The summary retains `API34_SYNTHETIC_EMULATOR_ONLY` and physical acceptance
+`NOT_TESTED`. All retained Android profile workflows and the 88-case deployment
+guard passed. The [MotherNext producer](https://github.com/imanipour2/kelpie/actions/runs/44574930519)
+also passed, but its APK is not selected as the final artifact of this newer
+timer-fix tree.
+
+The [Background workflow](https://github.com/imanipour2/kelpie/actions/runs/44574930490)
+first failed in `mapDebugSourceSetPaths` on 13 unresolved runtime POM coordinates,
+before Kotlin compilation. One same-head retry then passed the original full
+build/test/ktlint step and Android Lint. The first log contains no HTTP status,
+TLS or DNS failure detail, so successful retry is recurrence evidence, not a
+root-cause correction. Failed and successful attempts had different runner
+images/providers. Several runs restored the same cache key and archive byte
+length; no archive content hash was available, so identical cache contents are
+not claimed. No image/cache/provider/global-outage cause is established.
+
+The retained build now captures its original log with `pipefail`. Only after
+that step fails, a bounded helper probes the 13 fixed public Maven Central POMs
+using HEAD and GET, maximum three concurrent workers, 5-second connect and
+15-second request deadlines, 20-second process deadlines and a 64 KiB body cap.
+The [official curl manual](https://curl.se/docs/manpage.html), version 8.23.1 read 2026-11-19,
+documents the filesize behavior used here; curl 8.4 or newer is required for a
+streaming bound. No redirect, curlrc, credential, TLS bypass or retry is enabled.
+Only fixed coordinates, status/timing/exit values, body size/hash and XML identity
+booleans are emitted; bodies, raw headers and raw curl errors are withheld.
+Strict UTF-8, NUL/DTD/entity rejection and bounded reads precede POM parsing.
+One separately bounded, same-profile Gradle resolution diagnostic records
+`--info --stacktrace` without refreshing dependencies or deleting caches.
+Original tasks, dependencies, repositories and the failed workflow conclusion
+remain unchanged. Logs are retained for 14 days when a real failure occurs.
+
+Local checks passed for YAML/bash syntax, original failure propagation through
+tee, 26 mocked probes with maximum concurrency three, timeout/404 handling,
+inherited POM identity and malformed/UTF-16/DTD rejection. A valid UTF-8 POM with
+Persian text still parses. These checks validate safe evidence collection; they
+do not claim a hosted Maven failure has been reproduced or fixed. The next
+complete source head must run the original matrix before final artifact review.
 
 Additional protocol reference read during wire verification:
 [MCP Streamable HTTP, 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports).

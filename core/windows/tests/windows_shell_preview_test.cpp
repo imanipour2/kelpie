@@ -10,12 +10,14 @@
 #include <cstddef>
 #include <cstdlib>
 #include <filesystem>
+#include <functional>
 #include <iostream>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "resource.h"
+#include "close_lifecycle.h"
 #include "theme/theme.h"
 #include "theme/chrome_palette.h"
 #include "win32_shell.h"
@@ -46,6 +48,7 @@ class PreviewDelegate final : public kelpie::windows::ShellDelegate {
   void OnActivateTabRequested(std::string, std::uint64_t) override {}
   void OnCloseTabRequested(std::string, std::uint64_t) override {}
   void OnWindowCloseRequested() override {}
+  void OnWindowCloseRetry() override { if (close_retry) close_retry(); }
   void OnNavigateRequested(const std::string&) override {}
   void OnBackRequested() override {}
   void OnForwardRequested() override {}
@@ -54,6 +57,7 @@ class PreviewDelegate final : public kelpie::windows::ShellDelegate {
   std::optional<std::wstring> BestUrlCompletion(std::wstring_view) const override { return std::nullopt; }
   int tab_count = 2;
   bool background_title_changed = false;
+  std::function<void()> close_retry;
 };
 
 class PreviewObserver final : public kelpie::windows::BrowserStateObserver {
@@ -120,6 +124,60 @@ bool CheckAddressFocus(kelpie::windows::Win32Shell& shell,
   shell.UpdateBrowserState({"https://kelpie.dev", "Kelpie workspace", false, true, true});
   ShowWindow(shell.hwnd(), SW_HIDE);
   return passed;
+}
+
+bool CheckCloseRetryInsideNativeModalLoop(kelpie::windows::Win32Shell& shell, PreviewDelegate& delegate) {
+  struct Scenario {
+    kelpie::windows::CloseLifecycle close;
+    unsigned polls = 0;
+    unsigned persists = 0;
+    unsigned shutdowns = 0;
+    bool drained = false;
+    bool premature = false;
+    bool timed_out = false;
+  } scenario;
+  scenario.close.Request();
+  const bool was_visible = IsWindowVisible(shell.hwnd()) != FALSE;
+  if (!was_visible) shell.Show(SW_SHOWNOACTIVATE);
+  delegate.close_retry = [&] {
+    ++scenario.polls;
+    scenario.close.Advance(scenario.drained, [&] { ++scenario.persists; }, [&] {
+      ++scenario.shutdowns;
+      return true;
+    });
+    if (!scenario.drained && (scenario.persists || scenario.shutdowns)) scenario.premature = true;
+  };
+  // Only TaskDialog's nested native loop dispatches these timers. There is no
+  // host Tick here. The packaged fixture separately holds a real HTTP worker.
+  if (!SetTimer(shell.hwnd(), kelpie::windows::kCloseRetryTimerId, 50, nullptr)) {
+    delegate.close_retry = {};
+    if (!was_visible) ShowWindow(shell.hwnd(), SW_HIDE);
+    return Expect(false, "close retry timer was not created");
+  }
+  TASKDIALOGCONFIG dialog{};
+  dialog.cbSize = sizeof(dialog);
+  dialog.hwndParent = shell.hwnd();
+  dialog.dwFlags = TDF_CALLBACK_TIMER | TDF_ALLOW_DIALOG_CANCELLATION;
+  dialog.dwCommonButtons = TDCBF_CANCEL_BUTTON;
+  dialog.pszWindowTitle = L"Kelpie synthetic close retry";
+  dialog.pszMainInstruction = L"This isolated fixture closes automatically";
+  dialog.lpCallbackData = reinterpret_cast<LONG_PTR>(&scenario);
+  dialog.pfCallback = [](HWND window, UINT notification, WPARAM elapsed, LPARAM, LONG_PTR context) -> HRESULT {
+    if (notification != TDN_TIMER) return S_OK;
+    auto& state = *reinterpret_cast<Scenario*>(context);
+    if (state.polls >= 2) state.drained = true;
+    if (elapsed >= 2000) state.timed_out = true;
+    if (state.close.completed() || state.timed_out) SendMessageW(window, TDM_CLICK_BUTTON, IDCANCEL, 0);
+    return S_OK;
+  };
+  const HRESULT result = TaskDialogIndirect(&dialog, nullptr, nullptr, nullptr);
+  KillTimer(shell.hwnd(), kelpie::windows::kCloseRetryTimerId);
+  delegate.close_retry = {};
+  if (!was_visible) ShowWindow(shell.hwnd(), SW_HIDE);
+  return Expect(SUCCEEDED(result) && !scenario.timed_out && scenario.polls >= 3 &&
+      scenario.drained && scenario.close.completed() && !scenario.premature &&
+      scenario.persists == 1 && scenario.shutdowns == 1,
+      "native modal loop must retry close after the held drain without a host Tick");
 }
 
 bool SavePng(HBITMAP bitmap, const std::filesystem::path& path) {
@@ -238,6 +296,7 @@ int main() {
   shell.UpdateBrowserState(state);
 
   passed &= CheckAddressFocus(shell, browser);
+  passed &= CheckCloseRetryInsideNativeModalLoop(shell, delegate);
 
   constexpr int kWidth = 1120;
   constexpr int kHeight = 760;

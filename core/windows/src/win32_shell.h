@@ -30,6 +30,7 @@ namespace kelpie::windows {
 // The macOS tab bar clamps pill widths to this range before spreading them.
 inline constexpr int kTabMinWidthDip = 80;
 inline constexpr int kTabMaxWidthDip = 220;
+inline constexpr UINT_PTR kCloseRetryTimerId = 0x4B51;
 
 class ShellDelegate : public UrlBarDelegate {
  public:
@@ -46,6 +47,8 @@ class ShellDelegate : public UrlBarDelegate {
   // A favourite was dragged off the favourites bar.
   virtual void OnRemoveFavoriteRequested(const std::string& id) { (void)id; }
   virtual void OnWindowCloseRequested() = 0;
+  // Native modal loops dispatch window timers without the host's outer Tick.
+  virtual void OnWindowCloseRetry() {}
   // Empties the request log, as the HTTP `clear-network-log` method does.
   virtual void OnClearNetworkRequested() {}
 };

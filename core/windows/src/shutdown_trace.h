@@ -15,6 +15,7 @@ enum class ShutdownStage {
   kCookieSync, kConnection, kAccount, kLoginWindow, kPageAppearance,
   kChromium, kNativeControl, kReadiness, kCompleted,
   kOwnerTick, kBeforeDirectPump, kAfterDirectPump, kAfterBrowserState, kClosePoll,
+  kCefPumpDrain,
 };
 
 struct ShutdownProgress {
@@ -95,6 +96,7 @@ class ShutdownTrace {
       case ShutdownStage::kAfterDirectPump: return "after-direct-cef-pump";
       case ShutdownStage::kAfterBrowserState: return "after-browser-state";
       case ShutdownStage::kClosePoll: return "close-poll";
+      case ShutdownStage::kCefPumpDrain: return "waiting-cef-pump";
     }
     return "unknown-stage";
   }

@@ -8,6 +8,7 @@ on:
       - '.github/workflows/qa-r5-background-agent.yml'
       - 'scripts/qa/r5-s24-acceptance.py'
       - 'scripts/qa/r5-s24-background-acceptance.py'
+      - 'scripts/qa/maven-central-failure-evidence.py'
   workflow_dispatch:
 
 permissions:
@@ -50,13 +51,45 @@ jobs:
           python3 scripts/qa/r5-s24-background-acceptance.py --help > /dev/null
           python3 scripts/qa/r5-s24-acceptance.py --help > /dev/null
       - name: KtLint, agent JVM tests and private-display R5 background QA APK
+        id: background_build
         working-directory: apps/android
+        shell: bash
         run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/kelpie-background-diagnostics"
           ./gradlew --no-daemon \
             -PkelpieR5BackgroundAgentQaProfile=true \
             :kelpie-browser:ktlintCheck \
             :kelpie-browser:testDebugUnitTest \
-            :app:assembleDebug
+            :app:assembleDebug 2>&1 | tee "$RUNNER_TEMP/kelpie-background-diagnostics/initial-gradle.log"
+      - name: Collect bounded public Maven POM evidence after build failure
+        if: ${{ failure() && steps.background_build.outcome == 'failure' }}
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/qa/maven-central-failure-evidence.py \
+            | tee "$RUNNER_TEMP/kelpie-background-diagnostics/maven-pom-evidence.jsonl"
+      - name: Record one dependency-resolution diagnostic after build failure
+        if: ${{ failure() && steps.background_build.outcome == 'failure' }}
+        timeout-minutes: 10
+        working-directory: apps/android
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Evidence only: preserve the original failed step and its log.
+          timeout --signal=TERM --kill-after=10s 8m ./gradlew --no-daemon \
+            -PkelpieR5BackgroundAgentQaProfile=true \
+            :app:mapDebugSourceSetPaths --info --stacktrace 2>&1 \
+            | tee "$RUNNER_TEMP/kelpie-background-diagnostics/diagnostic-gradle.log"
+      - name: Preserve build failure evidence
+        if: ${{ failure() && steps.background_build.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: kelpie-background-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/kelpie-background-diagnostics/
+          if-no-files-found: warn
+          retention-days: 14
       - name: Android Lint for R5 browser and isolated app
         working-directory: apps/android
         run: |

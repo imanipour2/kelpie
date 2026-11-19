@@ -105,6 +105,7 @@ class WindowsApp final : public ShellDelegate, public BrowserStateObserver {
   void OnActivateTabRequested(std::string id, std::uint64_t generation) override;
   void OnCloseTabRequested(std::string id, std::uint64_t generation) override;
   void OnWindowCloseRequested() override;
+  void OnWindowCloseRetry() override;
 
   void OnBrowserStateChanged(const BrowserState& state) override;
 
@@ -131,6 +132,7 @@ class WindowsApp final : public ShellDelegate, public BrowserStateObserver {
   void TraceShutdown(ShutdownStage stage);
   void TraceShutdownProgress(ShutdownStage stage);
   bool ExternalCefPumpActive() const;
+  void PumpDesktopRuntimeOnce();
   bool CreateShell(int show_command);
   std::wstring AppTitle() const;
   // Peer-to-peer cookie sync (windows_cookie_sync.cpp); standalone only.

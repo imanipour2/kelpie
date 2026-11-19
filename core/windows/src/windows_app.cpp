@@ -26,8 +26,6 @@
 namespace kelpie::windows {
 namespace {
 
-constexpr UINT_PTR kCloseRetryTimerId = 0x4B51;
-
 std::optional<TabLease> ActiveLease(DesktopApp* app) {
   if (app == nullptr) return std::nullopt;
   std::vector<TabSnapshot> tabs;
@@ -68,7 +66,7 @@ WindowsApp::~WindowsApp() {
   // normal WM_CLOSE. A DesktopApp with live CEF callbacks must remain owned
   // until its HTTP workers and browser close have drained.
   while (!ShutdownDesktopRuntime()) {
-    if (desktop_app_ != nullptr) desktop_app_->Tick();
+    PumpDesktopRuntimeOnce();
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
 }
@@ -119,7 +117,7 @@ int WindowsApp::Run(int show_command) {
   // WM_QUIT bypasses the shell timer. Keep the native owner available for HTTP
   // handlers admitted before the close gate and for bounded CEF close retries.
   while (!TryCompleteClose()) {
-    if (desktop_app_ != nullptr) desktop_app_->Tick();
+    PumpDesktopRuntimeOnce();
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
   return browser_ready ? 0 : 1;
@@ -137,19 +135,23 @@ void WindowsApp::Tick() {
   if (close_lifecycle_.requested()) ++shutdown_owner_ticks_;
   TraceShutdownProgress(ShutdownStage::kOwnerTick);
   if (desktop_app_) {
-    // Observation only: retain the existing pump call and ordering.
+    // Keep direct-work diagnostics while sharing ownership with timer pumps.
     struct DepthObservation {
       unsigned& depth;
       explicit DepthObservation(unsigned& value) : depth(value) { ++depth; }
       ~DepthObservation() { --depth; }
     } observation{direct_cef_pump_depth_};
     TraceShutdownProgress(ShutdownStage::kBeforeDirectPump);
-    desktop_app_->Tick();
+    PumpDesktopRuntimeOnce();
   }
   TraceShutdownProgress(ShutdownStage::kAfterDirectPump);
   UpdateBrowserStateFromRuntime();
   TraceShutdownProgress(ShutdownStage::kAfterBrowserState);
-  if (desktop_app_ && !close_lifecycle_.requested()) PollComputerApproval(desktop_app_->http_server().approvals(), shell_->hwnd());
+  if (desktop_app_ && !close_lifecycle_.requested()) {
+    const auto* runtime = desktop_app_.get();
+    PollComputerApproval(desktop_app_->http_server().approvals(), shell_->hwnd(),
+        [this, runtime] { return !IsClosing() && desktop_app_.get() == runtime; });
+  }
   TryCompleteClose();
 }
 
@@ -340,6 +342,13 @@ bool WindowsApp::TryCompleteClose() {
       return false;
     }
   }
+  // A timer also arrives inside native/CEF nested loops. Continue the close
+  // state machine there, but never tear CEF down while either pump is active.
+  if (direct_cef_pump_depth_ != 0 || ExternalCefPumpActive()) {
+    TraceShutdown(ShutdownStage::kCefPumpDrain);
+    ArmCloseRetry();
+    return false;
+  }
   const bool completed = close_lifecycle_.Advance(
       true, [this] { PersistForClose(); }, [this] { return ShutdownDesktopRuntime(); });
   if (!completed) {
@@ -354,6 +363,8 @@ bool WindowsApp::TryCompleteClose() {
   if (shell_ != nullptr) shell_->Close();
   return true;
 }
+
+void WindowsApp::OnWindowCloseRetry() { TryCompleteClose(); }
 
 void WindowsApp::OnWindowCloseRequested() {
   TraceShutdownProgress(ShutdownStage::kCloseRequested);

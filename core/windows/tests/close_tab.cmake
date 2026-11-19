@@ -10,5 +10,8 @@
       httplib::httplib nlohmann_json::nlohmann_json ws2_32 user32)
     add_test(NAME close_tab_control_surface_test
       COMMAND close_tab_control_surface_test "$<TARGET_FILE_DIR:kelpie>")
-    set_tests_properties(close_tab_control_surface_test PROPERTIES TIMEOUT 300)
+    add_test(NAME close_tab_held_transport_test
+      COMMAND close_tab_control_surface_test "$<TARGET_FILE_DIR:kelpie>" --hold-http-body)
+    set_tests_properties(close_tab_control_surface_test close_tab_held_transport_test
+      PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
   endif()

@@ -1,6 +1,8 @@
 #include "cef_pump_schedule.h"
 
 #include <cassert>
+#include <stdexcept>
+#include <vector>
 
 using kelpie::windows::CefPumpScheduler;
 using Action = kelpie::windows::CefPumpScheduler::Action;
@@ -101,6 +103,63 @@ void ResetClearsPendingState() {
   assert(scheduler.EndWork().action == Action::kArmTimer);
 }
 
+void IncompleteOrThrowingStopResumesDeferredWork() {
+  for (bool throws : {false, true}) {
+    CefPumpScheduler scheduler;
+    std::vector<Action> resumed;
+    try {
+      kelpie::windows::CefPumpWorkGuard guard(scheduler, [&](auto decision) {
+        resumed.push_back(decision.action);
+      });
+      assert(guard.acquired() && scheduler.running());
+      assert(scheduler.OnTimerElapsed().action == Action::kRunWork);
+      assert(!scheduler.BeginWork()); // Native timer inside Stop's raw pump.
+      if (throws) throw std::runtime_error("synthetic Stop failure");
+      // No Retire: Stop still has live browser callbacks to drain.
+    } catch (const std::runtime_error&) {}
+    assert(!scheduler.running());
+    assert(resumed == std::vector<Action>{Action::kPostWork});
+    assert(scheduler.BeginWork()); // The deferred retry can actually run.
+    scheduler.EndWork();
+  }
+}
+
+void CompletedStopCannotScheduleWorkAfterRetirement() {
+  CefPumpScheduler scheduler;
+  unsigned resumed = 0;
+  {
+    kelpie::windows::CefPumpWorkGuard guard(scheduler, [&](auto) { ++resumed; });
+    assert(guard.acquired());
+    scheduler.OnScheduleWork(0);
+    assert(!scheduler.BeginWork());
+    assert(scheduler.running()); // Still guarded while native resources retire.
+    guard.Retire();
+    assert(!scheduler.running() && !scheduler.timer_pending());
+  }
+  assert(resumed == 0); // No EndWork heartbeat after CefShutdown.
+}
+
+void WorkGuardCannotReleaseAnotherPump() {
+  CefPumpScheduler scheduler;
+  std::vector<Action> resumed;
+  {
+    kelpie::windows::CefPumpWorkGuard outer(scheduler, [&](auto decision) {
+      resumed.push_back(decision.action);
+    });
+    assert(outer.acquired());
+    {
+      kelpie::windows::CefPumpWorkGuard nested(scheduler, [&](auto decision) {
+        resumed.push_back(decision.action);
+      });
+      assert(!nested.acquired());
+      nested.Retire();
+    }
+    assert(scheduler.running() && resumed.empty());
+  }
+  assert(!scheduler.running());
+  assert(resumed == std::vector<Action>{Action::kPostWork});
+}
+
 }  // namespace
 
 int main() {
@@ -111,5 +170,8 @@ int main() {
   PendingTimerSuppressesHeartbeat();
   ReentrantRequestIsDeferred();
   ResetClearsPendingState();
+  IncompleteOrThrowingStopResumesDeferredWork();
+  CompletedStopCannotScheduleWorkAfterRetirement();
+  WorkGuardCannotReleaseAnotherPump();
   return 0;
 }
