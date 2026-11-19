@@ -42,21 +42,17 @@ class R5AgentControlPlaneRoutesTest {
     fun revokedPrivateWebViewCannotBlockConsentRequestOrStopForAuthenticatedAgent() {
         for (method in listOf("agent-session-request", "agent-session-status", "agent-session-stop")) {
             assertFalse(
-                R5McpBootstrapGate.requiresNativeGrantAtDelivery(
+                R5McpBootstrapGate.requiresNativeGrant(
                     method,
                     emptyMap(),
                     "paired-agent",
-                    privateAtIngress = true,
-                    privateAtEgress = true,
                 ),
             )
             assertTrue(
-                R5McpBootstrapGate.requiresNativeGrantAtDelivery(
+                R5McpBootstrapGate.requiresNativeGrant(
                     method,
                     emptyMap(),
                     "localhost",
-                    privateAtIngress = true,
-                    privateAtEgress = true,
                 ),
             )
         }
@@ -66,12 +62,10 @@ class R5AgentControlPlaneRoutesTest {
     fun browserActionsAreNotUpgradedToConsentControl() {
         for (method in listOf("agent-command", "agent-tabs", "agent-runtime-status", "tools/call")) {
             assertTrue(
-                R5McpBootstrapGate.requiresNativeGrantAtDelivery(
+                R5McpBootstrapGate.requiresNativeGrant(
                     method,
                     emptyMap(),
                     "paired-agent",
-                    privateAtIngress = true,
-                    privateAtEgress = false,
                 ),
             )
         }

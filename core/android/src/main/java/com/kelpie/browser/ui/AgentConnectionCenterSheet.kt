@@ -87,9 +87,9 @@ internal fun AgentConnectionCenterSheet(
                 0 -> {
                     Text(
                         "No uniquely authenticated agent has been seen recently. " +
-                            "If you already paired your AI client, you can request a fresh native " +
-                            "approval through the existing Termux tunnel below. " +
-                            "Do not reinstall, rotate credentials or change ports.",
+                            "Refresh the existing paired AI client's connection, then return here " +
+                            "to approve its verified identity inside Kelpie. " +
+                            "The native approval path does not require Termux.",
                     )
                     if (provider == R5AgentProvider.CHATGPT && chatGptTunnel) {
                         R5TermuxOwnerReconnectAction()
@@ -103,9 +103,10 @@ internal fun AgentConnectionCenterSheet(
                         onGranted = onDismiss,
                     )
                     Text(
-                        "One tap authorizes ordinary browsing, tabs, DOM, typing and " +
-                            "Kelpie WebView screenshots for this active app session. " +
-                            "STOP immediately revokes access. Sensitive actions need separate approval.",
+                        "One tap authorizes ordinary navigation, sanitized observations and " +
+                            "verified interactions for this active app session. " +
+                            "STOP immediately revokes access. Sensitive exports and images without " +
+                            "verified privacy evidence remain blocked.",
                     )
                 }
                 else -> {

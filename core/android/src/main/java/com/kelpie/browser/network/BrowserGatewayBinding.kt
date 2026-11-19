@@ -3,6 +3,7 @@ package com.kelpie.browser.network
 import com.kelpie.browser.ai.openai.AgentBrowserPolicy
 import com.kelpie.browser.ai.openai.OpenAIJson
 import com.kelpie.browser.capture.PrivateCaptureOperationPolicy
+import com.kelpie.browser.handlers.BrowserOperationGuard
 import com.kelpie.browser.handlers.HandlerContext
 import com.kelpie.browser.nativecore.BrowserGatewayNative
 import kotlinx.coroutines.Dispatchers
@@ -21,8 +22,15 @@ class BrowserGatewayBinding(
     private val lock = Mutex()
     private val sessions = mutableSetOf<BrowserGatewaySession>()
     private val changedDocuments = ConcurrentHashMap.newKeySet<String>()
-    private val methods = router.registeredMethods - AndroidUnsupportedMethods.all
-    private val extensions = nativeExtensions().filter { it["method"] in methods }
+    private val methods =
+        (router.registeredMethods - AndroidUnsupportedMethods.all)
+            .filter { !router.motherR5BackgroundQa || R5RemoteOperationPolicy.permitsNativeCapability(it) }
+            .toSet()
+    private val extensions =
+        nativeExtensions().filter {
+            it["method"] in methods &&
+                (!router.motherR5BackgroundQa || R5RemoteOperationPolicy.permitsExtension(it["method"] as? String ?: ""))
+        }
     private val direct = session(methods, extensions, true, null)
 
     fun register() {
@@ -79,6 +87,7 @@ class BrowserGatewayBinding(
                     "fixedReader" to true,
                     "allowActions" to allowActions,
                     "requireAuthorization" to true,
+                    "requireActionEffect" to router.motherR5BackgroundQa,
                 ),
                 lock,
                 authorize = { request, mutates -> authorize(request, mutates, allowActions, pinned) },
@@ -102,7 +111,9 @@ class BrowserGatewayBinding(
         allowActions: Boolean,
         pinned: String?,
     ): Boolean =
-        (ctx.motherPrivateAgentActive?.invoke() != true || ctx.motherGatewayAuthorization?.invoke() == true) &&
+        (!router.motherR5BackgroundQa || R5RemoteOperationPolicy.permitsGatewayRequest(request["method"] as? String ?: "")) &&
+            ownerRequestCurrent() &&
+            (ctx.motherPrivateAgentActive?.invoke() != true || ctx.motherGatewayAuthorization?.invoke() == true) &&
             PrivateCaptureOperationPolicy.permits(
                 request["method"] as? String ?: "",
                 ctx.privateCaptureRestricted?.invoke() == true,
@@ -149,6 +160,7 @@ class BrowserGatewayBinding(
         action: suspend () -> T,
     ): T =
         withBrowserGatewayLease(lock, ctx.browserRetirement) {
+            if (!ownerRequestCurrent()) throw R5AuthorizationChangedException()
             check(ctx.motherPrivateAgentActive?.invoke() != true || ctx.motherGatewayAuthorization?.invoke() == true) {
                 "Native owner authorization required for private WebView"
             }
@@ -166,7 +178,7 @@ class BrowserGatewayBinding(
                 if (view == null || method in setOf("new-tab", "switch-tab", "close-tab", "delete-partition")) {
                     action()
                 } else {
-                    ctx.withBrowserTarget(view) { action() }
+                    withRequestTarget(view) { action() }
                 }
             }
         }
@@ -177,6 +189,9 @@ class BrowserGatewayBinding(
         pinned: String?,
     ): Map<String, Any?> =
         withContext(Dispatchers.Main.immediate) {
+            if (!ownerRequestCurrent()) {
+                return@withContext errorResponse("SESSION_REVOKED", "Native owner-authorized request changed")
+            }
             if (ctx.motherPrivateAgentActive?.invoke() == true && ctx.motherGatewayAuthorization?.invoke() != true) {
                 return@withContext errorResponse("PERMISSION_REQUIRED", "Private WebView needs live owner-authorized agent")
             }
@@ -186,7 +201,7 @@ class BrowserGatewayBinding(
             val store = ctx.tabStore
             val boundary = BrowserGatewayDispatch({ store?.activeTabId?.value ?: "0" }, { if (store == null) ctx.webView else store.activeTab?.webView })
             boundary.execute(method, params, pinned) { view ->
-                val result = if (view == null) invoke(method, params) else ctx.withBrowserTarget(view) { invoke(method, params) }
+                val result = if (view == null) invoke(method, params) else withRequestTarget(view) { invoke(method, params) }
                 if (pinned != null && method == "get-tabs") {
                     result + (
                         "tabs" to
@@ -202,6 +217,9 @@ class BrowserGatewayBinding(
         method: String,
         params: Map<String, Any?>,
     ): Map<String, Any?> {
+        if (!ownerRequestCurrent()) {
+            return errorResponse("SESSION_REVOKED", "Native owner-authorized request changed")
+        }
         if (ctx.motherPrivateAgentActive?.invoke() == true && ctx.motherGatewayAuthorization?.invoke() != true) {
             return errorResponse("PERMISSION_REQUIRED", "Private WebView needs live owner-authorized agent")
         }
@@ -259,7 +277,7 @@ class BrowserGatewayBinding(
                         if (method != "browser-control-evaluate" || !owned()) {
                             errorResponse("TAB_NOT_FOUND", "The context tab changed")
                         } else {
-                            ctx.withBrowserTarget(view) {
+                            withRequestTarget(view) {
                                 val result = invoke(method, params)
                                 if (owned()) result else errorResponse("TAB_NOT_FOUND", "The context tab changed")
                             }
@@ -293,6 +311,32 @@ class BrowserGatewayBinding(
     }
 
     private fun nativeExtensions(): List<Map<String, Any?>> = (OpenAIJson.parseOrNull(BrowserGatewayNative.extensions()) as? JsonArray).orEmpty().map { OpenAIJson.toMap(it as JsonObject) }
+
+    private suspend fun <T> withRequestTarget(
+        view: android.webkit.WebView,
+        block: suspend () -> T,
+    ): T {
+        val guard =
+            if (router.motherR5BackgroundQa) {
+                val principal = verifiedClientId()
+                val admitted = verifiedOwnerGrant()
+                val store = ctx.tabStore
+                val tab = store?.activeTab
+                val document = tab?.documentVersion
+                BrowserOperationGuard(
+                    authorityCurrent = { R5RequestAuthorization.permits(principal, admitted, router.nativeConsentSnapshot()) },
+                    targetCurrent = {
+                        tab != null && store != null && store === ctx.tabStore && store.activeTab === tab && tab.webView === view
+                    },
+                    originalDocumentCurrent = { document != null && tab?.documentVersion == document },
+                )
+            } else {
+                null
+            }
+        return ctx.withBrowserTarget(view) { ctx.withOperationGuard(guard, block) }
+    }
+
+    private suspend fun ownerRequestCurrent(): Boolean = !router.motherR5BackgroundQa || R5RequestAuthorization.current(router.nativeConsentSnapshot)
 
     companion object {
         private val REENTRANT_METHODS = setOf("ai-infer", "ai-record", "ai-cancel", "abort-script", "get-script-status")

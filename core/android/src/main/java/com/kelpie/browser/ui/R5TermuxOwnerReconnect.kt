@@ -9,8 +9,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,6 +43,7 @@ internal object R5TermuxOwnerReconnect {
 
     enum class Dispatch {
         QUEUED_NOT_CONFIRMED,
+        OWNER_APPROVAL_REQUIRED,
         PERMISSION_REQUIRED,
         TERMUX_UNAVAILABLE,
         START_FAILED,
@@ -54,10 +57,26 @@ internal object R5TermuxOwnerReconnect {
             nowElapsed < lastAttemptElapsed ||
             nowElapsed - lastAttemptElapsed >= MIN_RETRY_MS
 
-    fun sendExplicitOwnerRequest(context: Context): Dispatch {
-        if (ContextCompat.checkSelfPermission(context, PERMISSION) != PackageManager.PERMISSION_GRANTED) {
-            return Dispatch.PERMISSION_REQUIRED
+    fun admission(
+        ownerApprovedFallback: Boolean,
+        permissionGranted: Boolean,
+    ): Dispatch? =
+        when {
+            !ownerApprovedFallback -> Dispatch.OWNER_APPROVAL_REQUIRED
+            !permissionGranted -> Dispatch.PERMISSION_REQUIRED
+            else -> null
         }
+
+    fun sendExplicitOwnerRequest(
+        context: Context,
+        ownerApprovedFallback: Boolean,
+    ): Dispatch {
+        val rejected =
+            admission(
+                ownerApprovedFallback,
+                ContextCompat.checkSelfPermission(context, PERMISSION) == PackageManager.PERMISSION_GRANTED,
+            )
+        if (rejected != null) return rejected
         val intent =
             Intent(ACTION).apply {
                 component = ComponentName(PACKAGE, SERVICE)
@@ -88,6 +107,7 @@ internal fun R5TermuxOwnerReconnectAction() {
     var lastAttempt by remember { mutableStateOf<Long?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     var queuedAt by remember { mutableStateOf<Long?>(null) }
+    var confirmFallback by remember { mutableStateOf(false) }
 
     // The native sheet is removed as soon as a real pending/active session is observed.
     // If this component stays mounted, the request has not been seen by native UI.
@@ -103,36 +123,62 @@ internal fun R5TermuxOwnerReconnectAction() {
         }
     }
 
-    Column {
-        Text("اگر عامل احرازشده اخیراً مشاهده نشده، می‌توانید از تونل Termux موجود درخواست اتصال بفرستید.")
-        Button(
-            onClick = {
-                val now = SystemClock.elapsedRealtime()
-                if (!R5TermuxOwnerReconnect.canTryAgain(now, lastAttempt)) {
-                    message = "درخواست قبلی تازه ارسال شده است؛ ابتدا وضعیت تأیید را بررسی کنید."
-                } else {
-                    when (R5TermuxOwnerReconnect.sendExplicitOwnerRequest(context)) {
-                        R5TermuxOwnerReconnect.Dispatch.QUEUED_NOT_CONFIRMED -> {
-                            lastAttempt = now
-                            queuedAt = now
-                            message =
-                                "فرمان به Termux تحویل شد؛ هنوز اتصال تأیید نشده است. " +
-                                "فقط اگر پنجره تأیید Kelpie ظاهر شد، هویت عامل را بررسی و تأیید کنید."
-                        }
-                        R5TermuxOwnerReconnect.Dispatch.PERMISSION_REQUIRED -> {
-                            message =
-                                "مجوز «Run commands in Termux environment» باید از تنظیمات مجوزهای Kelpie " +
-                                "اعطا شود؛ Termux نیز باید allow-external-apps=true داشته باشد."
-                        }
-                        R5TermuxOwnerReconnect.Dispatch.TERMUX_UNAVAILABLE -> {
-                            message = "سرویس Termux موجود در دسترس نیست. برنامه دیگری نصب نکنید."
-                        }
-                        R5TermuxOwnerReconnect.Dispatch.START_FAILED -> {
-                            message = "اجرای فرمان Termux ناموفق بود؛ هیچ مجوز تازه‌ای صادر نشده است."
-                        }
-                    }
-                }
+    if (confirmFallback) {
+        AlertDialog(
+            onDismissRequest = { confirmFallback = false },
+            title = { Text("اجرای اختیاری پل Termux موجود") },
+            text = {
+                Text(
+                    "فقط اسکریپت ثابت نصب‌شده برای درخواست تأیید اجرا می‌شود؛ " +
+                        "هیچ اعتبارنامه‌ای به Termux ارسال نمی‌شود. " +
+                        "این درخواست جای تأیید هویت و مجوز داخل Kelpie را نمی‌گیرد.",
+                )
             },
+            dismissButton = {
+                TextButton(onClick = { confirmFallback = false }) { Text("ادامه با اتصال بومی") }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmFallback = false
+                        val now = SystemClock.elapsedRealtime()
+                        if (!R5TermuxOwnerReconnect.canTryAgain(now, lastAttempt)) {
+                            message = "درخواست قبلی تازه ارسال شده است؛ ابتدا وضعیت تأیید را بررسی کنید."
+                        } else {
+                            when (R5TermuxOwnerReconnect.sendExplicitOwnerRequest(context, ownerApprovedFallback = true)) {
+                                R5TermuxOwnerReconnect.Dispatch.QUEUED_NOT_CONFIRMED -> {
+                                    lastAttempt = now
+                                    queuedAt = now
+                                    message =
+                                        "فرمان به Termux تحویل شد؛ هنوز اتصال تأیید نشده است. " +
+                                        "فقط اگر پنجره تأیید Kelpie ظاهر شد، هویت عامل را بررسی و تأیید کنید."
+                                }
+                                R5TermuxOwnerReconnect.Dispatch.PERMISSION_REQUIRED -> {
+                                    message =
+                                        "مجوز اجرای فرمان Termux از قبل آماده نیست. " +
+                                        "اتصال بومی Kelpie را ادامه دهید؛ هیچ تنظیمی تغییر نکرد."
+                                }
+                                R5TermuxOwnerReconnect.Dispatch.OWNER_APPROVAL_REQUIRED -> {
+                                    message = "پل Termux بدون انتخاب صریح مالک اجرا نمی‌شود."
+                                }
+                                R5TermuxOwnerReconnect.Dispatch.TERMUX_UNAVAILABLE -> {
+                                    message = "سرویس Termux موجود در دسترس نیست. برنامه دیگری نصب نکنید."
+                                }
+                                R5TermuxOwnerReconnect.Dispatch.START_FAILED -> {
+                                    message = "اجرای فرمان Termux ناموفق بود؛ هیچ مجوز تازه‌ای صادر نشده است."
+                                }
+                            }
+                        }
+                    },
+                ) { Text("درخواست با پل موجود") }
+            },
+        )
+    }
+
+    Column {
+        Text("اگر اتصال بومی در دسترس نیست، می‌توانید پل Termux موجود را جداگانه انتخاب کنید.")
+        Button(
+            onClick = { confirmFallback = true },
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
         ) { Text("درخواست اتصال از Termux") }
         if (message != null) {

@@ -1,12 +1,16 @@
 package com.kelpie.browser.network
 
 import android.webkit.WebView
+import com.kelpie.browser.agent.session.AndroidAgentProcessSession
+import com.kelpie.browser.agent.session.SessionConsentCore
 import com.kelpie.browser.capture.PrivateCaptureOperationPolicy
 import com.kelpie.browser.handlers.HandlerContext
 
 typealias RouteHandler = suspend (body: Map<String, Any?>) -> Map<String, Any?>
 
-class Router {
+class Router(
+    internal val nativeConsentSnapshot: () -> SessionConsentCore.State = { AndroidAgentProcessSession.snapshot() },
+) {
     private val routes = mutableMapOf<String, RouteHandler>()
     var webView: WebView? = null
     var handlerContext: HandlerContext? = null
@@ -49,11 +53,18 @@ class Router {
         bypassRecordingGate: Boolean = false,
         fromGateway: Boolean = false,
     ): Pair<Int, Map<String, Any?>> {
-        // During mother+R5 private ownership, even direct legacy /v1 routes
-        // must carry the same currently approved principal. Ordinary foreground
-        // mother operations retain the standard pairing contract.
+        if (motherR5BackgroundQa && !R5RemoteOperationPolicy.permitsRoute(method, fromGateway)) {
+            return 403 to errorResponse("NEEDS_HUMAN", "This export or unobserved action requires a separate native owner workflow")
+        }
+        val controlOnly = !R5McpBootstrapGate.requiresNativeGrant(method, body, verifiedClientId())
+        // Foreground visibility is not owner consent. A request admitted before
+        // STOP/re-approval or lock/unlock retains its original grant and epoch.
+        if (motherR5BackgroundQa && !controlOnly && !R5RequestAuthorization.current(nativeConsentSnapshot)) {
+            return 403 to errorResponse("PERMISSION_REQUIRED", "Native owner-authorized request required")
+        }
         if (motherR5BackgroundQa &&
-            method !in setOf("mcp", "agent-session-request", "agent-session-status", "agent-session-stop", "get-device-info") &&
+            !controlOnly &&
+            method != "mcp" &&
             handlerContext?.motherPrivateAgentActive?.invoke() == true &&
             handlerContext?.motherGatewayAuthorization?.invoke() != true
         ) {
@@ -68,7 +79,8 @@ class Router {
             return 403 to errorResponse("PERMISSION_REQUIRED", "R5 QA permits consent/status/STOP only")
         }
         val privateOwnerAtAdmission = handlerContext?.privateCaptureRestricted?.invoke() == true
-        if (!PrivateCaptureOperationPolicy.permits(
+        if (!controlOnly &&
+            !PrivateCaptureOperationPolicy.permits(
                 method,
                 privateOwnerAtAdmission,
                 outerEnvelope = true,
@@ -105,7 +117,11 @@ class Router {
         // after transfer. Existing private-envelope calls are allowed through
         // only if Gateway/MCPSession has independently checked their inner method.
         val privateOwnerAtDelivery = handlerContext?.privateCaptureRestricted?.invoke() == true
-        if (!PrivateCaptureOperationPolicy.permitsDelivery(
+        if (motherR5BackgroundQa && !controlOnly && !R5RequestAuthorization.current(nativeConsentSnapshot)) {
+            return 403 to errorResponse("SESSION_REVOKED", "Native owner approval changed before delivery")
+        }
+        if (!controlOnly &&
+            !PrivateCaptureOperationPolicy.permitsDelivery(
                 method,
                 privateOwnerAtAdmission,
                 privateOwnerAtDelivery,

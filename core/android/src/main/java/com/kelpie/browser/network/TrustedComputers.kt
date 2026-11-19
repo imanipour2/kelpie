@@ -1,5 +1,6 @@
 package com.kelpie.browser.network
 
+import com.kelpie.browser.agent.session.AndroidAgentProcessSession
 import com.kelpie.browser.nativecore.NativeCore
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -51,7 +52,11 @@ interface ComputerTrust {
         request("deny", fields("requestId" to requestId))
     }
 
-    fun revoke(publicKey: String): Boolean = request("revoke", fields("publicKey" to publicKey))["success"]?.jsonPrimitive?.booleanOrNull == true
+    fun revoke(publicKey: String): Boolean {
+        val removed = request("revoke", fields("publicKey" to publicKey))["success"]?.jsonPrimitive?.booleanOrNull == true
+        if (removed) AndroidAgentProcessSession.revokePrincipal(publicKey)
+        return removed
+    }
 
     fun list(): List<TrustedComputer> = runCatching { computerJson.decodeFromString<List<TrustedComputer>>(request("list")["computers"].toString()) }.getOrDefault(emptyList())
 

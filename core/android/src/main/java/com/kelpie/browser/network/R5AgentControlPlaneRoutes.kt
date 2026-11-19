@@ -19,4 +19,12 @@ internal object R5AgentControlPlaneRoutes {
         method: String,
         verifiedClientId: String?,
     ): Boolean = isConsentMethod(method) && R5AgentPrincipalPolicy.eligible(verifiedClientId)
+
+    /** Run after the Main-thread hop, before touching process consent state. */
+    suspend fun rejectionIfRevoked(): Map<String, Any?>? =
+        if (verifiedRequestAuthorityCurrent()) {
+            null
+        } else {
+            errorResponse("AUTHORIZATION_REVOKED", "Paired client authorization changed before consent handling")
+        }
 }

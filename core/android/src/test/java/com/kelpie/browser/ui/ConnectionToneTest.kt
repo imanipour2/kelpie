@@ -10,8 +10,12 @@ class ConnectionToneTest {
     }
 
     @Test
-    fun explicitFailureIsRed() {
-        assertEquals(ConnectionTone.BAD, tunnelTone(200, 503))
+    fun runningProbeWithFailedReadinessIsDegraded() {
+        assertEquals(ConnectionTone.DEGRADED, tunnelTone(200, 503))
+    }
+
+    @Test
+    fun explicitHealthFailureIsRedWithoutClaimingRemoteTunnelState() {
         assertEquals(ConnectionTone.BAD, tunnelTone(500, 200))
     }
 

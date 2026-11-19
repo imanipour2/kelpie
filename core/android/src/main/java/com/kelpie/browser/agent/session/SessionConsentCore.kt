@@ -84,6 +84,20 @@ class SessionConsentCore(
         current = State.Off
     }
 
+    /** Unpairing revokes only the pending/active grant bound to that identity. */
+    @Synchronized
+    fun revokePrincipal(principalId: String): Boolean {
+        val owner =
+            when (val state = current) {
+                is State.Active -> state.principalId
+                is State.Pending -> state.principalId
+                State.Off -> null
+            }
+        if (owner != principalId) return false
+        current = State.Off
+        return true
+    }
+
     private fun nonce(): String = ByteArray(NONCE_BYTES).also(random::nextBytes).joinToString("") { "%02x".format(it) }
 
     private fun valid(value: String?): Boolean = value != null && value.isNotBlank() && value.length <= MAX_PRINCIPAL_LENGTH && value.none(Char::isISOControl)

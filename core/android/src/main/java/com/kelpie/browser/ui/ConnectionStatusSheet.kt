@@ -39,7 +39,7 @@ import java.text.DateFormat
 import java.util.Date
 
 /** Text and symbols accompany every color: never treat tunnel health as agent authorization. */
-internal enum class ConnectionTone { GOOD, BAD, UNKNOWN }
+internal enum class ConnectionTone { GOOD, DEGRADED, BAD, UNKNOWN }
 
 internal fun tunnelTone(
     healthStatus: Int?,
@@ -47,6 +47,7 @@ internal fun tunnelTone(
 ): ConnectionTone =
     when {
         healthStatus == null || (healthStatus == 200 && readyStatus == null) -> ConnectionTone.UNKNOWN
+        healthStatus == 200 && readyStatus != 200 -> ConnectionTone.DEGRADED
         healthStatus != 200 || readyStatus != 200 -> ConnectionTone.BAD
         else -> ConnectionTone.GOOD
     }
@@ -112,7 +113,8 @@ internal fun ConnectionStatusSheet(
             if (browserRunning) ConnectionTone.GOOD else ConnectionTone.BAD,
         )
         StatusDetail("Browser port", deviceInfo.port.toString(), ConnectionTone.UNKNOWN)
-        StatusDetail("Secure tunnel", tunnelLabel, tunnelStatus)
+        StatusDetail("Local tunnel diagnostics", tunnelLabel, tunnelStatus)
+        StatusDetail("Remote tunnel", "Not verified by this probe", ConnectionTone.UNKNOWN)
         StatusDetail(
             "MCP traffic",
             mcpLabel,
@@ -134,7 +136,8 @@ internal fun ConnectionStatusSheet(
             }
         }
         Text(
-            "If the tunnel is ready but tabs are blocked, check the agent identity and permissions.",
+            "A running probe with degraded readiness does not prove the remote tunnel is down. " +
+                "Use the native agent approval page to review the verified client and session.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -198,12 +201,14 @@ private fun StatusDetail(
     val color =
         when (tone) {
             ConnectionTone.GOOD -> if (dark) Color(0xFF81C784) else Color(0xFF1B5E20)
+            ConnectionTone.DEGRADED -> if (dark) Color(0xFFFFD166) else Color(0xFF805500)
             ConnectionTone.BAD -> if (dark) Color(0xFFFFB4AB) else Color(0xFFB3261E)
             ConnectionTone.UNKNOWN -> MaterialTheme.colorScheme.onSurfaceVariant
         }
     val glyph =
         when (tone) {
             ConnectionTone.GOOD -> "✓"
+            ConnectionTone.DEGRADED -> "!"
             ConnectionTone.BAD -> "×"
             ConnectionTone.UNKNOWN -> "?"
         }

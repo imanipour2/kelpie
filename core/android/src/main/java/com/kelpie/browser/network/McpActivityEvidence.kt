@@ -26,11 +26,11 @@ internal fun tunnelReadyLabel(
     readyStatus: Int?,
 ): String =
     when {
-        healthStatus == null -> "Diagnostics unavailable"
-        healthStatus != 200 -> "Diagnostics unhealthy (HTTP $healthStatus)"
-        readyStatus == null -> "Running; readiness unknown"
-        readyStatus != 200 -> "Running; not ready (HTTP $readyStatus)"
-        else -> "Ready locally"
+        healthStatus == null -> "Probe unavailable; remote state unknown"
+        healthStatus != 200 -> "Probe unhealthy (HTTP $healthStatus); remote state unknown"
+        readyStatus == null -> "Probe running; readiness unknown"
+        readyStatus != 200 -> "Probe degraded (ready HTTP $readyStatus)"
+        else -> "Probe ready locally"
     }
 
 /** Only a fresh verified non-localhost request is meaningful; none proves control. */

@@ -1,5 +1,7 @@
 package com.kelpie.browser.network
 
+import com.kelpie.browser.agent.session.R5AgentPrincipalPolicy
+
 /**
  * MCP control plane is not a browser action. An already authenticated, non-localhost
  * computer may negotiate protocol metadata even when the owner has stopped or locked
@@ -10,18 +12,15 @@ internal object R5McpBootstrapGate {
     private val controlMethods = setOf("initialize", "notifications/initialized", "ping", "tools/list")
 
     /**
-     * Mirrors the HTTPServer delivery check. The owner grant is not required
-     * for authenticated protocol metadata; actions are checked separately.
+     * Applies in foreground and PRIVATE ownership. Only verified protocol
+     * metadata and native consent negotiation are independent of a grant.
      */
-    fun requiresNativeGrantAtDelivery(
+    fun requiresNativeGrant(
         outerMethod: String,
         inner: Map<String, Any?>,
         verifiedClientId: String?,
-        privateAtIngress: Boolean,
-        privateAtEgress: Boolean,
     ): Boolean =
-        (privateAtIngress || privateAtEgress) &&
-            !maySkipNativeSession(outerMethod, inner, verifiedClientId) &&
+        !maySkipNativeSession(outerMethod, inner, verifiedClientId) &&
             !R5AgentControlPlaneRoutes.mayRespondWithoutOwnerGrant(outerMethod, verifiedClientId)
 
     fun maySkipNativeSession(
@@ -30,7 +29,6 @@ internal object R5McpBootstrapGate {
         verifiedClientId: String?,
     ): Boolean =
         outerMethod == "mcp" &&
-            !verifiedClientId.isNullOrBlank() &&
-            verifiedClientId != "localhost" &&
+            R5AgentPrincipalPolicy.eligible(verifiedClientId) &&
             (inner["method"] as? String)?.let { it in controlMethods } == true
 }

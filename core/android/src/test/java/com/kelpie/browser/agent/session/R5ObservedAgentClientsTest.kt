@@ -8,6 +8,33 @@ import org.junit.Test
 
 class R5ObservedAgentClientsTest {
     @Test
+    fun unpairingRemovesOnlyThatObservedPrincipalBeforeTtlExpires() {
+        val clients = RecentVerifiedAgentClients({ 1_000L })
+        clients.noteVerified("first")
+        clients.noteVerified("second")
+        clients.forget("first")
+        assertEquals("second", clients.soleRecentPrincipal())
+        clients.forget("second")
+        assertNull(clients.soleRecentPrincipal())
+        assertTrue(clients.observed.value.isEmpty())
+    }
+
+    @Test
+    fun unpairingRevokesPendingOrActiveGrantOnlyForTheSameIdentity() {
+        val consent = SessionConsentCore({ 1_000L })
+        consent.requestNativeConsent("first")!!
+        assertFalse(consent.revokePrincipal("second"))
+        assertTrue(consent.snapshot() is SessionConsentCore.State.Pending)
+        assertTrue(consent.revokePrincipal("first"))
+        assertEquals(SessionConsentCore.State.Off, consent.snapshot())
+        val prompt = consent.requestNativeConsent("first")!!
+        consent.approveFromNativeUi(prompt.promptId, deviceUnlocked = true)!!
+        assertFalse(consent.revokePrincipal("second"))
+        assertTrue(consent.revokePrincipal("first"))
+        assertEquals(SessionConsentCore.State.Off, consent.snapshot())
+    }
+
+    @Test
     fun neverTreatAndroidLocalhostAsAnIdentifiedAgent() {
         assertFalse(R5AgentPrincipalPolicy.eligible("localhost"))
         assertFalse(R5AgentPrincipalPolicy.eligible(null))

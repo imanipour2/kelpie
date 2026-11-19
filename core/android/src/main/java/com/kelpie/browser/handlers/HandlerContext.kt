@@ -10,6 +10,13 @@ import com.kelpie.browser.browser.KeyboardObserver
 import com.kelpie.browser.browser.TabStore
 import com.kelpie.browser.nativecore.AiManager
 import com.kelpie.browser.network.BrowserGatewayRetirement
+import java.io.ByteArrayOutputStream
+import java.util.Base64
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlin.coroutines.suspendCoroutine
+import kotlin.math.max
+import kotlin.math.roundToInt
 import kotlinx.coroutines.asContextElement
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,13 +25,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.jsonObject
-import java.io.ByteArrayOutputStream
-import java.util.Base64
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
-import kotlin.coroutines.suspendCoroutine
-import kotlin.math.max
-import kotlin.math.roundToInt
 
 private val json =
     Json {
@@ -52,12 +52,14 @@ class HandlerContext(
 
     /** Null means deny private capture; never draw the suspended activity as a fallback. */
     var motherPrivateScreenshot: (suspend () -> Map<String, Any?>?)? = null
+
     var remoteDocumentGuard: (() -> Boolean)? = null
     var remoteNavigationStart: (() -> Boolean)? = null
     var remoteNavigationReadGuard: (() -> Boolean)? = null
     var remoteNavigationWaitGuard: (() -> Boolean)? = null
     private var visibleWebView: WebView? = null
     private val operationWebView = ThreadLocal<WebView>()
+    private val operationAuthority = BrowserOperationContext()
     var webView: WebView?
         get() = operationWebView.get() ?: visibleWebView
         set(value) {
@@ -69,6 +71,13 @@ class HandlerContext(
         view: WebView,
         block: suspend () -> T,
     ): T = withContext(operationWebView.asContextElement(view)) { block() }
+
+    internal fun captureOperationGuard(): BrowserOperationGuard? = operationAuthority.capture()
+
+    internal suspend fun <T> withOperationGuard(
+        guard: BrowserOperationGuard?,
+        block: suspend () -> T,
+    ): T = operationAuthority.withGuard(guard, block)
 
     var tabStore: TabStore? = null
     var browserDocumentChanged: ((String) -> Unit)? = null
@@ -136,9 +145,15 @@ class HandlerContext(
     private suspend fun evaluateGuardedJS(
         script: String,
         guard: (() -> Boolean)?,
+        navigationRead: Boolean = false,
     ): String =
         suspendCancellableCoroutine { cont ->
             val wv = webView
+            // Capture before posting: the Main runnable must not inherit a later
+            // request's ThreadLocal value or silently acquire a replacement grant.
+            val requestGuard = captureOperationGuard()
+
+            fun requestCurrent(): Boolean = if (navigationRead) requestGuard?.afterNavigation() != false else requestGuard?.beforeAction() != false
             if (privateCaptureRestricted?.invoke() == true) {
                 cont.resumeWithException(IllegalStateException("Private WebView capture owns the browser"))
                 return@suspendCancellableCoroutine
@@ -152,13 +167,14 @@ class HandlerContext(
                 if (cont.isActive) {
                     try {
                         check(privateCaptureRestricted?.invoke() != true) { "Private WebView capture owns the browser" }
+                        check(requestCurrent()) { "Original browser request authority or target changed" }
                         check(guard?.invoke() != false) { "Tab document changed or job stopped" }
                         wv.evaluateJavascript(script) { result ->
                             browserRetirement.complete(ticket)
                             if (cont.isActive) {
                                 if (privateCaptureRestricted?.invoke() == true) {
                                     cont.resumeWithException(IllegalStateException("Private WebView capture owns the browser"))
-                                } else if (guard?.invoke() == false) {
+                                } else if (!requestCurrent() || guard?.invoke() == false) {
                                     cont.resumeWithException(IllegalStateException("Tab document changed or job stopped"))
                                 } else {
                                     cont.resume(result ?: "null")
@@ -183,14 +199,17 @@ class HandlerContext(
 
     /** Fixed metadata only: callers cannot use the transferred pin for arbitrary script/mutations. */
     suspend fun navigationSnapshot(): Map<String, Any?> {
+        val requestGuard = captureOperationGuard()
         while (remoteNavigationReadGuard?.invoke() == false) {
+            check(requestGuard?.afterNavigation() != false) { "Original navigation request changed" }
             check(remoteNavigationWaitGuard?.invoke() == true) { "Navigation document changed or job stopped" }
             kotlinx.coroutines.delay(25)
         }
         val raw =
             evaluateGuardedJS(
-                "JSON.stringify({url:location.href,title:document.title,readyState:document.readyState})",
+                "JSON.stringify({url:location.href,title:document.title,readyState:document.readyState,timeOrigin:performance.timeOrigin})",
                 remoteNavigationReadGuard ?: remoteDocumentGuard,
+                navigationRead = true,
             )
         return parseObject(raw)
     }
