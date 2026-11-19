@@ -91,6 +91,9 @@ internal fun AgentConnectionCenterSheet(
                             "then ask that client to check capabilities. No background control " +
                             "is granted by this setup screen.",
                     )
+                    if (provider == R5AgentProvider.CHATGPT && chatGptTunnel) {
+                        R5TermuxOwnerReconnectAction()
+                    }
                 }
                 1 -> {
                     Text("Recently verified agent ID: " + observedClients.single().take(8) + "...")
