@@ -86,10 +86,10 @@ internal fun AgentConnectionCenterSheet(
             when (observedClients.size) {
                 0 -> {
                     Text(
-                        "No authenticated paired AI client is active. A clean reinstall removes " +
-                            "earlier Kelpie pairings. Finish the approved MCP client pairing first, " +
-                            "then ask that client to check capabilities. No background control " +
-                            "is granted by this setup screen.",
+                        "No uniquely authenticated agent has been seen recently. " +
+                            "If you already paired your AI client, you can request a fresh native " +
+                            "approval through the existing Termux tunnel below. " +
+                            "Do not reinstall, rotate credentials or change ports.",
                     )
                     if (provider == R5AgentProvider.CHATGPT && chatGptTunnel) {
                         R5TermuxOwnerReconnectAction()
