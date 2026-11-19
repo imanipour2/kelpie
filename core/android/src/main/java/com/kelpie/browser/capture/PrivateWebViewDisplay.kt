@@ -97,6 +97,12 @@ class PrivateWebViewDisplay(
 
     suspend fun start(original: WebView): Boolean =
         withContext(Dispatchers.Main.immediate) {
+            val traceStartMs = android.os.SystemClock.elapsedRealtime()
+            fun trace(stage: String) {
+                val elapsed = android.os.SystemClock.elapsedRealtime() - traceStartMs
+                Log.i("KelpieR5Transfer", "stage=" + stage + " elapsedMs=" + elapsed)
+            }
+            trace("START_ENTERED")
             // Diagnose the exact failed gate, not a combined status. These are
             // fixed labels: never log URLs, JavaScript results, pixels or principals.
             val preconditionFailure =
@@ -110,17 +116,22 @@ class PrivateWebViewDisplay(
                     else -> null
                 }
             if (preconditionFailure != null) {
-                Log.w("KelpieR5Transfer", "START_PRECONDITION_DENIED_" + preconditionFailure)
+                Log.w(
+                    "KelpieR5Transfer",
+                    "stage=START_PRECONDITION_DENIED_" + preconditionFailure +
+                        " elapsedMs=" + (android.os.SystemClock.elapsedRealtime() - traceStartMs),
+                )
                 return@withContext false
             }
             val cssScroll =
                 R5WebViewScrollRestoration.read(original) ?: run {
-                    Log.w("KelpieR5Transfer", "CSS_SCROLL_WITNESS_MISSING")
+                    trace("CSS_SCROLL_WITNESS_MISSING")
                     return@withContext false
                 }
             if (stateFlow.value != State.IDLE || isLocked() || !activityVisible) return@withContext false
             val generation = ownershipGeneration.incrementAndGet()
             previousCssScroll = cssScroll
+            trace("COMPOSE_RELEASE_BEGIN")
             stateFlow.value = State.RELEASING_COMPOSE
             view = original
             qaFrameSequence = 0
@@ -137,10 +148,11 @@ class PrivateWebViewDisplay(
                         !original.isAttachedToWindow && current()
                     } == true
                 if (!detached) {
-                    Log.w("KelpieR5Transfer", "COMPOSE_RELEASE_TIMEOUT")
+                    trace("COMPOSE_RELEASE_TIMEOUT")
                     if (ownershipGeneration.get() == generation) releaseAndRestore(State.FAILED)
                     return@withContext false
                 }
+                trace("COMPOSE_DETACHED")
                 val backgroundThread = HandlerThread("Kelpie-Private-ImageReader")
                 backgroundThread.start()
                 worker = backgroundThread
@@ -165,19 +177,21 @@ class PrivateWebViewDisplay(
                 val proof = if (useNativeFrameProof) R5NativeFrameProof(host.context).also { nativeFrameProof = it } else null
                 host.setContentView(proof?.host(original) ?: original)
                 host.show()
+                trace("PRIVATE_HOST_SHOWN")
                 if (!viewportReadiness.awaitCommittedViewport(original, ++visualRequestId, ::current) || !current()) {
-                    Log.w("KelpieR5Transfer", "PRIVATE_VIEWPORT_COMMIT_FAILED")
+                    trace("PRIVATE_VIEWPORT_COMMIT_FAILED")
                     if (ownershipGeneration.get() == generation) releaseAndRestore(State.FAILED)
                     return@withContext false
                 }
                 active = true
                 stateFlow.value = State.PRIVATE_DISPLAY
+                trace("PRIVATE_DISPLAY_COMMITTED")
                 true
             } catch (error: CancellationException) {
                 if (ownershipGeneration.get() == generation) releaseAndRestore(State.FAILED)
                 throw error
             } catch (_: RuntimeException) {
-                Log.w("KelpieR5Transfer", "PRIVATE_DISPLAY_RUNTIME_FAILURE")
+                trace("PRIVATE_DISPLAY_RUNTIME_FAILURE")
                 if (ownershipGeneration.get() == generation) releaseAndRestore(State.FAILED)
                 false
             }
