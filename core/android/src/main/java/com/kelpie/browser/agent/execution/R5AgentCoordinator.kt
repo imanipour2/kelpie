@@ -126,7 +126,17 @@ class R5AgentCoordinator(
 
     init {
         // Mother MCP must rehost the exact R5 WebView before reporting a private tab as selected.
-        ctx.motherPrivateTabSwitch = { tabId -> switchTabFromMother(tabId) }
+        val motherSwitch =
+            R5MotherTabSwitch(
+                activity = activity,
+                consent = consent,
+                nativeTabCommands = tabCommands,
+                ready = { ready },
+                selectedTab = { currentTabId },
+                closed = { closed },
+                cancelInFlight = { runtime.cancelInFlight() },
+            )
+        ctx.motherPrivateTabSwitch = motherSwitch::select
         if (focusObserver.isAlive) {
             focusObserver.addOnWindowFocusChangeListener(focusRegainedListener)
         }
@@ -324,43 +334,6 @@ class R5AgentCoordinator(
                 ),
             )
         }
-    }
-
-    /**
-     * Legacy mother MCP has no R5 command sequence. Its authenticated principal is resolved
-     * from the native request, not JSON; the existing tab action, generation/epoch check,
-     * ownership transfer mutex and independent verification remain mandatory.
-     */
-    private suspend fun switchTabFromMother(targetId: String): Boolean {
-        val principal = verifiedClientId() ?: return false
-        val active = consent.snapshot() as? SessionConsentCore.State.Active ?: return false
-        if (!ready || !canUse(principal, active.generation, active)) return false
-        val observed = tabCommands.observe() ?: return false
-        val command =
-            AgentCommand(
-                commandId = UUID.randomUUID().toString(),
-                principalId = principal,
-                consentGeneration = active.generation,
-                tabId = observed.tabId,
-                observedDocumentEpoch = observed.documentEpoch,
-                operation = Operation.SWITCH_TAB,
-                selector = targetId,
-            )
-        // In-flight R5 actions must not outlive a mother-initiated renderer transition.
-        runtime.cancelInFlight()
-        val performed = tabCommands.perform(command)
-        val verified = performed && tabCommands.verify(command)
-        if (!verified || !ready || !canUse(principal, active.generation, consent.snapshot() as? SessionConsentCore.State.Active) ||
-            currentTabId != targetId
-        ) {
-            if (performed) {
-                // A transferred but unverified renderer must never remain approved.
-                AndroidAgentProcessSession.stop()
-                AgentSessionNotification.hide(activity)
-            }
-            return false
-        }
-        return true
     }
 
     private fun canUse(
