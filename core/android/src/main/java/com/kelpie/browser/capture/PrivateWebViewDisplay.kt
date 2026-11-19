@@ -97,8 +97,20 @@ class PrivateWebViewDisplay(
 
     suspend fun start(original: WebView): Boolean =
         withContext(Dispatchers.Main.immediate) {
-            if (stateFlow.value != State.IDLE || isLocked() || !activityVisible || !viewportReadiness.cssReady(original)) {
-                Log.w("KelpieR5Transfer", "START_PRECONDITION_DENIED")
+            // Diagnose the exact failed gate, not a combined status. These are
+            // fixed labels: never log URLs, JavaScript results, pixels or principals.
+            val preconditionFailure =
+                when {
+                    stateFlow.value != State.IDLE -> "RENDERER_NOT_IDLE"
+                    isLocked() -> "DEVICE_OR_ACTIVITY_LOCKED"
+                    !activityVisible -> "ACTIVITY_VISIBILITY_CHANGED"
+                    !original.isAttachedToWindow -> "WEBVIEW_NOT_ATTACHED"
+                    original.width <= 0 || original.height <= 0 -> "WEBVIEW_ZERO_NATIVE_SIZE"
+                    !viewportReadiness.cssReady(original) -> "WEBVIEW_CSS_NOT_READY"
+                    else -> null
+                }
+            if (preconditionFailure != null) {
+                Log.w("KelpieR5Transfer", "START_PRECONDITION_DENIED_" + preconditionFailure)
                 return@withContext false
             }
             val cssScroll =
