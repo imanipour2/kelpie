@@ -58,6 +58,70 @@ class R5McpBootstrapGateTest {
     }
 
     @Test
+    fun revokedPrivateOwnerStillAllowsPairedProtocolBootstrap() {
+        assertFalse(
+            R5McpBootstrapGate.requiresNativeGrantAtDelivery(
+                "mcp",
+                mapOf("method" to "initialize"),
+                "verified-paired-computer",
+                privateAtIngress = true,
+                privateAtEgress = true,
+            ),
+        )
+        assertFalse(
+            R5McpBootstrapGate.requiresNativeGrantAtDelivery(
+                "mcp",
+                mapOf("method" to "tools/list"),
+                "verified-paired-computer",
+                privateAtIngress = false,
+                privateAtEgress = true,
+            ),
+        )
+    }
+
+    @Test
+    fun revokedPrivateOwnerStillProtectsBrowserAndLocalhost() {
+        for (method in listOf("tools/call", "resources/read", "prompts/get")) {
+            assertTrue(
+                R5McpBootstrapGate.requiresNativeGrantAtDelivery(
+                    "mcp",
+                    mapOf("method" to method),
+                    "verified-paired-computer",
+                    privateAtIngress = true,
+                    privateAtEgress = false,
+                ),
+            )
+        }
+        assertTrue(
+            R5McpBootstrapGate.requiresNativeGrantAtDelivery(
+                "mcp",
+                mapOf("method" to "initialize"),
+                "localhost",
+                privateAtIngress = true,
+                privateAtEgress = true,
+            ),
+        )
+        assertTrue(
+            R5McpBootstrapGate.requiresNativeGrantAtDelivery(
+                "mcp",
+                mapOf("method" to "initialize"),
+                null,
+                privateAtIngress = true,
+                privateAtEgress = true,
+            ),
+        )
+        assertFalse(
+            R5McpBootstrapGate.requiresNativeGrantAtDelivery(
+                "mcp",
+                mapOf("method" to "tools/call"),
+                "verified-paired-computer",
+                privateAtIngress = false,
+                privateAtEgress = false,
+            ),
+        )
+    }
+
+    @Test
     fun nonMcpRoutesAndMalformedRequestsCannotBypassOwnerGrant() {
         assertFalse(
             R5McpBootstrapGate.maySkipNativeSession(
