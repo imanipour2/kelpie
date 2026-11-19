@@ -16,7 +16,7 @@ import android.widget.FrameLayout
  * This is image freshness evidence, NOT permission to access the browser.
  */
 internal class R5NativeFrameProof(
-    context: Context,
+    private val context: Context,
 ) {
     private val sequence = R5FrameProofEpochSequence()
     private val primaryMarker =
@@ -35,7 +35,7 @@ internal class R5NativeFrameProof(
 
     fun host(webView: WebView): FrameLayout {
         check(root == null) { "Native frame proof cannot attach twice" }
-        return FrameLayout(webView.context).also { frame ->
+        return FrameLayout(context).also { frame ->
             frame.addView(
                 webView,
                 FrameLayout.LayoutParams(
@@ -57,6 +57,8 @@ internal class R5NativeFrameProof(
         }
     }
 
+    fun owns(webView: WebView): Boolean = root != null && webView.parent === root
+
     /** Swap only the app-owned WebView; retain the independent native proof markers. */
     fun swapWebView(
         oldView: WebView,
@@ -73,13 +75,15 @@ internal class R5NativeFrameProof(
             )
             nextView.parent === frame
         } catch (_: RuntimeException) {
-            (nextView.parent as? ViewGroup)?.removeView(nextView)
-            if (oldView.parent == null) {
-                frame.addView(
-                    oldView,
-                    0,
-                    FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
-                )
+            runCatching { (nextView.parent as? ViewGroup)?.removeView(nextView) }
+            runCatching {
+                if (oldView.parent == null) {
+                    frame.addView(
+                        oldView,
+                        0,
+                        FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
+                    )
+                }
             }
             false
         }
@@ -108,8 +112,9 @@ internal class R5NativeFrameProof(
     }
 
     fun dispose() {
-        (primaryMarker.parent as? ViewGroup)?.removeView(primaryMarker)
-        (secondaryMarker.parent as? ViewGroup)?.removeView(secondaryMarker)
+        // A STOP may interrupt a transfer before the display commits its owner.
+        // Detach every child without destroying either real tab's WebView.
+        root?.removeAllViews()
         root = null
     }
 

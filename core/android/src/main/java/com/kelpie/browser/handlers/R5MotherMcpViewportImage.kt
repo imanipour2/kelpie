@@ -2,7 +2,8 @@ package com.kelpie.browser.handlers
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import java.io.ByteArrayOutputStream
+import com.kelpie.browser.capture.CapturePrivacyEvidence
+import com.kelpie.browser.capture.R5BoundedImageOutputStream
 import java.util.Base64
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -31,6 +32,7 @@ internal object R5MotherMcpViewportImage {
         native: Map<String, Any?>,
         metrics: ScreenshotViewportMetrics,
     ): Map<String, Any?>? {
+        if (!CapturePrivacyEvidence.hasVerifiedReceipt(native)) return null
         val base64 = native["image"] as? String ?: return null
         if (base64.length > MAX_IMAGE_BYTES * 2) return null
         val png = runCatching { Base64.getDecoder().decode(base64) }.getOrNull() ?: return null
@@ -54,11 +56,12 @@ internal object R5MotherMcpViewportImage {
                 } else {
                     Bitmap.createScaledBitmap(bitmap, outputPixels.first, outputPixels.second, true).also { resized = it }
                 }
-            val output = ByteArrayOutputStream()
+            val output = R5BoundedImageOutputStream(MAX_OUTPUT_BYTES)
             if (!target.compress(Bitmap.CompressFormat.PNG, 100, output)) return null
             val bytes = output.toByteArray()
             if (bytes.isEmpty() || bytes.size > MAX_OUTPUT_BYTES) return null
-            mapOf("image" to Base64.getEncoder().encodeToString(bytes)) +
+            native.filterKeys { it != "image" } +
+                mapOf("image" to Base64.getEncoder().encodeToString(bytes)) +
                 metrics.metadata(
                     imageWidth = target.width,
                     imageHeight = target.height,

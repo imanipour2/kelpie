@@ -1,5 +1,50 @@
 package com.kelpie.browser.handlers
 
+enum class ScreenshotResolution(
+    val wireValue: String,
+) {
+    NATIVE("native"),
+    VIEWPORT("viewport"),
+    ;
+
+    companion object {
+        fun parse(raw: Any?): ScreenshotResolution? =
+            when (raw) {
+                null -> NATIVE
+                is String -> entries.firstOrNull { it.wireValue == raw }
+                else -> null
+            }
+    }
+}
+
+data class ScreenshotViewportMetrics(
+    val viewportWidth: Int,
+    val viewportHeight: Int,
+    val devicePixelRatio: Double,
+) {
+    fun metadata(
+        imageWidth: Int,
+        imageHeight: Int,
+        format: String,
+        resolution: ScreenshotResolution,
+    ): Map<String, Any> {
+        val scaleX = if (viewportWidth > 0) imageWidth.toDouble() / viewportWidth.toDouble() else 1.0
+        val scaleY = if (viewportHeight > 0) imageHeight.toDouble() / viewportHeight.toDouble() else 1.0
+        return mapOf(
+            "width" to imageWidth,
+            "height" to imageHeight,
+            "format" to format,
+            "resolution" to resolution.wireValue,
+            "coordinateSpace" to "viewport-css-pixels",
+            "viewportWidth" to viewportWidth,
+            "viewportHeight" to viewportHeight,
+            "devicePixelRatio" to devicePixelRatio,
+            "imageScaleX" to scaleX,
+            "imageScaleY" to scaleY,
+        )
+    }
+}
+
 /** Pure image/CSS mapping; DPR is deliberately not part of the transform. */
 data class ScreenshotRect(
     val x: Double,
@@ -73,3 +118,6 @@ internal fun requireScreenshotAllocation(
         throw ScreenshotRefusal("SCREENSHOT_TOO_LARGE", "Concurrent bitmaps exceed the capture memory budget")
     }
 }
+
+/** The verified provider covers one viewport; stitched Canvas tiles have no frame proof. */
+internal fun refuseUnverifiedFullPageCapture(): Nothing = throw ScreenshotRefusal("UNSUPPORTED", "Full-page capture requires independently verified fresh and privacy-safe tiles")

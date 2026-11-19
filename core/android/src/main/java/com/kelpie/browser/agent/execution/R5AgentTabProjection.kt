@@ -1,6 +1,7 @@
 package com.kelpie.browser.agent.execution
 
 import com.kelpie.browser.browser.TabStore
+import com.kelpie.browser.handlers.TabMetadataPrivacy
 
 /**
  * R5 metadata projection for only app-owned tabs. Never export cookies,
@@ -36,12 +37,9 @@ internal object R5AgentTabProjection {
                 "tabId" to tab.id,
                 "documentEpoch" to tab.documentEpoch,
                 "active" to tab.active,
-                "title" to tab.title.take(256),
-                "urlWithoutQuery" to
-                    tab.url
-                        .substringBefore("?")
-                        .substringBefore("#")
-                        .take(2048),
+                "title" to TabMetadataPrivacy.title(tab.url),
+                "titleRedacted" to true,
+                "urlWithoutQuery" to TabMetadataPrivacy.url(tab.url),
             )
         }
 

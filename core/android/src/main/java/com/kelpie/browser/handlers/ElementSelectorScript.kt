@@ -18,6 +18,7 @@ fun elementSelectorBuilderScript(): String =
         var current = node;
         while (current && current.nodeType === 1) {
             var tag = current.tagName.toLowerCase();
+            if (structuralOnly && typeof kelpieSafeTag === 'function' && kelpieSafeTag(current) === 'generic') return null;
             var segment = tag;
             if (!structuralOnly && current.id) {
                 segment += '#' + kelpieEscapeIdentifier(current.id);

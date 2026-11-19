@@ -9,7 +9,7 @@ class R5WebViewActionScriptsTest {
     @Test
     fun ordinaryButtonsNoLongerHaveBlanketDenyRule() {
         val script = R5WebViewActionScripts.click("#ordinary-button")
-        assertTrue(script.contains("e.click();return 'DISPATCHED'"))
+        assertTrue(script.contains("hit.click()"))
         assertFalse(script.contains("e.matches('button,[type=submit]"))
         assertTrue(script.contains("DENIED_SENSITIVE"))
         assertTrue(script.contains("one-time-code"))
@@ -19,12 +19,13 @@ class R5WebViewActionScriptsTest {
     @Test
     fun mutationAndExternalProtocolButtonsHaveConservativeGuards() {
         val script = R5WebViewActionScripts.click("#ordinary-button")
-        assertTrue(script.contains("nonGetFormButton"))
-        assertTrue(script.contains("formHasSecrets"))
-        assertTrue(script.contains("unsafeLink"))
-        assertTrue(script.contains("destructive.test(label)"))
+        assertTrue(script.contains("String(form.method || 'get').toLowerCase() !== 'get'"))
+        assertTrue(script.contains("Array.from(form.elements).some"))
+        assertTrue(script.contains("field.matches('input[type=password]"))
+        assertTrue(script.contains("anchor.protocol"))
+        assertTrue(script.contains("sensitiveOperations.test(hints)"))
         assertTrue(script.contains("DENIED_SENSITIVE"))
-        assertTrue(script.contains("e.click();return 'DISPATCHED'"))
+        assertTrue(script.contains("hit.click()"))
     }
 
     @Test
@@ -35,7 +36,7 @@ class R5WebViewActionScriptsTest {
         assertTrue(snapshot.contains("depth<24"))
         assertTrue(snapshot.contains("css.length>500"))
         assertTrue(snapshot.contains("document.querySelectorAll(css).length===1"))
-        assertTrue(snapshot.contains("role:(e.getAttribute('role')"))
+        assertTrue(snapshot.contains("role:kelpieSafeRole(e)"))
         assertFalse(snapshot.contains("selector:e.id ?"))
         assertFalse(snapshot.contains("value:e.value"))
     }
@@ -61,8 +62,19 @@ class R5WebViewActionScriptsTest {
         val malicious = """x');window.location='https://other.example';//"""
         val script = R5WebViewActionScripts.click(malicious)
         assertFalse(script.contains("querySelector('x');window.location"))
-        assertTrue(script.contains("querySelector(\""))
+        assertTrue(script.contains("querySelectorAll(\""))
         assertTrue(script.contains("DENIED_SENSITIVE"))
+    }
+
+    @Test
+    fun mutationProofsAreCommandLocalBoundedAndOneShot() {
+        val fill = R5WebViewActionScripts.fill("#query", "Public text", "native-proof")
+        assertTrue(fill.contains("kelpieFillElement(selector,value)"))
+        assertTrue(fill.contains("current[0]!==e"))
+        assertTrue(fill.contains("matches[0]!==target"))
+        assertTrue(fill.contains("setTimeout(retire,10000)"))
+        assertTrue(fill.contains("delete window[kelpieProofKey]"))
+        assertTrue(R5WebViewActionScripts.verifyFill("#query", "Public text", "native-proof").contains("native-proof"))
     }
 
     @Test
@@ -78,10 +90,12 @@ class R5WebViewActionScriptsTest {
 
     @Test
     fun selectAndWaitAreFixedScriptsWithQuotedArguments() {
-        val choose = R5WebViewActionScripts.select("#grade", "PRO 25")
-        val verify = R5WebViewActionScripts.verifySelect("#grade", "PRO 25")
+        val choose = R5WebViewActionScripts.select("#grade", "PRO 25", "native-proof")
+        val verify = R5WebViewActionScripts.verifySelect("#grade", "PRO 25", "native-proof")
         assertTrue(choose.contains("HTMLSelectElement"))
-        assertTrue(verify.contains("selectedOptions"))
+        assertTrue(choose.contains("selectedOptions"))
+        assertTrue(verify.contains("native-proof"))
+        assertTrue(verify.contains("Object.getOwnPropertyDescriptor"))
         assertTrue(choose.contains("PRO 25"))
         assertTrue(R5WebViewActionScripts.waitFor("#ready").contains("querySelector"))
         assertTrue(R5WebViewActionScripts.waitFor(null).contains("readyState"))

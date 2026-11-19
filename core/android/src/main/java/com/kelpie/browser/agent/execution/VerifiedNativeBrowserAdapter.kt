@@ -55,7 +55,8 @@ class VerifiedNativeBrowserAdapter(
             return null
         }
         val target = port.actualTarget(command.tabId) ?: return null
-        if (target.tabId != command.tabId ||
+        if (consent.snapshot() != active ||
+            target.tabId != command.tabId ||
             target.rendererIdentity.isBlank() ||
             target.documentEpoch.isBlank() ||
             !ownership.mayExecuteWebOperation(active.generation, target.rendererIdentity)
@@ -84,6 +85,7 @@ class VerifiedNativeBrowserAdapter(
         pendingEvidence = null
         val hostEpoch = ownership.transitionEpoch()
         val target = authorizedTarget(command) ?: return AdapterOutcome.Failed
+        if (ownership.transitionEpoch() != hostEpoch) return AdapterOutcome.Failed
         if (before != ObservedTarget(target.tabId, target.documentEpoch)) return AdapterOutcome.Failed
         // Never accept stale document references even if a new page has the same URL.
         if (command.observedDocumentEpoch != target.documentEpoch &&
@@ -124,7 +126,8 @@ class VerifiedNativeBrowserAdapter(
         }
         val live = authorizedTarget(command) ?: return false
         if (after != ObservedTarget(live.tabId, live.documentEpoch) ||
-            evidence.before.rendererIdentity != live.rendererIdentity
+            evidence.before.rendererIdentity != live.rendererIdentity ||
+            (command.operation in DOCUMENT_STABLE && evidence.before.documentEpoch != live.documentEpoch)
         ) {
             return false
         }
@@ -136,6 +139,17 @@ class VerifiedNativeBrowserAdapter(
     }
 
     companion object {
+        private val DOCUMENT_STABLE =
+            setOf(
+                com.kelpie.browser.agent.contract.Operation.READ_DOM,
+                com.kelpie.browser.agent.contract.Operation.SCREENSHOT,
+                com.kelpie.browser.agent.contract.Operation.FILL,
+                com.kelpie.browser.agent.contract.Operation.TYPE,
+                com.kelpie.browser.agent.contract.Operation.SELECT,
+                com.kelpie.browser.agent.contract.Operation.SCROLL,
+                com.kelpie.browser.agent.contract.Operation.WAIT,
+            )
+
         private val DOCUMENT_NEUTRAL =
             setOf(
                 com.kelpie.browser.agent.contract.Operation.NAVIGATE,

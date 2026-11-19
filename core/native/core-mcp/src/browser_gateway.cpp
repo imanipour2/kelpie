@@ -131,7 +131,7 @@ std::string CollectBrowserSelectorSnapshotExpression(const nlohmann::json& optio
       "const count=read.snapshot.elements.length;"
       "read.snapshot.elements=read.snapshot.elements.flatMap(item=>{"
       "const node=read.targets[item.ref],selector=kelpieBuildSelector(node,true);"
-      "return selector?[{...item,selector,tag:node.tagName.toLowerCase(),label:item.name}]:[];});"
+      "return selector?[{...item,selector,tag:kelpieSafeTag(node),label:item.name}]:[];});"
       "if(read.snapshot.elements.length!==count){read.snapshot.truncated=true;"
       "if(read.snapshot.coverage){read.snapshot.coverage.observed=read.snapshot.elements.length;"
       "read.snapshot.coverage.truncated=true;read.snapshot.coverage.unobserved=null;"

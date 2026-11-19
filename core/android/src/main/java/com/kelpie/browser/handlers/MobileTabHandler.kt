@@ -47,8 +47,9 @@ class MobileTabHandler(
                 mapOf(
                     "id" to "0",
                     "windowId" to "main",
-                    "url" to (wv?.url ?: ""),
-                    "title" to (wv?.title ?: ""),
+                    "url" to TabMetadataPrivacy.url(wv?.url),
+                    "title" to TabMetadataPrivacy.title(wv?.url),
+                    "titleRedacted" to true,
                     "active" to true,
                     "isLoading" to false,
                 )
@@ -151,15 +152,16 @@ class MobileTabHandler(
         mapOf(
             "id" to tab.id,
             "windowId" to "main",
-            "url" to tab.currentUrl,
-            "title" to tab.pageTitle,
+            "url" to TabMetadataPrivacy.url(tab.currentUrl),
+            "title" to TabMetadataPrivacy.title(tab.currentUrl),
+            "titleRedacted" to true,
             "active" to (tab.id == activeTabId),
             "isLoading" to tab.isLoading,
         ) +
             buildMap {
-                tab.name?.let { put("name", it) }
+                tab.name?.let { put("name", "redacted") }
                 tab.partition?.let {
-                    put("partition", it)
+                    put("partition", "redacted")
                     put("persistent", true)
                 }
             }

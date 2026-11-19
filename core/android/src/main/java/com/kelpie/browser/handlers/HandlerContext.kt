@@ -1,7 +1,5 @@
 package com.kelpie.browser.handlers
 
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.os.Handler
 import android.os.Looper
 import android.webkit.WebView
@@ -10,13 +8,6 @@ import com.kelpie.browser.browser.KeyboardObserver
 import com.kelpie.browser.browser.TabStore
 import com.kelpie.browser.nativecore.AiManager
 import com.kelpie.browser.network.BrowserGatewayRetirement
-import java.io.ByteArrayOutputStream
-import java.util.Base64
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
-import kotlin.coroutines.suspendCoroutine
-import kotlin.math.max
-import kotlin.math.roundToInt
 import kotlinx.coroutines.asContextElement
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,6 +16,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.jsonObject
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 private val json =
     Json {
@@ -53,6 +46,8 @@ class HandlerContext(
     /** Null means deny private capture; never draw the suspended activity as a fallback. */
     var motherPrivateScreenshot: (suspend () -> Map<String, Any?>?)? = null
 
+    /** Native renderer-death signal; never set or invoked through a remote/DOM route. */
+    var nativeRendererGone: ((WebView) -> Unit)? = null
     var remoteDocumentGuard: (() -> Boolean)? = null
     var remoteNavigationStart: (() -> Boolean)? = null
     var remoteNavigationReadGuard: (() -> Boolean)? = null
@@ -78,6 +73,11 @@ class HandlerContext(
         guard: BrowserOperationGuard?,
         block: suspend () -> T,
     ): T = operationAuthority.withGuard(guard, block)
+
+    /** Retired coroutine targets are cancelled separately by browserRetirement. */
+    internal fun retireVisibleWebView(view: WebView) {
+        if (visibleWebView === view) visibleWebView = null
+    }
 
     var tabStore: TabStore? = null
     var browserDocumentChanged: ((String) -> Unit)? = null
@@ -359,70 +359,7 @@ class HandlerContext(
         format: String = "png",
         quality: Int = 80,
         resolution: ScreenshotResolution = ScreenshotResolution.NATIVE,
-    ): Map<String, Any?>? {
-        if (motherPrivateAgentActive?.invoke() == true) {
-            if (format != "png") return null
-            val verifiedFrame = motherPrivateScreenshot?.invoke() ?: return null
-            if (resolution == ScreenshotResolution.NATIVE) return verifiedFrame
-            val viewport = runCatching { viewportMetrics() }.getOrNull() ?: return null
-            return withContext(kotlinx.coroutines.Dispatchers.Default) {
-                R5MotherMcpViewportImage.viewport(verifiedFrame, viewport)
-            }
-        }
-        if (privateCaptureRestricted?.invoke() == true) return null
-        val wv = webView ?: return null
-        val normalizedFormat = if (format == "jpeg") "jpeg" else "png"
-        val viewport = viewportMetrics()
-        val bitmap =
-            suspendCoroutine<Bitmap?> { cont ->
-                mainHandler.post {
-                    try {
-                        check(privateCaptureRestricted?.invoke() != true) { "Private WebView capture owns the browser" }
-                        val bmp = Bitmap.createBitmap(wv.width, wv.height, Bitmap.Config.ARGB_8888)
-                        val canvas = Canvas(bmp)
-                        wv.draw(canvas)
-                        cont.resume(bmp)
-                    } catch (_: Exception) {
-                        cont.resume(null)
-                    }
-                }
-            } ?: return null
-        val rendered =
-            if (resolution == ScreenshotResolution.VIEWPORT) {
-                val targetWidth = max((bitmap.width / max(viewport.devicePixelRatio, 1.0)).roundToInt(), 1)
-                val targetHeight = max((bitmap.height / max(viewport.devicePixelRatio, 1.0)).roundToInt(), 1)
-                if (targetWidth == bitmap.width && targetHeight == bitmap.height) {
-                    bitmap
-                } else {
-                    Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true)
-                }
-            } else {
-                bitmap
-            }
-
-        return try {
-            val stream = ByteArrayOutputStream()
-            val compressFormat =
-                if (normalizedFormat == "jpeg") {
-                    Bitmap.CompressFormat.JPEG
-                } else {
-                    Bitmap.CompressFormat.PNG
-                }
-            rendered.compress(compressFormat, quality, stream)
-            mapOf("image" to Base64.getEncoder().encodeToString(stream.toByteArray())) +
-                viewport.metadata(
-                    imageWidth = rendered.width,
-                    imageHeight = rendered.height,
-                    format = normalizedFormat,
-                    resolution = resolution,
-                )
-        } finally {
-            if (rendered !== bitmap) {
-                rendered.recycle()
-            }
-            bitmap.recycle()
-        }
-    }
+    ): Map<String, Any?>? = capturePrivacyCheckedScreenshot(format, quality, resolution)
 
     suspend fun viewportMetrics(): ScreenshotViewportMetrics {
         val result =

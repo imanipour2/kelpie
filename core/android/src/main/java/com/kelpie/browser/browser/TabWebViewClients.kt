@@ -2,6 +2,7 @@ package com.kelpie.browser.browser
 
 import android.graphics.Bitmap
 import android.os.Build
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -25,7 +26,7 @@ internal fun installTabWebViewClients(
     browserState: BrowserState,
     handlerContext: HandlerContext,
 ) {
-    val isActive: () -> Boolean = { tabStore.activeTabId.value == tab.id }
+    val isActive: () -> Boolean = { tabStore.activeTab === tab }
 
     webView.webViewClient = tabWebViewClient(tab, tabStore, browserState, handlerContext, isActive)
     webView.webChromeClient = tabWebChromeClient(tab, tabStore, browserState, handlerContext, isActive)
@@ -41,12 +42,22 @@ private fun tabWebViewClient(
     object : WebViewClient() {
         private var documentNavigationUrl: String? = null
         private var didCaptureDocumentForNavigation = false
+        private var rendererRetired = false
+
+        override fun onRenderProcessGone(
+            view: WebView,
+            detail: RenderProcessGoneDetail,
+        ): Boolean {
+            rendererRetired = true
+            return tabStore.retireDeadRenderer(view)
+        }
 
         override fun onPageStarted(
             view: WebView,
             url: String,
             favicon: Bitmap?,
         ) {
+            if (rendererRetired || !isRegisteredTab(tabStore, tab, view)) return
             val previousVersion = tab.documentVersion
             tab.documentVersion =
                 java.util.UUID
@@ -76,6 +87,7 @@ private fun tabWebViewClient(
             request: WebResourceRequest?,
             error: WebResourceError?,
         ) {
+            if (rendererRetired || !isRegisteredTab(tabStore, tab, view)) return
             if (request?.isForMainFrame != true) return
             val description =
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -91,6 +103,7 @@ private fun tabWebViewClient(
             request: WebResourceRequest?,
             errorResponse: WebResourceResponse?,
         ) {
+            if (rendererRetired || !isRegisteredTab(tabStore, tab, view)) return
             if (request?.isForMainFrame != true) return
             val code = errorResponse?.statusCode ?: return
             if (code >= 400) {
@@ -102,6 +115,7 @@ private fun tabWebViewClient(
             view: WebView,
             url: String,
         ) {
+            if (rendererRetired || !isRegisteredTab(tabStore, tab, view)) return
             tab.currentUrl = url
             tab.recordHistoryIfNeeded(url)
             tab.isLoading = false
@@ -127,6 +141,7 @@ private fun tabWebViewClient(
             if (!didCaptureDocumentForNavigation && documentNavigationUrl == url) {
                 didCaptureDocumentForNavigation = true
                 view.evaluateJavascript("(document.contentType || 'text/html')") { value ->
+                    if (rendererRetired || !isRegisteredTab(tabStore, tab, view)) return@evaluateJavascript
                     val contentType =
                         value
                             ?.trim()
@@ -161,6 +176,7 @@ private fun tabWebChromeClient(
             view: WebView,
             title: String?,
         ) {
+            if (!isRegisteredTab(tabStore, tab, view)) return
             val nextTitle = title ?: ""
             tab.pageTitle = nextTitle
             tab.updateHistoryTitleIfNeeded(nextTitle)
@@ -174,6 +190,7 @@ private fun tabWebChromeClient(
             view: WebView,
             newProgress: Int,
         ) {
+            if (!isRegisteredTab(tabStore, tab, view)) return
             if (isActive()) {
                 browserState.updateProgress(newProgress)
             }
@@ -185,6 +202,10 @@ private fun tabWebChromeClient(
             message: String?,
             result: android.webkit.JsResult,
         ): Boolean {
+            if (!isRegisteredTab(tabStore, tab, view)) {
+                runCatching { result.cancel() }
+                return true
+            }
             handlerContext.dialogState.enqueue(
                 DialogState.PendingDialog(
                     type = "alert",
@@ -203,6 +224,10 @@ private fun tabWebChromeClient(
             message: String?,
             result: android.webkit.JsResult,
         ): Boolean {
+            if (!isRegisteredTab(tabStore, tab, view)) {
+                runCatching { result.cancel() }
+                return true
+            }
             handlerContext.dialogState.enqueue(
                 DialogState.PendingDialog(
                     type = "confirm",
@@ -222,6 +247,10 @@ private fun tabWebChromeClient(
             defaultValue: String?,
             result: android.webkit.JsPromptResult,
         ): Boolean {
+            if (!isRegisteredTab(tabStore, tab, view)) {
+                runCatching { result.cancel() }
+                return true
+            }
             handlerContext.dialogState.enqueue(
                 DialogState.PendingDialog(
                     type = "prompt",
@@ -234,3 +263,10 @@ private fun tabWebChromeClient(
             return true
         }
     }
+
+/** A replacement can retain the tab ID; stale callbacks must match the actual tab object and WebView. */
+private fun isRegisteredTab(
+    store: TabStore,
+    tab: BrowserTab,
+    view: WebView,
+): Boolean = tab.webView === view && store.tabs.value.any { it === tab }

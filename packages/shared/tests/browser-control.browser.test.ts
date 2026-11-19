@@ -245,7 +245,7 @@ describe("KAI shared observation security fixtures (not Android device acceptanc
       await page.route("**/*", (route) => route.fulfill({ body: "<title>KAI_QUERY</title><button aria-label='KAI_FRAGMENT'>fixture-password</button>", contentType: "text/html" }));
       await page.goto("https://fixture-user:fixture-password@kai.invalid/path?token=KAI_QUERY#KAI_FRAGMENT");
       const snapshot = await observe(page);
-      expect(snapshot.url).toBe("https://kai.invalid/path");
+      expect(snapshot.url).toBe("https://kai.invalid");
       const serialized = JSON.stringify(snapshot);
       expect(["fixture-user", "fixture-password", "KAI_QUERY", "KAI_FRAGMENT"].some((marker) => serialized.includes(marker))).toBe(false);
       expect(snapshot.screenshotBlocked).toBe(true);

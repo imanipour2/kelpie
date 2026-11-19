@@ -10,12 +10,17 @@ internal class R5PrivateViewportReadiness(
     private val locked: () -> Boolean,
 ) {
     suspend fun cssReady(webView: WebView): Boolean {
+        if (locked() || !webView.isAttachedToWindow || webView.width <= 0 || webView.height <= 0) return false
         val answer = CompletableDeferred<String>()
-        webView.evaluateJavascript(
-            "window.innerWidth > 0 && window.innerHeight > 0 && " +
-                "document.documentElement.getBoundingClientRect().width > 0",
-        ) { raw ->
-            if (!answer.isCompleted) answer.complete(raw)
+        try {
+            webView.evaluateJavascript(
+                "window.innerWidth > 0 && window.innerHeight > 0 && " +
+                    "document.documentElement.getBoundingClientRect().width > 0",
+            ) { raw ->
+                if (!answer.isCompleted) answer.complete(raw)
+            }
+        } catch (_: RuntimeException) {
+            return false
         }
         return withTimeoutOrNull(500L) { answer.await() } == "true"
     }
@@ -28,10 +33,11 @@ internal class R5PrivateViewportReadiness(
     suspend fun awaitCommittedViewport(
         webView: WebView,
         requestId: Long,
+        stillOwned: () -> Boolean = { true },
     ): Boolean {
         val laidOut =
             withTimeoutOrNull(3_000L) {
-                while (!locked()) {
+                while (!locked() && stillOwned()) {
                     if (R5ViewportAdmission.permits(
                             attached = webView.isAttachedToWindow,
                             nativeWidth = webView.width,
@@ -46,18 +52,20 @@ internal class R5PrivateViewportReadiness(
                 }
                 false
             } ?: false
-        if (!laidOut || locked()) return false
+        if (!laidOut || locked() || !stillOwned()) return false
         val visual = CompletableDeferred<Boolean>()
+        val expectedRequestId = requestId
         webView.postVisualStateCallback(
             requestId,
             object : WebView.VisualStateCallback() {
                 override fun onComplete(requestId: Long) {
-                    if (!visual.isCompleted) visual.complete(true)
+                    if (!visual.isCompleted) visual.complete(requestId == expectedRequestId && stillOwned())
                 }
             },
         )
         val committed = withTimeoutOrNull(2_000L) { visual.await() } == true
         return committed &&
+            stillOwned() &&
             R5ViewportAdmission.permits(
                 attached = webView.isAttachedToWindow,
                 nativeWidth = webView.width,
