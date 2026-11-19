@@ -96,6 +96,25 @@ internal class R5NativeBrowserPort(
                 return@withContext AdapterOutcome.Failed
             }
             val view = tab.webView
+            // Readable DOM does not imply a rendered viewport. Reject mutations while
+            // the selected WebView is detached or its private CSS layout is still 0x0.
+            if (command.operation in setOf(Operation.CLICK, Operation.FILL, Operation.TYPE, Operation.SELECT, Operation.SCROLL)) {
+                val cssReady =
+                    evaluate(
+                        view,
+                        "window.innerWidth > 0 && window.innerHeight > 0 && document.documentElement.getBoundingClientRect().width > 0",
+                    ) == "true"
+                if (!com.kelpie.browser.capture.R5ViewportAdmission.permits(
+                        attached = view.isAttachedToWindow,
+                        nativeWidth = view.width,
+                        nativeHeight = view.height,
+                        cssReady = cssReady,
+                        locked = false,
+                    )
+                ) {
+                    return@withContext AdapterOutcome.Failed
+                }
+            }
             val result =
                 when (command.operation) {
                     Operation.LIST_TABS -> {
