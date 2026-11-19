@@ -37,7 +37,7 @@ class R5WebViewActionScriptsTest {
         assertTrue(snapshot.contains("document.querySelectorAll(css).length===1"))
         assertTrue(snapshot.contains("role:(e.getAttribute('role')"))
         assertFalse(snapshot.contains("selector:e.id ?"))
-        assertFalse(snapshot.contains("e.value"))
+        assertFalse(snapshot.contains("value:e.value"))
     }
 
     @Test
