@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -20,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.delay
 
 /**
  * Optional owner-initiated QA bridge into the ALREADY installed Termux.
@@ -85,6 +87,21 @@ internal fun R5TermuxOwnerReconnectAction() {
     val context = LocalContext.current
     var lastAttempt by remember { mutableStateOf<Long?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
+    var queuedAt by remember { mutableStateOf<Long?>(null) }
+
+    // The native sheet is removed as soon as a real pending/active session is observed.
+    // If this component stays mounted, the request has not been seen by native UI.
+    LaunchedEffect(queuedAt) {
+        val attempt = queuedAt
+        if (attempt != null) {
+            delay(12_000L)
+            if (queuedAt == attempt) {
+                message =
+                    "هنوز درخواست تأیید در Kelpie مشاهده نشده است. " +
+                        "مجوز Termux، اسکریپت ثابت و هویت عامل را بررسی کنید؛ اتصال را فرض نکنید."
+            }
+        }
+    }
 
     Column {
         Text("اگر عامل احرازشده اخیراً مشاهده نشده، می‌توانید از تونل Termux موجود درخواست اتصال بفرستید.")
@@ -97,6 +114,7 @@ internal fun R5TermuxOwnerReconnectAction() {
                     when (R5TermuxOwnerReconnect.sendExplicitOwnerRequest(context)) {
                         R5TermuxOwnerReconnect.Dispatch.QUEUED_NOT_CONFIRMED -> {
                             lastAttempt = now
+                            queuedAt = now
                             message =
                                 "فرمان به Termux تحویل شد؛ هنوز اتصال تأیید نشده است. " +
                                     "فقط اگر پنجره تأیید Kelpie ظاهر شد، هویت عامل را بررسی و تأیید کنید."
