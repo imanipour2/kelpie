@@ -108,8 +108,12 @@ class PrivateWebViewDisplay(
      */
     suspend fun start(original: WebView): Boolean =
         withContext(Dispatchers.Main.immediate) {
-            if (stateFlow.value != State.IDLE || isLocked() || !activityVisible ||
-                original.width <= 0 || original.height <= 0 || !original.isAttachedToWindow ||
+            if (stateFlow.value != State.IDLE ||
+                isLocked() ||
+                !activityVisible ||
+                original.width <= 0 ||
+                original.height <= 0 ||
+                !original.isAttachedToWindow ||
                 !viewportReadiness.cssReady(original)
             ) {
                 return@withContext false
