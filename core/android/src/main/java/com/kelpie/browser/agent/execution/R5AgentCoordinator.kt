@@ -323,6 +323,7 @@ class R5AgentCoordinator(
     /** Called from Activity lifecycle, not from a remote JSON argument. */
     fun onPause() {
         val pauseEpoch = ++lifecycleVisibilityEpoch
+        Log.i("KelpieR5Lifecycle", "pause epoch=" + pauseEpoch)
         scope.launch {
             val stillBackground = {
                 R5PausedVisibilityGate.mayCommit(
@@ -332,12 +333,21 @@ class R5AgentCoordinator(
                 )
             }
             val active = consent.snapshot() as? SessionConsentCore.State.Active
+            Log.i(
+                "KelpieR5Lifecycle",
+                "pause_check epoch=" + pauseEpoch +
+                    " current=" + lifecycleVisibilityEpoch +
+                    " stillBackground=" + stillBackground() +
+                    " grantActive=" + (active != null) +
+                    " rendererIdle=" + (renderer.state.value == PrivateWebViewDisplay.State.IDLE),
+            )
             if (stillBackground() && active != null && !active.locked &&
                 renderer.state.value == PrivateWebViewDisplay.State.IDLE
             ) {
                 activateRenderer(active)
             }
             if (stillBackground()) {
+                Log.i("KelpieR5Lifecycle", "pause_commit_background epoch=" + pauseEpoch)
                 renderer.setActivityVisible(false)
             } else if (activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
                 renderer.state.value == PrivateWebViewDisplay.State.PRIVATE_DISPLAY
@@ -352,6 +362,7 @@ class R5AgentCoordinator(
 
     fun onResume() {
         ++lifecycleVisibilityEpoch
+        Log.i("KelpieR5Lifecycle", "resume epoch=" + lifecycleVisibilityEpoch)
         renderer.setActivityVisible(true)
         scope.launch {
             when (renderer.state.value) {
@@ -452,6 +463,13 @@ class R5AgentCoordinator(
             }
             val ticket = ownership.moveToPrivate(active.generation) ?: return@withLock
             ready = false
+            Log.i(
+                "KelpieR5Lifecycle",
+                "private_start lifecycleResumed=" +
+                    activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) +
+                    " viewAttached=" + tab.webView.isAttachedToWindow +
+                    " nativeGeometryValid=" + (tab.webView.width > 0 && tab.webView.height > 0),
+            )
             val entered = renderer.start(tab.webView)
             if (!entered || consent.snapshot() != active || !ownership.completePrivate(ticket)) {
                 ownership.failRenderer()
