@@ -21,7 +21,8 @@ internal object R5McpBootstrapGate {
         privateAtEgress: Boolean,
     ): Boolean =
         (privateAtIngress || privateAtEgress) &&
-            !maySkipNativeSession(outerMethod, inner, verifiedClientId)
+            !maySkipNativeSession(outerMethod, inner, verifiedClientId) &&
+            !R5AgentControlPlaneRoutes.mayRespondWithoutOwnerGrant(outerMethod, verifiedClientId)
 
     fun maySkipNativeSession(
         outerMethod: String,
