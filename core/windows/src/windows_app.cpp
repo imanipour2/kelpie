@@ -75,6 +75,9 @@ WindowsApp::~WindowsApp() {
 
 bool WindowsApp::Start(int show_command) {
   ResolveProfileDirectory();
+  wchar_t trace_flag[2]{};
+  shutdown_trace_.Enable(config_.profile_dir_overridden &&
+      GetEnvironmentVariableW(L"KELPIE_TEST_SHUTDOWN_TRACE", trace_flag, 2) == 1 && trace_flag[0] == L'1');
   std::string session_error;
   startup_diagnostics_.Enter(StartupStage::kProfileOwnership);
   if (!profile_session_.Open(config_.profile_dir, config_.readiness_path, &session_error)) {
@@ -291,6 +294,7 @@ SettingsValues WindowsApp::CurrentSettings() const {
 }
 
 void WindowsApp::PersistForClose() {
+  TraceShutdown(ShutdownStage::kPersist);
   // Persist while the engine-owned stores and tab model still exist. This runs
   // only after the HTTP listener has retired every handler it admitted before
   // close, so no acknowledged mutation can be written after this snapshot.
@@ -315,6 +319,8 @@ bool WindowsApp::TryCompleteClose() {
   if (desktop_app_ != nullptr) {
     desktop_app_->BeginShutdown();
     if (!desktop_app_->IsShutdownReady()) {
+      TraceShutdown(desktop_app_->http_server().IsDrained()
+          ? ShutdownStage::kPreviewDrain : ShutdownStage::kHttpDrain);
       ArmCloseRetry();
       return false;
     }
@@ -329,16 +335,22 @@ bool WindowsApp::TryCompleteClose() {
     KillTimer(shell_->hwnd(), kCloseRetryTimerId);
   }
   running_ = false;
+  TraceShutdown(ShutdownStage::kCompleted);
   if (shell_ != nullptr) shell_->Close();
   return true;
 }
 
 void WindowsApp::OnWindowCloseRequested() {
+  TraceShutdown(ShutdownStage::kCloseRequested);
   if (inference_) inference_->Cancel();
   if (account_) account_->Shutdown();
   close_lifecycle_.Request();
+  TraceShutdown(ShutdownStage::kBeginDrain);
   if (desktop_app_ != nullptr) desktop_app_->BeginShutdown();
   TryCompleteClose();
+}
+void WindowsApp::TraceShutdown(ShutdownStage stage) {
+  shutdown_trace_.Record(config_.profile_dir, stage);
 }
 void WindowsApp::OnBrowserStateChanged(const BrowserState& state) {
   browser_state_ = state;

@@ -41,6 +41,7 @@ gap. No extra decision authority or duplicate historical master was created.
 | Correction | Root cause | Production files / reused boundary | Executable evidence | Device acceptance still required |
 | --- | --- | --- | --- | --- |
 | CI baseline | Eight Android workflows independently stopped at formatting in four files; macOS failed to acquire a runner | Existing ktlint configuration; no checks disabled | Per-job log/excerpt and full 37b9 retest in [CI baseline](wave1-ci-baseline-20261119.md) | CI is not an installed APK |
+| Windows shutdown | Existing close-state transition allowed reentrant teardown; the hosted process-exit failure still needs stage evidence | `CloseLifecycle`, Windows shutdown boundaries, opt-in `ShutdownTrace`, existing close lifecycle/control-surface tests | Old state-machine unit reproduces double persistence/teardown; guarded unit passes; real Windows 73/74 baseline retained for hosted retest | Independent desktop regression scope; no S24/device changes |
 | Metadata and consent | Browser grant was tested at the wrong boundary; private state could deadlock negotiation while foreground could bypass owner authority | `HTTPServer`, `Router`, `AuthenticatedRequestDispatcher`, `R5McpBootstrapGate`, `AgentSessionCoordinator`, existing native consent reducer | Dispatcher suspended-race tests; exact-method gate tests; compiled real HTTP/JNI wire fixture | Authenticated metadata at STOP/lock, one native prompt and actual response delivery |
 | Principal and protocol | R5 invalid/missing bearer could fall back to localhost; mother/private protocol sets were conflated | `AuthMiddleware`, `AccountPairingAuthorization`, `AuthenticatedClientContext`, `R5RequestAuthorization`, `BrowserGatewayBinding` | Original `AccountPairingTests` retained; scoped protocol/authentication matrix and real native gateway tests | Same live paired client and current bearer, without exposing/resetting credentials |
 | Revocation | A new grant or unlock could accidentally validate an old asynchronous operation; unpair did not retire every native reference | `SessionConsentCore`, `AndroidAgentProcessSession`, `R5ObservedAgentClients`, `PairingStore`, `TrustedComputers` | STOP/reapprove, lock/resume, unpair, pre-dispatch credential revocation and queued-Main consent tests | STOP-in-flight and lock/unlock on the exact APK |
@@ -292,6 +293,65 @@ admission or deleting any of the 11 cases:
 
 Runtime success of these corrections is not inferred from compilation; their
 next exact-head Android execution is recorded in PR #71 and the Drive readback.
+
+The [actual 865fcdf5 Android rerun](https://github.com/imanipour2/kelpie/actions/runs/44567636742/job/135713645341)
+then passed **all 11 instrumented cases, zero failures, errors or skips**:
+one real HTTP/JNI wire case, six privacy/foreground WebView cases, two real
+Surface/ImageReader cases and two WebView navigation cases. The strict XML
+summary and artifact `14553856496` are tied to
+`865fcdf58353a1ba0c5fc95f7babc6504b27e6a4`. The 25-frame Surface producer fixture
+does not claim 25 private WebView frames or physical S24 acceptance; the summary
+explicitly retains `physicalS24Acceptance: NOT_TESTED`.
+
+On the same head, two other Android jobs failed while resolving dependencies,
+before their Kotlin tests could run: MotherNext
+[job 135713645736](https://github.com/imanipour2/kelpie/actions/runs/44567637319/job/135713645736)
+could not find several AGP transitive Maven artifacts during configuration, and
+background profile
+[job 135713644523](https://github.com/imanipour2/kelpie/actions/runs/44567636786/job/135713644523)
+could not resolve its runtime classpath. The declared dependencies/repositories
+were unchanged. No global outage, deleted upstream version or source compile
+failure is inferred from those logs; the next complete head must rerun them
+with the same versions and normal TLS. This attempt produced no designated
+MotherNext candidate, despite the independent 11-case runtime pass.
+
+### Existing Windows shutdown regression exposed by the full matrix
+
+The complete cross-platform matrix also found a reproducible Windows failure,
+not a build/download timeout. On both the first functional head and `b667`,
+CEF/application compilation completed and **73 of 74 CTest targets passed**.
+In the [actual b667 job](https://github.com/imanipour2/kelpie/actions/runs/44561116178/job/135690380814),
+`close_tab_control_surface_test` passed background, active and last-tab closure,
+replacement-tab, live `get-tabs` and readiness assertions. Only process exit
+after `close-browser` and final readiness-file removal failed.
+
+The direct route is `DesktopHttpServer` -> `DesktopRouter`/guard -> `ShellHandler`
+-> the Windows `WM_CLOSE` request. The test does not construct a browser-control
+gateway or execute the Wave 1 selector/action scripts. Those Windows/desktop
+engine files were unchanged relative to the PR #70 base. Nevertheless, the old
+test discarded the close response and recorded no shutdown barrier, so its log
+did not prove which stage prevented completion. Response acceptance and
+token-free stage diagnostics are required before attributing that CI failure.
+
+The pinned build uses CEF `152.0.6+g708dc14` / Chromium `152.0.7977.83`.
+Its [upstream shutdown implementation](https://github.com/chromiumembedded/cef/blob/708dc14/libcef/browser/main_runner.cc)
+drains pending UI and IO tasks during shutdown; the
+[official CEF integration guide](https://github.com/chromiumembedded/cef/blob/master/docs/general_usage.md)
+also documents the main-thread/message-loop boundary. These sources were read
+2026-11-19. A bounded regression against the old `CloseLifecycle::Advance`
+reproduced double persistence/teardown: nested persistence produced counts 2/2,
+and nested shutdown produced counts 1/2. A scope-bound attempt guard now makes
+both cases 1/1 and preserves incomplete-close retry and exception unwinding.
+Those actual portable unit checks passed after the fix.
+
+The existing process test now asserts HTTP 200 plus success/accepted for the
+close request, then retains the unchanged exit/readiness assertions and time
+limit. A fixed-enum, bounded stage trace is off by default and enabled only in
+the isolated child test's explicit temporary profile/environment; no owner
+environment, URL, token or browser content is recorded. The observed hosted
+failure still requires its next Windows run. The independently proved reentry
+defect is not silently relabeled as that failure's root cause without runtime
+evidence. No readiness file is deleted early to satisfy the test.
 
 Both Apple jobs failed before any build step: the hosted runner was not acquired
 after multiple attempts, with provider annotations identifying macOS arm64

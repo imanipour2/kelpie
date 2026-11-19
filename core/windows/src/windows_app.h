@@ -22,6 +22,7 @@
 #include "kelpie/network_traffic_store.h"
 
 #include "close_lifecycle.h"
+#include "shutdown_trace.h"
 #include "device_info_windows.h"
 #include "profile_session.h"
 #include "native_window_control.h"
@@ -127,6 +128,7 @@ class WindowsApp final : public ShellDelegate, public BrowserStateObserver {
   void PersistForClose();
   bool TryCompleteClose();
   void ArmCloseRetry();
+  void TraceShutdown(ShutdownStage stage);
   bool CreateShell(int show_command);
   std::wstring AppTitle() const;
   // Peer-to-peer cookie sync (windows_cookie_sync.cpp); standalone only.
@@ -141,6 +143,7 @@ class WindowsApp final : public ShellDelegate, public BrowserStateObserver {
   std::string connection_installation_id_;
   std::atomic<bool> running_{true};
   CloseLifecycle close_lifecycle_;
+  ShutdownTrace shutdown_trace_;
 
   DeviceInfoWindows device_info_provider_;
   BrowserState browser_state_;

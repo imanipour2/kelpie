@@ -13,10 +13,14 @@
 
 #include <windows.h>
 
+#include "shutdown_trace.h"
+
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <cwchar>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -38,6 +42,37 @@ bool Check(bool condition, const std::string& what) {
 
 void Wait(int milliseconds) {
   std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
+}
+
+std::vector<wchar_t> FixtureEnvironment() {
+  std::vector<wchar_t> result;
+  wchar_t* inherited = GetEnvironmentStringsW();
+  if (!inherited) return result;
+  std::vector<std::wstring> entries;
+  constexpr wchar_t key[] = L"KELPIE_TEST_SHUTDOWN_TRACE=";
+  for (const wchar_t* entry = inherited; *entry; entry += std::wcslen(entry) + 1) {
+    if (_wcsnicmp(entry, key, std::size(key) - 1) != 0)
+      entries.emplace_back(entry);
+  }
+  FreeEnvironmentStringsW(inherited);
+  entries.emplace_back(L"KELPIE_TEST_SHUTDOWN_TRACE=1");
+  std::sort(entries.begin(), entries.end(), [](const auto& left, const auto& right) {
+    return _wcsicmp(left.c_str(), right.c_str()) < 0;
+  });
+  for (const auto& entry : entries) {
+    result.insert(result.end(), entry.begin(), entry.end());
+    result.push_back(L'\0');
+  }
+  result.push_back(L'\0');
+  return result;
+}
+
+void PrintShutdownTrace(const std::filesystem::path& profile) {
+  std::ifstream stream(profile / kelpie::windows::kShutdownTraceFile);
+  std::string line;
+  unsigned count = 0;
+  while (count++ < 128 && std::getline(stream, line))
+    std::cout << "     shutdown " << line.substr(0, 100) << '\n';
 }
 
 // Reserve and release a loopback port so the test instance does not collide
@@ -182,7 +217,10 @@ int main(int argc, char** argv) {
   startup.dwFlags = STARTF_USESHOWWINDOW;
   startup.wShowWindow = SW_SHOWNOACTIVATE;
   PROCESS_INFORMATION information{};
-  if (!Check(::CreateProcessW(nullptr, command.data(), nullptr, nullptr, FALSE, 0, nullptr,
+  auto environment = FixtureEnvironment();
+  if (!Check(!environment.empty(), "an isolated diagnostic environment is available")) return 1;
+  if (!Check(::CreateProcessW(nullptr, command.data(), nullptr, nullptr, FALSE,
+                              CREATE_UNICODE_ENVIRONMENT, environment.data(),
                               binary_dir.wstring().c_str(), &startup, &information) != FALSE,
              "the test instance launched")) {
     return 1;
@@ -250,7 +288,12 @@ int main(int argc, char** argv) {
         "readiness.json still advertises the live control surface");
 
   // Orderly shutdown must still exit and must still retract readiness.
-  client.Post("close-browser", nlohmann::json::object());
+  const auto closing = client.Post("close-browser", nlohmann::json::object());
+  Check(closing.value("httpStatus", 0) == 200 && closing.value("success", false) &&
+        closing.value("accepted", false), "close-browser is accepted by the control surface");
+  std::cout << "     close-browser http=" << closing.value("httpStatus", 0)
+            << " success=" << closing.value("success", false)
+            << " accepted=" << closing.value("accepted", false) << '\n';
   bool exited = false;
   for (int attempt = 0; attempt < 600 && !exited; ++attempt) {
     exited = process.Exited();
@@ -258,6 +301,7 @@ int main(int argc, char** argv) {
   }
   Check(exited, "close-browser shuts the app down");
   Check(!std::filesystem::exists(readiness_path), "orderly shutdown removes readiness.json");
+  PrintShutdownTrace(profile_dir);
 
   std::filesystem::remove_all(profile_dir, code);
   if (g_failures == 0) std::cout << "close_tab_control_surface_test passed\n";
