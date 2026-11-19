@@ -4,7 +4,8 @@
 #include <vector>
 
 namespace kelpie::windows {
-void PollComputerApproval(PeerApprovalQueue& approvals, HWND owner) {
+void PollComputerApproval(PeerApprovalQueue& approvals, HWND owner,
+                          const std::function<bool()>& owner_current) {
   // MessageBox pumps the owner timer; a nested Tick must not open another gate.
   static bool presenting = false;
   if (presenting) return;
@@ -17,7 +18,11 @@ void PollComputerApproval(PeerApprovalQueue& approvals, HWND owner) {
       "\n\nComputer key: " + request.at("publicKey").get<std::string>() + "\n\nName (self-reported): " + request.at("clientName").get<std::string>() +
       "\n\nAllow this computer to control Kelpie, even when its IP changes? This stays allowed until you revoke it in Settings.");
   const auto id = request.at("requestId").get<std::string>();
-  if (MessageBoxW(owner, message.c_str(), L"Allow this computer?", MB_YESNO | MB_DEFBUTTON2 | MB_ICONQUESTION) == IDYES) {
+  const int choice = MessageBoxW(owner, message.c_str(), L"Allow this computer?", MB_YESNO | MB_DEFBUTTON2 | MB_ICONQUESTION);
+  // A close timer can retire the runtime while this native dialog unwinds.
+  // Do not dereference the queue borrowed from that runtime after it retires.
+  if (!owner_current()) return;
+  if (choice == IDYES) {
     if (!approvals.Approve(id)) MessageBoxW(owner, L"Could not save approval, or the request expired. Try again.", L"Computer approval", MB_OK | MB_ICONERROR);
   } else approvals.Deny(id);
 }

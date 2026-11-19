@@ -1,15 +1,9 @@
 package com.kelpie.browser.agent.execution
 
 import android.app.KeyguardManager
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.os.PowerManager
 import android.util.Log
-import android.view.ViewTreeObserver
 import androidx.activity.ComponentActivity
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import com.kelpie.browser.agent.contract.AgentCommand
 import com.kelpie.browser.agent.contract.ExecutionStatus
@@ -19,6 +13,7 @@ import com.kelpie.browser.agent.render.WebViewOwnershipState
 import com.kelpie.browser.agent.session.AgentSessionNotification
 import com.kelpie.browser.agent.session.AndroidAgentProcessSession
 import com.kelpie.browser.agent.session.SessionConsentCore
+import com.kelpie.browser.capture.ForegroundWebViewCapture
 import com.kelpie.browser.capture.PrivateWebViewDisplay
 import com.kelpie.browser.handlers.HandlerContext
 import com.kelpie.browser.network.Router
@@ -89,51 +84,44 @@ class R5AgentCoordinator(
         )
     }
 
-    // The Activity can stay RESUMED through a keyguard round-trip. Android
-    // delivers window focus independently of onResume / USER_PRESENT, so a
-    // valid same-generation unlock must be rechecked when real focus returns.
-    // Focus itself grants nothing; the existing native consent and same-WebView
-    // gates in rebindAfterRealOwnerUnlock remain authoritative.
-    private val focusObserver = activity.window.decorView.viewTreeObserver
-    private val focusRegainedListener =
-        ViewTreeObserver.OnWindowFocusChangeListener { hasFocus ->
-            if (!hasFocus || closed || ownership.status() != WebViewOwnershipState.Host.SUSPENDED) {
-                return@OnWindowFocusChangeListener
-            }
-            val active = consent.snapshot() as? SessionConsentCore.State.Active
-            if (active != null && !active.locked) {
-                scope.launch { rebindAfterRealOwnerUnlock(active) }
-            }
-        }
+    // Focus grants nothing; it only schedules the existing same-generation checks.
+    private val lifecycleSignals =
+        R5LifecycleSignals(
+            activity,
+            onFocusRegained = {
+                val active = consent.snapshot() as? SessionConsentCore.State.Active
+                if (!closed && ownership.status() == WebViewOwnershipState.Host.SUSPENDED && active != null && !active.locked) {
+                    scope.launch { rebindAfterRealOwnerUnlock(active) }
+                }
+            },
+            onScreenOff = {
+                if (!closed) {
+                    ownership.lockDevice()
+                    ready = false
+                    renderer.cancelPendingCapture()
+                    runtime.cancelInFlight()
+                    scope.launch { releaseRenderer() }
+                }
+            },
+        )
 
     private fun newRuntime(): AgentOperationRuntime = AgentOperationRuntime(consent, VerifiedNativeBrowserAdapter(consent, ownership, nativePort))
 
-    private val screenOffReceiver =
-        object : BroadcastReceiver() {
-            override fun onReceive(
-                context: Context,
-                intent: Intent,
-            ) {
-                if (intent.action != Intent.ACTION_SCREEN_OFF || closed) return
-                // Authority reducer independently suspends the grant. Renderer
-                // disposal does not rely on eventual HTTP reads or wakeup.
-                ownership.lockDevice()
-                runtime.cancelInFlight()
+    init {
+        ctx.motherPrivateTabSwitch = R5MotherTabSwitch(activity, consent, tabCommands, { ready }, { currentTabId }, { closed }, { runtime.cancelInFlight() })::select
+        ctx.nativeRendererGone = { dead ->
+            if (!closed) {
                 ready = false
-                scope.launch { releaseRenderer() }
+                ownership.failRenderer()
+                nativePort.clearPendingEvidence()
+                // Clear dead-renderer witnesses before cancellation can run capture finally.
+                ForegroundWebViewCapture.onRendererGone(dead)
+                renderer.onRendererGone(dead)
+                runtime.cancelInFlight()
+                AndroidAgentProcessSession.stop()
+                AgentSessionNotification.hide(activity)
             }
         }
-
-    init {
-        if (focusObserver.isAlive) {
-            focusObserver.addOnWindowFocusChangeListener(focusRegainedListener)
-        }
-        ContextCompat.registerReceiver(
-            activity,
-            screenOffReceiver,
-            IntentFilter(Intent.ACTION_SCREEN_OFF),
-            ContextCompat.RECEIVER_NOT_EXPORTED,
-        )
         scope.launch {
             AndroidAgentProcessSession.active.collect { state ->
                 if (closed) return@collect
@@ -483,11 +471,13 @@ class R5AgentCoordinator(
     fun close() {
         if (closed) return
         closed = true
-        activity.unregisterReceiver(screenOffReceiver)
-        if (focusObserver.isAlive) {
-            focusObserver.removeOnWindowFocusChangeListener(focusRegainedListener)
-        }
+        ctx.motherPrivateTabSwitch = null
+        ctx.motherPrivateScreenshot = null
+        ctx.motherPrivateAgentActive = null
+        ctx.motherGatewayAuthorization = null
+        ctx.nativeRendererGone = null
         ready = false
+        runCatching { lifecycleSignals.close() }
         runtime.cancelInFlight()
         nativePort.clearPendingEvidence()
         ownership.stop()

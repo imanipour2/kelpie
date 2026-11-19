@@ -1,10 +1,7 @@
 package com.kelpie.browser.agent.execution
 
 import android.app.KeyguardManager
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.os.PowerManager
-import android.os.SystemClock
 import android.util.Log
 import android.webkit.WebView
 import androidx.activity.ComponentActivity
@@ -13,8 +10,12 @@ import com.kelpie.browser.agent.contract.AdapterOutcome
 import com.kelpie.browser.agent.contract.AgentCommand
 import com.kelpie.browser.agent.contract.Operation
 import com.kelpie.browser.agent.contract.R5VisionCaptureRequest
+import com.kelpie.browser.agent.session.AndroidAgentProcessSession
+import com.kelpie.browser.agent.session.SessionConsentCore
+import com.kelpie.browser.capture.ForegroundWebViewCapture
 import com.kelpie.browser.capture.PrivateWebViewDisplay
 import com.kelpie.browser.capture.R5VerifiedFrameEncoder
+import com.kelpie.browser.capture.WebViewCapturePrivacy
 import com.kelpie.browser.handlers.HandlerContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -45,6 +46,7 @@ internal class R5NativeBrowserPort(
         val operation: Operation,
         val expected: String?,
         val payload: Map<String, Any?>,
+        val actionToken: String,
     )
 
     private var proof: Pair<String, Proof>? = null
@@ -55,7 +57,31 @@ internal class R5NativeBrowserPort(
             val tab = ctx.tabStore?.activeTab ?: return@withContext null
             if (tab.id != tabId || tab.documentVersion.isBlank() || !safeScreen()) return@withContext null
             val view = tab.webView
-            if (!view.isAttachedToWindow) return@withContext null
+            if (!view.isAttachedToWindow || view.width <= 0 || view.height <= 0) return@withContext null
+            VerifiedNativeBrowserAdapter.NativeTarget(
+                tab.id,
+                tab.documentVersion,
+                rendererIds.getOrPut(view) { UUID.randomUUID().toString() },
+            )
+        }
+
+    /** Resolves the physically transferred target before the logical selection is committed. */
+    suspend fun privateTargetForBinding(tabId: String): VerifiedNativeBrowserAdapter.NativeTarget? =
+        withContext(Dispatchers.Main.immediate) {
+            val tab =
+                ctx.tabStore
+                    ?.tabs
+                    ?.value
+                    ?.firstOrNull { it.id == tabId } ?: return@withContext null
+            val view = tab.webView
+            if (!privateRenderer.isOwnedBy(view) ||
+                !safeScreen() ||
+                tab.documentVersion.isBlank() ||
+                view.width <= 0 ||
+                view.height <= 0
+            ) {
+                return@withContext null
+            }
             VerifiedNativeBrowserAdapter.NativeTarget(
                 tab.id,
                 tab.documentVersion,
@@ -71,7 +97,7 @@ internal class R5NativeBrowserPort(
                 activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
                     activity.window.decorView.isShown &&
                     view.isShown
-            if (!foreground && !privateRenderer.canDeliverFrame()) return@withContext null
+            if (!foreground && !privateRenderer.isOwnedBy(view)) return@withContext null
             target
         }
 
@@ -96,6 +122,37 @@ internal class R5NativeBrowserPort(
                 return@withContext AdapterOutcome.Failed
             }
             val view = tab.webView
+            val grant =
+                AndroidAgentProcessSession.runtimeConsent().snapshot() as? SessionConsentCore.State.Active
+                    ?: return@withContext AdapterOutcome.Failed
+            if (grant.locked || grant.principalId != command.principalId || grant.generation != command.consentGeneration) {
+                return@withContext AdapterOutcome.Failed
+            }
+            // Readable DOM does not imply a rendered viewport. Reject mutations while
+            // the selected WebView is detached or its private CSS layout is still 0x0.
+            if (command.operation in setOf(Operation.CLICK, Operation.FILL, Operation.TYPE, Operation.SELECT, Operation.SCROLL)) {
+                val cssReady =
+                    evaluate(
+                        view,
+                        "window.innerWidth > 0 && window.innerHeight > 0 && document.documentElement.getBoundingClientRect().width > 0",
+                    ) == "true"
+                if (!com.kelpie.browser.capture.R5ViewportAdmission.permits(
+                        attached = view.isAttachedToWindow,
+                        nativeWidth = view.width,
+                        nativeHeight = view.height,
+                        cssReady = cssReady,
+                        locked = false,
+                    )
+                ) {
+                    return@withContext AdapterOutcome.Failed
+                }
+            }
+            // CSS evaluation suspends: STOP, navigation or reparenting during it must
+            // prevent dispatch, not merely redact the response after an action happened.
+            if (AndroidAgentProcessSession.runtimeConsent().snapshot() != grant || actualTarget(tab.id) != target) {
+                return@withContext AdapterOutcome.Failed
+            }
+            val actionToken = UUID.randomUUID().toString()
             val result =
                 when (command.operation) {
                     Operation.LIST_TABS -> {
@@ -171,7 +228,11 @@ internal class R5NativeBrowserPort(
                         val previousFingerprint =
                             evaluate(view, R5WebViewActionScripts.DOCUMENT_FINGERPRINT)
                                 ?: return@withContext AdapterOutcome.Failed
+                        if (AndroidAgentProcessSession.runtimeConsent().snapshot() != grant || actualTarget(tab.id) != target) {
+                            return@withContext AdapterOutcome.Failed
+                        }
                         val outcome = evaluate(view, R5WebViewActionScripts.click(selector))
+                        if (outcome == "\"UNCERTAIN\"") return@withContext AdapterOutcome.Uncertain
                         if (outcome != "\"DISPATCHED\"") return@withContext AdapterOutcome.Failed
                         // The agent controls ordinary clicks; never infer success from JS dispatch.
                         // Native navigation OR a stable visible DOM/control-state change
@@ -210,7 +271,7 @@ internal class R5NativeBrowserPort(
                     Operation.SELECT -> {
                         val selector = command.selector ?: return@withContext AdapterOutcome.Failed
                         val value = command.inputText ?: return@withContext AdapterOutcome.Failed
-                        if (evaluate(view, R5WebViewActionScripts.select(selector, value)) != "true") {
+                        if (evaluate(view, R5WebViewActionScripts.select(selector, value, actionToken)) != "true") {
                             return@withContext AdapterOutcome.Failed
                         }
                         Pair(value, mapOf("kind" to "select"))
@@ -234,7 +295,7 @@ internal class R5NativeBrowserPort(
                     Operation.FILL, Operation.TYPE -> {
                         val selector = command.selector ?: return@withContext AdapterOutcome.Failed
                         val text = command.inputText ?: return@withContext AdapterOutcome.Failed
-                        if (evaluate(view, R5WebViewActionScripts.fill(selector, text)) != "true") {
+                        if (evaluate(view, R5WebViewActionScripts.fill(selector, text, actionToken)) != "true") {
                             return@withContext AdapterOutcome.Failed
                         }
                         Pair(null, mapOf("kind" to "fill"))
@@ -243,25 +304,31 @@ internal class R5NativeBrowserPort(
                         val beforeScroll =
                             evaluate(view, R5WebViewActionScripts.SCROLL)
                                 ?: return@withContext AdapterOutcome.Failed
+                        if (AndroidAgentProcessSession.runtimeConsent().snapshot() != grant || actualTarget(tab.id) != target) {
+                            return@withContext AdapterOutcome.Failed
+                        }
                         if (evaluate(view, R5WebViewActionScripts.scroll(command.scrollDeltaX, command.scrollDeltaY)) != "true") {
                             return@withContext AdapterOutcome.Failed
                         }
                         Pair(beforeScroll, mapOf("kind" to "scroll"))
                     }
                     Operation.SCREENSHOT -> {
+                        val privacy = WebViewCapturePrivacy.inspect(view)
                         val source = screenshotSource(view)
                         val png =
                             when (source) {
                                 R5ScreenshotSource.PRIVATE_DISPLAY -> privateRenderer.captureFreshPng(command.captureRequest)
-                                R5ScreenshotSource.FOREGROUND_WEBVIEW -> captureVisibleOwnedWebView(view, command.captureRequest)
+                                R5ScreenshotSource.FOREGROUND_WEBVIEW -> captureVisibleOwnedWebView(view, command.captureRequest, grant, target)
                                 R5ScreenshotSource.NONE -> null
                             } ?: return@withContext AdapterOutcome.Failed
+                        privacy.requireSameDocument(WebViewCapturePrivacy.inspect(view))
                         Pair(null, png + mapOf("kind" to "screenshot", "captureSource" to source.name))
                     }
                     else -> return@withContext AdapterOutcome.Failed
                 }
+            if (AndroidAgentProcessSession.runtimeConsent().snapshot() != grant) return@withContext AdapterOutcome.Uncertain
             val evidenceId = UUID.randomUUID().toString()
-            proof = evidenceId to Proof(command.commandId, tab.id, target.rendererIdentity, command.operation, result.first, result.second)
+            proof = evidenceId to Proof(command.commandId, tab.id, target.rendererIdentity, command.operation, result.first, result.second, actionToken)
             AdapterOutcome.Verified(evidenceId)
         }
 
@@ -296,7 +363,7 @@ internal class R5NativeBrowserPort(
                 Operation.FILL, Operation.TYPE -> {
                     val selector = command.selector ?: return@withContext false
                     val input = command.inputText ?: return@withContext false
-                    evaluate(live.webView, R5WebViewActionScripts.verifyFill(selector, input)) == "true"
+                    evaluate(live.webView, R5WebViewActionScripts.verifyFill(selector, input, recorded.actionToken)) == "true"
                 }
                 Operation.SCROLL -> {
                     val final = evaluate(live.webView, R5WebViewActionScripts.SCROLL)
@@ -315,7 +382,7 @@ internal class R5NativeBrowserPort(
                 Operation.SELECT -> {
                     val selector = command.selector ?: return@withContext false
                     val value = command.inputText ?: return@withContext false
-                    evaluate(live.webView, R5WebViewActionScripts.verifySelect(selector, value)) == "true"
+                    evaluate(live.webView, R5WebViewActionScripts.verifySelect(selector, value, recorded.actionToken)) == "true"
                 }
                 Operation.WAIT -> evaluate(live.webView, R5WebViewActionScripts.waitFor(command.selector)) == "true"
                 Operation.SCREENSHOT -> {
@@ -330,7 +397,7 @@ internal class R5NativeBrowserPort(
     /** Foreground PNG reads only the owner-approved, live app WebView, never the Android screen. */
     private fun screenshotSource(view: WebView): R5ScreenshotSource =
         R5ScreenshotRouting.select(
-            privateReady = privateRenderer.canDeliverFrame(),
+            privateReady = privateRenderer.isOwnedBy(view),
             privateIdle = privateRenderer.state.value == PrivateWebViewDisplay.State.IDLE,
             foreground =
                 activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
@@ -345,38 +412,24 @@ internal class R5NativeBrowserPort(
     private suspend fun captureVisibleOwnedWebView(
         view: WebView,
         capture: R5VisionCaptureRequest,
+        grant: SessionConsentCore.State.Active,
+        target: VerifiedNativeBrowserAdapter.NativeTarget,
     ): Map<String, Any>? {
+        fun admitted(): Boolean =
+            AndroidAgentProcessSession.runtimeConsent().snapshot() == grant &&
+                ctx.tabStore?.activeTab?.let { it.webView === view && it.id == target.tabId && it.documentVersion == target.documentEpoch } == true &&
+                screenshotSource(view) == R5ScreenshotSource.FOREGROUND_WEBVIEW
+        if (!admitted()) return null
         if (screenshotSource(view) != R5ScreenshotSource.FOREGROUND_WEBVIEW) return null
-        // A fresh visual-state callback prevents a just-navigated stale compositor frame.
-        val visualReady =
-            withTimeoutOrNull(2_500L) {
-                suspendCancellableCoroutine<Boolean> { continuation ->
-                    view.postVisualStateCallback(
-                        SystemClock.elapsedRealtimeNanos(),
-                        object : WebView.VisualStateCallback() {
-                            override fun onComplete(requestId: Long) {
-                                if (continuation.isActive) continuation.resume(true)
-                            }
-                        },
-                    )
-                }
-            } ?: false
-        if (!visualReady || screenshotSource(view) != R5ScreenshotSource.FOREGROUND_WEBVIEW) return null
-        val bitmap =
-            runCatching {
-                if (view.width <= 0 || view.height <= 0 || view.width.toLong() * view.height > 4_194_304L) {
-                    return null
-                }
-                Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888).also {
-                    view.draw(Canvas(it))
-                }
-            }.getOrNull() ?: return null
+        val privacy = WebViewCapturePrivacy.inspect(view)
+        val frame = ForegroundWebViewCapture.copy(view, activity, ::admitted) ?: return null
         return try {
-            // Retain the bounded original R5 image encoder/scale contract.
-            val result = withContext(Dispatchers.Default) { R5VerifiedFrameEncoder(activity).encode(bitmap, capture) }
-            result.takeIf { screenshotSource(view) == R5ScreenshotSource.FOREGROUND_WEBVIEW }
+            privacy.requireSameDocument(WebViewCapturePrivacy.inspect(view))
+            val result = withContext(Dispatchers.Default) { R5VerifiedFrameEncoder(activity).encode(frame.bitmap, capture, privacy) }
+            privacy.requireSameDocument(WebViewCapturePrivacy.inspect(view))
+            result?.plus(frame.metadata)?.takeIf { admitted() }
         } finally {
-            bitmap.recycle()
+            frame.bitmap.recycle()
         }
     }
 
@@ -398,7 +451,11 @@ internal class R5NativeBrowserPort(
     suspend fun takePayload(evidenceId: String?): Map<String, Any?>? =
         withContext(Dispatchers.Main.immediate) {
             if (proof?.first != evidenceId) return@withContext null
-            proof?.second?.payload.also { proof = null }
+            proof
+                ?.second
+                ?.payload
+                ?.filterKeys { it != "preFingerprint" }
+                .also { proof = null }
         }
 
     fun clearPendingEvidence() {

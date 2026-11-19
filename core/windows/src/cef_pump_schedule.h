@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
+#include <utility>
 
 namespace kelpie::windows {
 
@@ -55,6 +57,33 @@ class CefPumpScheduler {
   bool running_ = false;
   bool deferred_ = false;
   bool timer_pending_ = false;
+};
+
+// DesktopApp::Tick and Stop pump CEF internally. Borrow the same scheduler
+// guard during that work, so a native timer cannot enter a second CEF pump. An
+// incomplete or throwing Stop resumes scheduling; a completed Stop retires
+// only after its callback and native pump window have been removed.
+class CefPumpWorkGuard {
+ public:
+  CefPumpWorkGuard(CefPumpScheduler& scheduler,
+                   std::function<void(CefPumpScheduler::Decision)> resume)
+      : scheduler_(scheduler), resume_(std::move(resume)), acquired_(scheduler_.BeginWork()) {}
+  CefPumpWorkGuard(const CefPumpWorkGuard&) = delete;
+  CefPumpWorkGuard& operator=(const CefPumpWorkGuard&) = delete;
+  ~CefPumpWorkGuard() {
+    if (acquired_) resume_(scheduler_.EndWork());
+  }
+  bool acquired() const { return acquired_; }
+  void Retire() {
+    if (!acquired_) return;
+    scheduler_.Reset();
+    acquired_ = false;
+  }
+
+ private:
+  CefPumpScheduler& scheduler_;
+  std::function<void(CefPumpScheduler::Decision)> resume_;
+  bool acquired_;
 };
 
 }  // namespace kelpie::windows

@@ -65,6 +65,12 @@ internal class RecentVerifiedAgentClients(
         publish()
     }
 
+    @Synchronized
+    fun forget(principal: String) {
+        sightings.remove(principal)
+        publish()
+    }
+
     private fun expire(now: Long) {
         sightings.entries.removeAll { (_, time) -> now < time || now - time > ttlMs }
     }

@@ -62,12 +62,66 @@ class R5PrivateAgentAuthenticationTest {
             assertTrue(verified is AuthDecision.Authenticated)
             assertEquals("paired-chatgpt", (verified as AuthDecision.Authenticated).clientId)
 
-            // Metadata discovery may still identify generic localhost, but
-            // the owner-session coordinator must reject that identity.
+            // Public discovery remains separate; protected metadata must not
+            // turn an anonymous or invalid bearer into a localhost identity.
             val localOnly = r5.evaluate(request(path))
-            assertEquals("localhost", (localOnly as AuthDecision.Authenticated).clientId)
+            assertEquals(401, (localOnly as AuthDecision.Reject).status)
             val badBearer = r5.evaluate(request(path, "not-a-valid-token"))
-            assertEquals("localhost", (badBearer as AuthDecision.Authenticated).clientId)
+            assertEquals(401, (badBearer as AuthDecision.Reject).status)
+        }
+    }
+
+    @Test
+    fun verifiedBearerCannotAuthorizeBrowserOriginOrCrossSiteRequests() {
+        val store = PairingStore(File(temp, "pairings.json"), LoopbackComputerTrust())
+        val started = store.startPairing("paired-chatgpt", "ChatGPT", "127.0.0.1")
+        val token = store.approve(started.request!!.requestId, persist = false)!!.first
+        val auth = AuthMiddleware(store, r5PrivateMcpQa = true)
+        for (path in listOf("/mcp", "/v1/agent-session-request", "/v1/screenshot", "/v1/browser-control")) {
+            val valid = request(path, token)
+            for (extra in listOf("origin" to listOf("https://untrusted.invalid"), "sec-fetch-site" to listOf("cross-site"))) {
+                val result = auth.evaluate(valid.copy(headers = valid.headers + extra))
+                assertEquals(403, (result as AuthDecision.Reject).status)
+            }
+            assertEquals(401, (auth.evaluate(request(path, "invalid")) as AuthDecision.Reject).status)
+        }
+    }
+
+    @Test
+    fun publicLivenessAndDiscoveryDoNotGrantAuthenticatedMetadata() {
+        val auth = AuthMiddleware(PairingStore(File(temp, "pairings.json"), LoopbackComputerTrust()), r5PrivateMcpQa = true)
+        for (path in listOf("/health", "/v1/get-device-info")) {
+            assertEquals(AuthDecision.Unauthenticated, auth.evaluate(request(path)))
+        }
+    }
+
+    @Test
+    fun motherAcceptsItsNativeGatewayAdvertisedProtocolWhilePrivateBridgeKeepsItsOwnVersions() {
+        val store = PairingStore(File(temp, "pairings.json"), LoopbackComputerTrust())
+        val pending = store.startPairing("paired-chatgpt", "ChatGPT", "127.0.0.1").request!!
+        val token = store.approve(pending.requestId, persist = false)!!.first
+        for (path in listOf("/mcp", "/v1/mcp")) {
+            val base = request(path, token)
+            val mother = AuthMiddleware(store, r5PrivateMcpQa = true, r5PrivateMcpWire = false)
+            val bridge = AuthMiddleware(store, r5PrivateMcpQa = true, r5PrivateMcpWire = true)
+            for (version in listOf("2025-03-26", "2025-06-18")) {
+                val wire = base.copy(headers = base.headers + ("mcp-protocol-version" to listOf(version)))
+                assertTrue(mother.evaluate(wire) is AuthDecision.Authenticated)
+                if (path == "/mcp") {
+                    assertEquals(400, (bridge.evaluate(wire) as AuthDecision.Reject).status)
+                } else {
+                    assertTrue(bridge.evaluate(wire) is AuthDecision.Authenticated)
+                }
+            }
+            for (version in R5McpWireAdmission.SUPPORTED) {
+                val wire = base.copy(headers = base.headers + ("mcp-protocol-version" to listOf(version)))
+                if (path == "/mcp") {
+                    assertTrue(bridge.evaluate(wire) is AuthDecision.Authenticated)
+                } else {
+                    assertEquals(400, (bridge.evaluate(wire) as AuthDecision.Reject).status)
+                }
+                assertEquals(400, (mother.evaluate(wire) as AuthDecision.Reject).status)
+            }
         }
     }
 

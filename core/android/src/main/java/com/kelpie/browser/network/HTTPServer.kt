@@ -5,6 +5,8 @@ import android.util.Log
 import com.kelpie.browser.agent.execution.R5AgentDeliveryGuard
 import com.kelpie.browser.agent.session.AndroidAgentProcessSession
 import com.kelpie.browser.device.DeviceInfo
+import com.kelpie.browser.network.HttpJson.mapToJsonString
+import com.kelpie.browser.network.HttpJson.parseJsonBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -26,26 +28,8 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.boolean
-import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.double
-import kotlinx.serialization.json.doubleOrNull
-import kotlinx.serialization.json.int
-import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonObject
 import java.net.URLDecoder
-
-private val json =
-    Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-    }
+import java.util.UUID
 
 /**
  * Embedded HTTP server for receiving CLI commands.
@@ -87,8 +71,19 @@ class HTTPServer(
     var isRunning = false
         private set
 
+    /** Uses this running server's actual store, including its memory-only pairings. */
+    internal fun hasPairedPrincipal(principal: String): Boolean =
+        com.kelpie.browser.agent.session.R5AgentPrincipalPolicy
+            .eligible(principal) &&
+            pairingStore.hasPairedPrincipal(principal)
+
     fun start() {
-        val middleware = AccountPairingAuthorization(pairingStore, r5PrivateMcpQa = router.backgroundAgentQa || router.motherR5BackgroundQa)
+        val middleware =
+            AccountPairingAuthorization(
+                pairingStore,
+                r5PrivateMcpQa = router.backgroundAgentQa || router.motherR5BackgroundQa,
+                r5PrivateMcpWire = router.backgroundAgentQa,
+            )
         val pairEndpoints =
             PairEndpoints(pairingStore) { onPendingPairChanged() }
 
@@ -105,7 +100,7 @@ class HTTPServer(
                     maxChunkSize = 64 * 1024
                 },
             ) {
-                install(ContentNegotiation) { json(json) }
+                install(ContentNegotiation) { json(HttpJson.codec) }
 
                 routing {
                     post("/mcp") {
@@ -270,6 +265,8 @@ class HTTPServer(
         principal: AuthDecision.Authenticated,
         overrideMethod: String? = null,
     ) {
+        val correlationId = UUID.randomUUID().toString()
+        call.response.header("X-Kelpie-Correlation-Id", correlationId)
         // User-scoped control, DOM, frames and pairing responses must never be cached.
         call.response.header("Cache-Control", "no-store")
         // Validate Content-Length BEFORE reading the body to ensure a single
@@ -340,31 +337,49 @@ class HTTPServer(
                 return
             }
         }
-        // Metadata only: never retain principal, token, MCP args, origin, tab or URL.
-        if (method == "mcp" && principal.clientId != "localhost") {
-            McpActivityEvidence.noteAuthenticatedMcpRequest()
-            if (router.motherR5BackgroundQa) {
-                com.kelpie.browser.agent.session.R5ObservedAgentClients.registry
-                    .noteVerified(principal.clientId)
-            }
+        val dispatcher =
+            AuthenticatedRequestDispatcher(
+                router,
+                noteMetadata = { verified ->
+                    if (router.motherR5BackgroundQa && hasPairedPrincipal(verified)) {
+                        com.kelpie.browser.agent.session.R5ObservedAgentClients.registry
+                            .noteVerified(verified)
+                    }
+                },
+            )
+        val outcome =
+            dispatcher.dispatch(
+                principal,
+                method,
+                body,
+                correlationId,
+                authenticateAgain = {
+                    AccountPairingAuthorization(
+                        pairingStore,
+                        r5PrivateMcpQa = router.backgroundAgentQa || router.motherR5BackgroundQa,
+                        r5PrivateMcpWire = router.backgroundAgentQa,
+                    ).evaluate(parsedRequest(call))
+                },
+                reportFailure = { id, error ->
+                    // Error messages and request bodies may contain page/credential data.
+                    // Keep only an opaque correlation and structural stack locations.
+                    val trace = error.stackTrace.take(12).joinToString("\n")
+                    Log.e("HTTPServer", "request=$id type=${error.javaClass.simpleName}\n$trace")
+                },
+            )
+        if (!dispatcher.mayDeliver(principal.clientId, outcome)) {
+            call.respondText(
+                mapToJsonString(AuthenticatedRequestDispatcher.correlatedError("SESSION_REVOKED", "Native owner approval changed before delivery", correlationId)),
+                ContentType.Application.Json,
+                HttpStatusCode.Forbidden,
+            )
+            return
         }
-        val (status, result) =
-            kotlinx.coroutines.withContext(AuthenticatedClientContext.fromVerifiedDecision(principal)) {
-                val privateAtIngress =
-                    router.motherR5BackgroundQa &&
-                        router.handlerContext?.motherPrivateAgentActive?.invoke() == true
-                val outcome = router.handle(method, body)
-                val privateAtEgress =
-                    router.motherR5BackgroundQa &&
-                        router.handlerContext?.motherPrivateAgentActive?.invoke() == true
-                if ((privateAtIngress || privateAtEgress) &&
-                    router.handlerContext?.motherGatewayAuthorization?.invoke() != true
-                ) {
-                    403 to errorResponse("SESSION_REVOKED", "Native private WebView approval ended before delivery")
-                } else {
-                    outcome
-                }
-            }
+        val status = outcome.status
+        val result = outcome.body
+        if (method == "mcp" && principal.clientId != "localhost" && status == 200 && !result.containsKey("error")) {
+            McpActivityEvidence.noteAuthenticatedMcpRequest()
+        }
         // Late STOP/lock/re-approval can happen after an await but before
         // Ktor begins writing the response. The exact request generation must
         // still belong to this middleware-verified principal at delivery.
@@ -459,59 +474,4 @@ class HTTPServer(
             status = statusCode,
         )
     }
-
-    private fun parseJsonBody(text: String): Map<String, Any?>? {
-        if (text.isEmpty()) return emptyMap()
-        return try {
-            val element = json.parseToJsonElement(text)
-            jsonObjectToMap(element.jsonObject)
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    private fun jsonObjectToMap(obj: JsonObject): Map<String, Any?> = obj.entries.associate { (k, v) -> k to jsonElementToAny(v) }
-
-    private fun jsonElementToAny(element: JsonElement): Any? =
-        when (element) {
-            is JsonNull -> null
-            is JsonPrimitive ->
-                when {
-                    element.isString -> element.content
-                    element.booleanOrNull != null -> element.boolean
-                    element.intOrNull != null -> element.int
-                    element.doubleOrNull != null -> element.double
-                    else -> element.content
-                }
-            is JsonObject -> jsonObjectToMap(element)
-            is JsonArray -> element.map { jsonElementToAny(it) }
-        }
-
-    private fun mapToJsonString(map: Map<String, Any?>): String = json.encodeToString(JsonElement.serializer(), mapToJsonElement(map))
-
-    private fun mapToJsonElement(map: Map<String, Any?>): JsonElement = JsonObject(map.entries.associate { (k, v) -> k to anyToJsonElement(v) })
-
-    @Suppress("UNCHECKED_CAST")
-    private fun anyToJsonElement(value: Any?): JsonElement =
-        when (value) {
-            null -> JsonNull
-            is Boolean -> JsonPrimitive(value)
-            is Int -> JsonPrimitive(value)
-            is Long -> JsonPrimitive(value)
-            is Double -> JsonPrimitive(value)
-            is Float -> JsonPrimitive(value)
-            is String -> JsonPrimitive(value)
-            is Map<*, *> -> mapToJsonElement(value as Map<String, Any?>)
-            is List<*> -> JsonArray(value.map { anyToJsonElement(it) })
-            else -> JsonPrimitive(value.toString())
-        }
-
-    private fun errorResponse(
-        code: String,
-        message: String,
-    ): Map<String, Any?> =
-        mapOf(
-            "success" to false,
-            "error" to mapOf("code" to code, "message" to message),
-        )
 }

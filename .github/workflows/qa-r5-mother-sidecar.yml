@@ -27,7 +27,7 @@ jobs:
       - uses: android-actions/setup-android@v4.0.3
       - name: Install SDK tools
         run: sdkmanager "platforms;android-34" "build-tools;35.0.0"
-      - name: Build isolated sidecar APK and Kotlin tests
+      - name: Build existing MotherNext candidate and Kotlin tests
         shell: bash
         run: |
           set -euo pipefail
@@ -35,8 +35,9 @@ jobs:
           ./gradlew --no-daemon -PkelpieR5MotherNextQaProfile=true \
             :kelpie-browser:ktlintCheck \
             :kelpie-browser:testDebugUnitTest \
+            :kelpie-browser:compileDebugAndroidTestKotlin \
             :app:assembleDebug
-      - name: Verify independent identity, standard mother MCP, native consent, port and signing
+      - name: Verify existing identity, standard mother MCP, native consent, port and signing
         shell: bash
         run: |
           set -euo pipefail
@@ -52,22 +53,64 @@ jobs:
           grep -Eq 'R5_BACKGROUND_AGENT_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
           grep -Eq 'R5_MOTHER_MCP_BACKGROUND_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
           "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.browser.r5mothernextverify'"
-          "$AAPT" dump badging "$APK" | grep -F "versionCode='40' versionName='0.2.20-r5-mother-viewport-sidecar-qa'"
-          "$SIGN" verify --verbose --print-certs "$APK"
+          "$AAPT" dump badging "$APK" | grep -F "versionCode='41' versionName='0.2.21-r5-wave1-qa'"
+          "$SIGN" verify --verbose --print-certs "$APK" > /tmp/mother-signing.txt
+          cat /tmp/mother-signing.txt
+          grep -Eq 'Verified using v2 scheme.*: true' /tmp/mother-signing.txt
+          CERT=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' /tmp/mother-signing.txt)
+          [[ "$CERT" =~ ^[0-9a-f]{64}$ ]]
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          git diff --quiet HEAD -- apps/android core/android core/native
           grep -F '.BrowserGatewayBinding(router, handlerContext)' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
           grep -F 'if (!motherMcpR5RendererQaEnabled && r5AgentCoordinator != null)' core/android/src/main/java/com/kelpie/browser/KelpieBrowserSession.kt
           sha256sum "$APK" > apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
           {
             echo "source_commit=$(git rev-parse HEAD)"
             echo "package=com.kelpie.browser.r5mothernextverify"
-            echo "version=0.2.20-r5-mother-viewport-sidecar-qa"
-            echo "versionCode=40"
+            echo "version=0.2.21-r5-wave1-qa"
+            echo "versionCode=41"
             echo "port=18463"
             echo "connection=STANDARD_MOTHER_MCP_AND_OWNER_CONSENTED_R5_RENDERER"
             echo "signature=debug-only"
-            echo "install=SIDE_BY_SIDE_AFTER_HASH_AND_SIGNER_VERIFY"
+            echo "signer_certificate_sha256=$CERT"
+            echo "build_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "build_variant=debug"
+            echo "gradle_profile=kelpieR5MotherNextQaProfile"
+            echo "ci_run_url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "install=NO_AUTO_INSTALL_SINGLE_PACKAGE_SIGNER_MATCH_REQUIRED"
             echo "artifact_sha256=$(sha256sum "$APK" | awk '{print $1}')"
           } > apps/android/app/build/outputs/apk/debug/provenance.txt
+          export APK CERT
+          python3 - <<'PYMANIFEST'
+          import datetime, hashlib, json, os, pathlib, subprocess
+          apk = pathlib.Path(os.environ['APK'])
+          manifest = {
+              'schemaVersion': 1,
+              'mission': 'EF-OPS-KELPIE-BETA-WAVE1-IMPLEMENT-001',
+              'repository': 'https://github.com/imanipour2/kelpie',
+              'sourceCommit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+              'packageName': 'com.kelpie.browser.r5mothernextverify',
+              'versionCode': 41,
+              'versionName': '0.2.21-r5-wave1-qa',
+              'localHttpPort': 18463,
+              'buildVariant': 'debug',
+              'gradleProfile': 'kelpieR5MotherNextQaProfile',
+              'buildUtc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              'artifactFile': apk.name,
+              'artifactSha256': hashlib.sha256(apk.read_bytes()).hexdigest(),
+              'signerCertificateSha256': os.environ['CERT'],
+              'signingSchemeV2': True,
+              'ciWorkflow': '.github/workflows/qa-r5-mother-sidecar.yml',
+              'ciRunUrl': f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+              'ciRunAttempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
+              'installPolicy': 'NO_AUTO_INSTALL_SINGLE_PACKAGE_SIGNER_MATCH_REQUIRED',
+              'deviceAcceptance': 'NOT_PROVIDED',
+              'recoveryEvidence': 'NOT_PROVIDED',
+          }
+          target = apk.with_name('candidate-manifest.json')
+          target.write_text(json.dumps(manifest, indent=2) + '\n')
+          target.with_suffix('.json.sha256').write_text(hashlib.sha256(target.read_bytes()).hexdigest() + '  ' + target.name + '\n')
+          PYMANIFEST
       - uses: actions/upload-artifact@v4.6.2
         with:
           name: kelpie-mother-r5-sidecar-${{ github.event.pull_request.head.sha || github.sha }}
@@ -75,5 +118,7 @@ jobs:
             apps/android/app/build/outputs/apk/debug/app-debug.apk
             apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
             apps/android/app/build/outputs/apk/debug/provenance.txt
+            apps/android/app/build/outputs/apk/debug/candidate-manifest.json
+            apps/android/app/build/outputs/apk/debug/candidate-manifest.json.sha256
           if-no-files-found: error
           retention-days: 14

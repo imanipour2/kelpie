@@ -2,7 +2,9 @@ package com.kelpie.browser.agent.execution
 
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.Lifecycle
+import com.kelpie.browser.capture.CapturePrivacyEvidence
 import com.kelpie.browser.capture.PrivateWebViewDisplay
+import com.kelpie.browser.capture.WebViewCapturePrivacy
 import com.kelpie.browser.handlers.HandlerContext
 
 /**
@@ -34,8 +36,28 @@ internal class R5MotherMcpCaptureAdapter(
             ) {
                 null
             } else {
+                val view = tab.webView
+                val document = tab.documentVersion
+
+                fun sameDocument(): Boolean {
+                    val selected = ctx.tabStore?.activeTab ?: return false
+                    return selected.id == tab.id &&
+                        selected.webView === view &&
+                        selected.documentVersion == document &&
+                        renderer.isOwnedBy(view)
+                }
+                if (!sameDocument()) {
+                    throw com.kelpie.browser.handlers
+                        .ScreenshotRefusal("OBSERVATION_RACE", "Capture target changed before admission")
+                }
+                val before = WebViewCapturePrivacy.inspect(view)
                 val frame = renderer.captureFreshPng()
+                before.requireSameDocument(WebViewCapturePrivacy.inspect(view))
                 if (frame != null &&
+                    CapturePrivacyEvidence.hasVerifiedReceipt(frame) &&
+                    frame["privacyDocumentStamp"] == before.documentStamp &&
+                    frame["privacySceneDigest"] == before.sceneDigest &&
+                    sameDocument() &&
                     authorized() &&
                     privateOwned() &&
                     sameTab(tab.id) &&

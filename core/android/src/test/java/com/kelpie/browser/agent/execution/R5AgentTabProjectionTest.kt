@@ -24,9 +24,23 @@ class R5AgentTabProjectionTest {
         assertEquals("tab-a", value["tabId"])
         assertEquals("epoch-a", value["documentEpoch"])
         assertEquals(true, value["active"])
-        assertEquals("https://example.org/private/path", value["urlWithoutQuery"])
+        assertEquals("https://example.org", value["urlWithoutQuery"])
+        assertEquals("https://example.org", value["title"])
+        assertEquals(true, value["titleRedacted"])
+        assertFalse(value.toString().contains("private/path"))
         assertFalse(value.toString().contains("never-echoed"))
         assertFalse(value.toString().contains("fragment-secret"))
+    }
+
+    @Test
+    fun pathCredentialsAndAccountTitlesCannotEscapeWithoutDomPrivacyContext() {
+        val unsafe = first.copy(title = "OTP 894231, account PERSONAL_NAME", url = "https://user:password@example.org/path-secret")
+        val snapshot = R5AgentTabProjection.publicSnapshot(listOf(unsafe)).single()
+        assertEquals("redacted", snapshot["urlWithoutQuery"])
+        assertEquals("Kelpie tab", snapshot["title"])
+        assertFalse(snapshot.toString().contains("PERSONAL_NAME"))
+        assertFalse(snapshot.toString().contains("password"))
+        assertFalse(snapshot.toString().contains("path-secret"))
     }
 
     @Test

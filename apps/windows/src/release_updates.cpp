@@ -114,7 +114,9 @@ struct StandaloneUpdates::Impl {
     if (!release) return;
     const auto version = utf::Utf8ToWideDisplay(release->version);
     int choice = 102;
-    if (FAILED(updates_ui::Prompt(app.window(), version, choice))) { monitor.Retry(*release); return; }
+    const auto prompt_result = updates_ui::Prompt(app.window(), version, choice);
+    if (app.IsClosing()) return;
+    if (FAILED(prompt_result)) { monitor.Retry(*release); return; }
     if (choice == 100) Install(*release);
     if (choice == 101 && !monitor.Skip(*release)) Error(L"Kelpie could not save Skip version. Please try again after restarting the app.");
   }

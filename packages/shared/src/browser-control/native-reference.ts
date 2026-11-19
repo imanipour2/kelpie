@@ -152,11 +152,11 @@ export function resolveNativeReference(ref: string, key = "__kelpieBrowserContro
 }
 
 /**
- * One atomic action on an observed object. "ok" proves dispatch only, never a
- * verified business effect. Caller-supplied scripts or page-text authority are
- * not accepted; native must fence the operation before and after dispatch.
+ * One atomic action on an observed object. Legacy "ok" acknowledges dispatch.
+ * R5 additionally requires a synchronous local DOM/control effect; neither mode
+ * claims business completion. Native still fences authority and document identity.
  */
-export function actOnNativeReference(ref: string, key: string, method: string, text = ""): { ok?: true; error?: string; mayHaveCompleted?: boolean } {
+export function actOnNativeReference(ref: string, key: string, method: string, text = "", requireEffect = false): { ok?: true; effectVerified?: true; error?: string; mayHaveCompleted?: boolean } {
   const state = (window as unknown as Record<string, NativeReferenceState | undefined>)[key];
   if (!state) return { error: "STALE_OBSERVATION", mayHaveCompleted: false };
   const permit = state.take(ref);
@@ -171,11 +171,18 @@ export function actOnNativeReference(ref: string, key: string, method: string, t
       (el.matches("input,textarea,select,[contenteditable]") ? "" : el.textContent) + " " +
       (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement
         ? Array.from(el.labels ?? []).map((label) => label.textContent).join(" ") : "");
-    if (/password|one-time|otp|cc-|credit.?card|card.?number|cvv|cvc|token|cookie|secret|captcha|checkout|payment|transfer|delete|erase|remove|publish|sign.?in|log.?in|رمز|گذرواژه|کارت|پرداخت|انتقال|حذف|انتشار|ورود/i.test(metadata) ||
+    const anchor = el.closest("a[href]");
+    const control = el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement || el instanceof HTMLButtonElement;
+    const form = control ? el.form : el.closest("form");
+    if ((anchor instanceof HTMLAnchorElement && (!["http:", "https:"].includes(anchor.protocol) || anchor.username || anchor.password)) ||
+      (form && Array.from(form.elements).some(field => field.matches('input[type="password"],[autocomplete="one-time-code" i],[autocomplete^="cc-" i]'))) ||
+      (form && form.method.toLowerCase() !== "get" && el.matches('button,[role="button"],input[type="submit"],input[type="reset"]')) ||
+      /password|one-time|otp|cc-|credit.?card|card.?number|cvv|cvc|token|cookie|secret|captcha|checkout|payment|transfer|bank|iban|delete|erase|remove|publish|sign.?in|log.?in|رمز|گذرواژه|کارت|پرداخت|بانک|شبا|درگاه|انتقال|حذف|انتشار|ورود/i.test(metadata) ||
       el.closest("[data-sensitive],[data-private],[aria-secret]") ||
       (el instanceof HTMLInputElement && ["password", "file", "hidden", "submit", "image"].includes(el.type)) ||
       (el instanceof HTMLButtonElement && el.type === "submit" && el.form)) return { error: "NEEDS_HUMAN", mayHaveCompleted: false };
     if (method !== "tab.click" && method !== "tab.type") return { error: "UNSUPPORTED", mayHaveCompleted: false };
+    if (requireEffect && method === "tab.type" && text.length === 0) return { error: "UNSUPPORTED", mayHaveCompleted: false };
     if (!permit.entry.allowedOperations.includes(method === "tab.click" ? "click" : "type")) return { error: "UNSUPPORTED", mayHaveCompleted: false };
     const clickable = (): boolean => el instanceof HTMLInputElement ? ["button", "reset", "checkbox", "radio"].includes(el.type)
       : el instanceof HTMLButtonElement || (el instanceof HTMLAnchorElement && el.hasAttribute("href")) ||
@@ -191,16 +198,75 @@ export function actOnNativeReference(ref: string, key: string, method: string, t
     const error = permit.check?.();
     if (error) return { error, mayHaveCompleted };
     if (method === "tab.click" ? !clickable() : !editable()) return { error: "UNSUPPORTED", mayHaveCompleted };
+    // Compare bounded final visible state, not mutation notifications. Transient
+    // changes reverted by a handler, private data-* counters and focus-only changes
+    // cannot establish an effect. This local string is never returned or persisted.
+    const visibleScene = (): string | undefined => {
+      const body = document.querySelector("body");
+      if (!body) return undefined;
+      const parts = [JSON.stringify([scrollX, scrollY, innerWidth, innerHeight])];
+      const walker = document.createTreeWalker(body, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+      let count = 0, bytes = parts[0]?.length ?? 0;
+      for (let node: Node | null = body; node; node = walker.nextNode()) {
+        if (++count > 4096) return undefined;
+        const element = node instanceof Element ? node : node.parentElement;
+        if (!(element instanceof HTMLElement) || element.closest("[hidden],[aria-hidden='true']")) continue;
+        const rect = element.getBoundingClientRect(), style = getComputedStyle(element);
+        if (rect.width <= 0 || rect.height <= 0 || rect.right <= 0 || rect.bottom <= 0 || rect.left >= innerWidth || rect.top >= innerHeight ||
+          style.display === "none" || style.visibility !== "visible" || style.opacity === "0") continue;
+        let hidden = false, depth = 0;
+        for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+          if (++depth > 64 || getComputedStyle(parent).opacity === "0") { hidden = true; break; }
+        }
+        if (hidden) continue;
+        const hit = document.elementFromPoint(Math.max(0, Math.min(innerWidth - 1, rect.left + rect.width / 2)),
+          Math.max(0, Math.min(innerHeight - 1, rect.top + rect.height / 2)));
+        if (!hit || !(hit === element || element.contains(hit) || hit.contains(element))) continue;
+        const item = node.nodeType === Node.TEXT_NODE
+          ? ["text", node.textContent?.slice(0, 256)]
+          : ["element", element.tagName, rect.x, rect.y, rect.width, rect.height,
+            style.color, style.backgroundColor, style.opacity, style.transform, style.fontSize, style.fontWeight,
+            element instanceof HTMLInputElement && ["checkbox", "radio"].includes(element.type) ? element.checked : null,
+            ...["aria-expanded", "aria-checked", "aria-selected", "aria-pressed", "open"].map(attribute => element.getAttribute(attribute))];
+        const encoded = JSON.stringify(item);
+        bytes += encoded.length;
+        if (bytes > 131072) return undefined;
+        parts.push(encoded);
+      }
+      return parts.join("\n");
+    };
+    // Arm after focus and its revalidation.
+    const beforeScene = requireEffect && method === "tab.click" ? visibleScene() : undefined;
+    if (requireEffect && method === "tab.click" && beforeScene === undefined) return { error: "UNSUPPORTED", mayHaveCompleted: true };
+    let expectedValue: string | undefined;
+    let readValue: (() => string) | undefined;
     if (method === "tab.click") el.click();
     else if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
       const prototype = el instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
       const value = Object.getOwnPropertyDescriptor(prototype, "value");
       if (!value?.get || !value.set) return { error: "UNSUPPORTED", mayHaveCompleted };
-      value.set.call(el, String(value.get.call(el)) + text);
+      const getter = value.get.bind(el);
+      expectedValue = String(value.get.call(el)) + text;
+      readValue = () => String(getter());
+      value.set.call(el, expectedValue);
       el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
     } else {
+      expectedValue = el.textContent + text;
+      readValue = () => el.textContent;
       el.append(document.createTextNode(text));
       el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
+    }
+    if (requireEffect) {
+      let verified = false;
+      if (method === "tab.type") {
+        // A handler may reject the value or substitute an equal-valued clone.
+        verified = el.isConnected && el.ownerDocument === document && editable() && readValue?.() === expectedValue;
+      } else {
+        const afterScene = visibleScene();
+        verified = afterScene !== undefined && afterScene !== beforeScene;
+      }
+      if (!verified) return { error: "EFFECT_UNVERIFIED", mayHaveCompleted: true };
+      return { ok: true, effectVerified: true };
     }
     return { ok: true };
   } finally {

@@ -1,6 +1,8 @@
 package com.kelpie.browser.agent.execution
 
+import com.kelpie.browser.handlers.formFillHelpersScript
 import com.kelpie.browser.handlers.observationPrivacyScript
+import com.kelpie.browser.handlers.selectorActivationScript
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -11,19 +13,19 @@ internal object R5WebViewActionScripts {
     val SNAPSHOT = """
         (() => {${observationPrivacyScript()}
           const uniqueSelector=e=>{
-          if(e.id){const byId='#'+CSS.escape(e.id);
-            if(document.querySelectorAll(byId).length===1)return byId;}
           const parts=[];let node=e;
           for(let depth=0;node&&node.nodeType===1&&depth<24;depth++){
             const parent=node.parentElement;let part=node.localName;
+            const allowed='html body main section article nav header footer aside div span p form fieldset legend '+
+              'label a button input textarea select option optgroup ul ol li table thead tbody tfoot tr th td '+
+              'details summary dialog h1 h2 h3 h4 h5 h6';
+            if(!allowed.split(' ').includes(part))return '';
             if(parent){let same=0,index=0;
               for(const sibling of parent.children){
                 if(sibling.localName===node.localName){
                   same++;if(sibling===node)index=same;}}
               if(same>1)part+=':nth-of-type('+index+')';}
-            if(node.id)part+='#'+CSS.escape(node.id);
             parts.unshift(part);
-            if(node.id&&document.querySelectorAll('#'+CSS.escape(node.id)).length===1)break;
             node=parent;}
           const css=parts.join(' > ');
           if(css.length>500)return '';
@@ -34,10 +36,10 @@ internal object R5WebViewActionScripts {
           text:kelpieSafeNodeText(document.body).slice(0,28000),coverage:'INCOMPLETE',redacted:true,
           elements:[...document.querySelectorAll('a,button,input,textarea,select,[role=tab]')]
             .filter(e=>e.getClientRects().length).slice(0,160).map(e=>({
-              tag:e.tagName.toLowerCase(),name:kelpieSafeName(e).slice(0,120),
+              tag:['a','button','input','textarea','select','div','span'].includes(e.localName)?e.localName:'generic',
+              name:kelpieSafeName(e).slice(0,120),
               selector:(()=>{const selector=uniqueSelector(e);return kelpieSafeText(selector)===selector?selector:'';})(),
-              role:(e.getAttribute('role')||'').slice(0,48),
-              type:(e.getAttribute('type')||'').slice(0,24)})),
+              role:kelpieSafeRole(e),type:kelpieSafeType(e)})),
           scroll:{x:scrollX,y:scrollY},
           // Observation only: challenge ownership and answers stay with the
           // visited website / human. Never read a challenge token or bypass it.
@@ -53,27 +55,15 @@ internal object R5WebViewActionScripts {
     // These guards are defense-in-depth, not a universal semantic risk classifier.
     fun click(selector: String): String =
         """
-        (()=>{const e=document.querySelector(__SEL__);
-          if(!e||!e.getClientRects().length||!e.isConnected||e.disabled) return 'DENIED';
-          const action=e.closest('button,[role=button],input[type=submit],a[href]')||e;
-          const form=action.closest('form');
-          const label=[action.getAttribute('aria-label')||'',action.getAttribute('value')||'',
-            action.textContent||'',action.getAttribute('name')||''].join(' ').slice(0,600);
-          const formIdentity=form?[form.getAttribute('action')||'',form.id||'',
-            form.getAttribute('aria-label')||''].join(' '):'';
-          const financial=/(payment|checkout|pay now|credit.card|card.number|bank.transfer|iban|wire.transfer|پرداخت|درگاه|بانک|رمز پویا|رمز دوم|شماره کارت|شماره شبا|انتقال وجه)/i;
-          const destructive=/(delete.account|delete.all|delete.permanent|remove.account|publish|make.public|unsubscribe|حذف حساب|حذف دائم|انتشار عمومی)/i;
-          const secret=!!action.closest('input[type=password],[autocomplete=one-time-code],[autocomplete^="cc-"]');
-          const formHasSecrets=!!form&&!!form.querySelector('input[type=password],[autocomplete=one-time-code],[autocomplete^="cc-"]');
-          const nonGetFormButton=!!form&&(form.method||'get').toLowerCase()!=='get'&&
-            !!action.closest('button,[role=button],input[type=submit]');
-          const anchor=action.closest('a[href]');
-          const unsafeLink=!!anchor&&!/^https?:$/i.test(anchor.protocol);
-          if(secret||formHasSecrets||nonGetFormButton||unsafeLink||financial.test(label)||
-            financial.test(formIdentity)||destructive.test(label)||destructive.test(formIdentity))
-            return 'DENIED_SENSITIVE';
-          e.click();return 'DISPATCHED';})()
-        """.replace("__SEL__", q(selector))
+        (()=>{try {
+          if(document.querySelectorAll(${q(selector)}).length!==1) return 'DENIED';
+          const outcome=${selectorActivationScript(selector)};
+          if(outcome && !outcome.error) return 'DISPATCHED';
+          if(outcome && outcome.error==='needs_human') return 'DENIED_SENSITIVE';
+          if(outcome && outcome.error==='uncertain') return 'UNCERTAIN';
+          return 'DENIED';
+        } catch(_) {return 'DENIED';}})()
+        """
 
     // A compact one-way hash, not a dump of user input or a trusted claim of
     // causality. Two stable post-click observations are required by native code.
@@ -96,58 +86,71 @@ internal object R5WebViewActionScripts {
     fun select(
         selector: String,
         value: String,
+        actionToken: String,
     ): String =
         """
-        (()=>{const e=document.querySelector(${q(selector)});
-          if(!(e instanceof HTMLSelectElement)||!e.getClientRects().length||e.disabled) return false;
-          const found=[...e.options].filter(o=>!o.disabled&&(o.value===${q(value)}||o.text.trim()===${q(value)}));
-          if(found.length!==1)return false;
-          e.value=found[0].value;
-          e.dispatchEvent(new Event('input',{bubbles:true}));
-          e.dispatchEvent(new Event('change',{bubbles:true}));return true;})()
+        (()=>{${formFillHelpersScript()}
+          ${mutationProofScript(actionToken)}
+          const selector=${q(selector)}, value=${q(value)};
+          let matches;try {matches=document.querySelectorAll(selector);}catch(_){return false;}
+          if(matches.length!==1) return false;
+          const e=matches[0];
+          if(!(e instanceof HTMLSelectElement)||e.multiple) return false;
+          const found=[...e.options].filter(o=>!o.disabled&&!o.closest('optgroup:disabled')&&
+            (o.value===value||o.text.trim()===value));
+          if(found.length!==1||!kelpieRememberActionTarget(e,found[0]))return false;
+          const outcome=kelpieFillElement(selector,found[0].value);
+          const current=document.querySelectorAll(selector);
+          if(!outcome||outcome.error||!e.isConnected||current.length!==1||current[0]!==e||
+            e.selectedOptions.length!==1||e.selectedOptions[0]!==found[0]||kelpieSensitiveAction(e)){
+            kelpieRetireActionProof();return false;}
+          kelpieArmActionProof();return true;})()
         """
 
     fun verifySelect(
         selector: String,
         value: String,
-    ): String =
-        """
-        (()=>{const e=document.querySelector(${q(selector)});
-          if(!(e instanceof HTMLSelectElement))return false;
-          const selected=e.selectedOptions[0];
-          return !!selected&&(selected.value===${q(value)}||selected.text.trim()===${q(value)});})()
-        """
+        actionToken: String,
+    ): String = verifyMutationScript(selector, value, actionToken, "select")
 
     fun waitFor(selector: String?): String =
         if (selector == null) {
             "document.readyState === 'complete'"
         } else {
-            "(()=>{const e=document.querySelector(__SEL__);return !!e&&!!e.getClientRects().length;})()"
-                .replace("__SEL__", q(selector))
+            """
+            (()=>{try {const matches=document.querySelectorAll(${q(selector)});
+              if(matches.length!==1)return false;const e=matches[0],style=getComputedStyle(e);
+              return e.isConnected&&e.getClientRects().length>0&&
+                style.visibility==='visible'&&style.display!=='none';}catch(_){return false;}})()
+            """
         }
 
     fun fill(
         selector: String,
         value: String,
+        actionToken: String,
     ): String =
         """
-        (()=>{const e=document.querySelector(${q(selector)});
-          if(!e||!e.getClientRects().length||!
-            (e instanceof HTMLInputElement||e instanceof HTMLTextAreaElement)) return false;
-          const t=(e.type||'text').toLowerCase(), a=(e.autocomplete||'').toLowerCase();
-          if(['password','file','hidden','submit','checkbox','radio'].includes(t)||
-            a.startsWith('cc-')||a==='one-time-code') return false;
-          const d=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(e),'value');
-          if(!d?.set) return false;
-          d.set.call(e,${q(value)});
-          e.dispatchEvent(new Event('input',{bubbles:true}));
-          e.dispatchEvent(new Event('change',{bubbles:true})); return true;})()
+        (()=>{${formFillHelpersScript()}
+          ${mutationProofScript(actionToken)}
+          const selector=${q(selector)}, value=${q(value)};
+          let matches;try {matches=document.querySelectorAll(selector);}catch(_){return false;}
+          if(matches.length!==1)return false;const e=matches[0];
+          if(!(e instanceof HTMLInputElement||e instanceof HTMLTextAreaElement)||
+            ['password','file','hidden','submit','image','button','reset','checkbox','radio'].includes(e.type))return false;
+          if(!kelpieRememberActionTarget(e,null))return false;
+          const outcome=kelpieFillElement(selector,value);
+          const current=document.querySelectorAll(selector);
+          if(!outcome||outcome.error||!e.isConnected||current.length!==1||current[0]!==e||kelpieSensitiveAction(e)){
+            kelpieRetireActionProof();return false;}
+          kelpieArmActionProof();return true;})()
         """
 
     fun verifyFill(
         selector: String,
         value: String,
-    ): String = "(()=>{const e=document.querySelector(${q(selector)});return !!e&&e.value===${q(value)};})()"
+        actionToken: String,
+    ): String = verifyMutationScript(selector, value, actionToken, "fill")
 
     fun scroll(
         x: Double,

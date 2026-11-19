@@ -447,7 +447,7 @@ if(BUILD_TESTING)
     src/network_rows.cpp
     src/network_inspector.cpp
   )
-  target_compile_definitions(windows_shell_preview_test PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE)
+  target_compile_definitions(windows_shell_preview_test PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE _WIN32_WINNT=0x0A00)
   target_include_directories(windows_shell_preview_test PRIVATE src resources)
   # win32_browser_view.h includes kelpie/renderer_interface.h, which the
   # automation core owns; without it this target cannot compile.

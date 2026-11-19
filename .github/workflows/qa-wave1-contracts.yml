@@ -1,0 +1,210 @@
+name: Wave 1 protocol and privacy contracts
+
+on:
+  pull_request:
+    paths:
+      - 'core/android/**'
+      - 'core/native/core-mcp/**'
+      - 'packages/**'
+      - 'tests/native/**'
+      - '.github/workflows/qa-wave1-contracts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wave1-contracts-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6.0.3
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: ./.github/actions/browser-contract
+      - name: Install the pinned dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build and test the original CLI and shared contracts
+        run: |
+          pnpm lint
+          pnpm build
+          pnpm test
+      - name: Install the Chromium version pinned by the existing browser adapter
+        run: pnpm --dir packages/shared exec playwright-core install --with-deps chromium
+      - name: Execute production Android scripts in real Chromium fixtures
+        run: node --test tests/native/android-privacy-contract.test.mjs tests/native/r5-action-effect.test.mjs
+      - name: Verify the real native MCP gateway control and data boundary
+        run: |
+          cmake -S core/native -B /tmp/kelpie-wave1-native -DCMAKE_BUILD_TYPE=Debug -DKELPIE_BUILD_DESKTOP_ENGINES=OFF
+          cmake --build /tmp/kelpie-wave1-native --target test_browser_gateway test_native_extensions test_mcp_registry browser_snapshot_fixture --parallel 2
+          ctest --test-dir /tmp/kelpie-wave1-native -R 'test_browser_gateway|test_native_extensions|test_mcp_registry' --output-on-failure
+          node tests/native/browser-snapshot-selectors.mjs /tmp/kelpie-wave1-native/core-mcp/tests/browser_snapshot_fixture
+
+  android-fixtures:
+    # Separate synthetic emulator scope. This never targets the owner's S24 or installs the candidate there.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ANDROID_SERIAL: emulator-5554
+    steps:
+      - uses: actions/checkout@v6.0.3
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: ./.github/actions/browser-contract
+      - uses: actions/setup-java@v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4.0.3
+      - name: Install official SDK emulator and API 34 image
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager "platforms;android-34" "build-tools;35.0.0" "emulator" "system-images;android-34;google_apis;x86_64"
+          test -c /dev/kvm
+          # Grant only this isolated CI user access to the KVM device.
+          sudo chown "$(id -u)" /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
+          "$ANDROID_HOME/emulator/emulator" -accel-check
+          pnpm install --frozen-lockfile
+      - name: Boot one isolated emulator with software graphics and no snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          report_boot_failure() {
+            local status=$?
+            trap - EXIT
+            if [ "$status" -ne 0 ]; then
+              echo "::error::Isolated emulator boot failed (exit $status)"
+              if [ -f "$RUNNER_TEMP/kelpie-emulator.log" ]; then
+                tail -n 200 "$RUNNER_TEMP/kelpie-emulator.log" || true
+              fi
+            fi
+            exit "$status"
+          }
+          trap report_boot_failure EXIT
+          # Both SDK tools must use the same explicit AVD index and content directory.
+          export ANDROID_USER_HOME="$RUNNER_TEMP/kelpie-wave1-android-user"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_USER_HOME" "$ANDROID_AVD_HOME"
+          printf 'ANDROID_USER_HOME=%s\nANDROID_AVD_HOME=%s\n' "$ANDROID_USER_HOME" "$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
+          ADB="$ANDROID_HOME/platform-tools/adb"
+          timeout --kill-after=2s 10s "$ADB" start-server
+          devices_readback="$(timeout --kill-after=2s 10s "$ADB" devices)"
+          test "$(printf '%s\n' "$devices_readback" | awk 'NR>1 && NF {n++} END {print n+0}')" = 0
+          printf 'no\n' | avdmanager create avd --force --name kelpie-wave1-api34 \
+            --package "system-images;android-34;google_apis;x86_64" \
+            --path "$ANDROID_AVD_HOME/kelpie-wave1-api34.avd"
+          test -s "$ANDROID_AVD_HOME/kelpie-wave1-api34.ini"
+          test -s "$ANDROID_AVD_HOME/kelpie-wave1-api34.avd/config.ini"
+          avd_readback="$(timeout --kill-after=2s 15s "$ANDROID_HOME/emulator/emulator" -list-avds)"
+          printf '%s\n' "$avd_readback"
+          test "$avd_readback" = kelpie-wave1-api34
+          # Official SDK flags: developer.android.com/studio/run/emulator-commandline
+          # software replaces deprecated swiftshader_indirect on current emulator releases.
+          nohup "$ANDROID_HOME/emulator/emulator" -avd kelpie-wave1-api34 \
+            -port 5554 -no-window -no-snapshot -no-audio -no-boot-anim \
+            -gpu software -accel on -memory 2048 -cores 2 \
+            > "$RUNNER_TEMP/kelpie-emulator.log" 2>&1 &
+          KELPIE_EMULATOR_PID=$!
+          export KELPIE_EMULATOR_PID
+          timeout --kill-after=2s 480s bash -c '
+            set -euo pipefail
+            while kill -0 "$KELPIE_EMULATOR_PID" 2>/dev/null; do
+              boot_value="$(timeout --kill-after=2s 5s "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" || boot_value=""
+              if [ "$boot_value" = 1 ]; then exit 0; fi
+              sleep 2
+            done
+            echo "Emulator process exited before Android boot completed" >&2
+            exit 1
+          '
+          devices_readback="$(timeout --kill-after=2s 10s "$ADB" devices)"
+          test "$(printf '%s\n' "$devices_readback" | awk 'NR>1 && NF {print $1}')" = emulator-5554
+          emulator_identity="$(timeout --kill-after=2s 10s "$ADB" -s emulator-5554 shell getprop ro.boot.qemu | tr -d '\r')"
+          test "$emulator_identity" = 1
+          emulator_sdk="$(timeout --kill-after=2s 10s "$ADB" -s emulator-5554 shell getprop ro.build.version.sdk | tr -d '\r')"
+          test "$emulator_sdk" = 34
+          timeout --kill-after=2s 10s "$ADB" -s emulator-5554 shell input keyevent KEYCODE_WAKEUP
+          timeout --kill-after=2s 10s "$ADB" -s emulator-5554 shell wm dismiss-keyguard
+          timeout --kill-after=2s 10s "$ADB" -s emulator-5554 shell settings put global window_animation_scale 0
+          timeout --kill-after=2s 10s "$ADB" -s emulator-5554 shell settings put global transition_animation_scale 0
+          timeout --kill-after=2s 10s "$ADB" -s emulator-5554 shell settings put global animator_duration_scale 0
+      - name: Build fixture APK with the existing ARM64 and x86_64 ABI configuration
+        working-directory: apps/android
+        run: ./gradlew --no-daemon -PkelpieR5MotherNextQaProfile=true :kelpie-browser:assembleDebugAndroidTest
+      - name: Execute all 11 new Wave 1 Android fixture tests
+        working-directory: apps/android
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Assembly can outlast the emulator screen timeout; verify and wake this same fixture again.
+          devices_readback="$(timeout --kill-after=2s 10s "$ANDROID_HOME/platform-tools/adb" devices)"
+          test "$(printf '%s\n' "$devices_readback" | awk 'NR>1 && NF {print $1, $2}')" = 'emulator-5554 device'
+          timeout --kill-after=2s 10s "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell input keyevent KEYCODE_WAKEUP
+          timeout --kill-after=2s 10s "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell wm dismiss-keyguard
+          ./gradlew --no-daemon -PkelpieR5MotherNextQaProfile=true \
+            -Pandroid.testInstrumentationRunnerArguments.class=com.kelpie.browser.network.R5ControlPlaneWireTest,com.kelpie.browser.capture.R5ImageReaderCaptureInstrumentedTest,com.kelpie.browser.capture.CapturePrivacyInstrumentedTest,com.kelpie.browser.handlers.NavigationHandlerInstrumentedTest \
+            :kelpie-browser:connectedDebugAndroidTest
+      - name: Require the complete fixture scope with no skipped, failed or missing cases
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import collections, json, os, pathlib, subprocess, xml.etree.ElementTree as ET
+          expected = {
+              'com.kelpie.browser.network.R5ControlPlaneWireTest': 1,
+              'com.kelpie.browser.capture.R5ImageReaderCaptureInstrumentedTest': 2,
+              'com.kelpie.browser.capture.CapturePrivacyInstrumentedTest': 6,
+              'com.kelpie.browser.handlers.NavigationHandlerInstrumentedTest': 2,
+          }
+          reports = list(pathlib.Path('core/android/build/outputs/androidTest-results/connected').rglob('TEST-*.xml'))
+          counts = collections.Counter()
+          cases = collections.defaultdict(set)
+          case_failures = []
+          failures = errors = skipped = 0
+          for path in reports:
+              suite = ET.parse(path).getroot()
+              failures += int(suite.get('failures', '0'))
+              errors += int(suite.get('errors', '0'))
+              skipped += int(suite.get('skipped', '0'))
+              for case in suite.iter('testcase'):
+                  cases[case.get('classname', '')].add(case.get('name', ''))
+                  if any(case.find(tag) is not None for tag in ('failure', 'error', 'skipped')):
+                      case_failures.append({'class': case.get('classname'), 'name': case.get('name')})
+          counts.update({name: len(methods) for name, methods in cases.items()})
+          summary = {'sourceCommit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(), 'scope': 'API34_SYNTHETIC_EMULATOR_ONLY',
+                     'classCounts': dict(counts), 'failures': failures, 'errors': errors, 'skipped': skipped,
+                     'unsuccessfulCases': case_failures,
+                     'minimumRequiredCases': 11, 'physicalS24Acceptance': 'NOT_TESTED'}
+          pathlib.Path(os.environ['RUNNER_TEMP'], 'kelpie-android-fixture-summary.json').write_text(json.dumps(summary, indent=2) + '\n')
+          assert reports, 'No Android instrumentation result XML was produced'
+          assert not case_failures, summary
+          assert failures == errors == skipped == 0, summary
+          assert all(counts[name] >= count for name, count in expected.items()), summary
+          assert sum(counts.values()) >= 11, summary
+          print(json.dumps(summary, indent=2))
+          PY
+      - name: Collect only synthetic emulator diagnostics and stop that emulator
+        if: always()
+        shell: bash
+        run: |
+          if [ -x "$ANDROID_HOME/platform-tools/adb" ]; then
+            timeout --kill-after=2s 15s "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 logcat -d '*:W' > "$RUNNER_TEMP/kelpie-fixture-logcat.log" 2>&1 || true
+            timeout --kill-after=2s 10s "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 emu kill || true
+          fi
+      - uses: actions/upload-artifact@v4.6.2
+        if: always()
+        with:
+          name: wave1-android-fixtures-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            core/android/build/reports/androidTests/connected/
+            core/android/build/outputs/androidTest-results/connected/
+            ${{ runner.temp }}/kelpie-emulator.log
+            ${{ runner.temp }}/kelpie-fixture-logcat.log
+            ${{ runner.temp }}/kelpie-android-fixture-summary.json
+          if-no-files-found: warn
+          retention-days: 14

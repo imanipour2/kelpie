@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - 'scripts/qa/kelpie-s24-mother-deploy.ps1'
+      - 'scripts/qa/kelpie-s24-mothernext-18463.ps1'
+      - 'scripts/qa/tests/test_mothernext_gates.ps1'
+      - '.github/workflows/qa-r5-mother-sidecar.yml'
       - '.github/workflows/qa-r5-mother-deploy-script.yml'
   workflow_dispatch:
 
@@ -48,4 +51,49 @@ jobs:
           if ($source -match '(?im)^\s*(?:(?:&\s*)?adb\s+uninstall|Remove-Item\s+-Recurse)') {
             throw 'Disallowed unconditional removal detected.'
           }
-          Write-Host 'PASS: syntax parsed, manual owner acceptance and essential gates remain present.'
+          $next='scripts/qa/kelpie-s24-mothernext-18463.ps1'
+          $nextTokens=$null
+          $nextErrors=$null
+          $nextAst=[System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $next),[ref]$nextTokens,[ref]$nextErrors)
+          if ($nextErrors.Count -gt 0) {
+            $nextErrors | ForEach-Object { Write-Error $_ }
+            throw '18463 preflight script must parse without errors.'
+          }
+          $newSource=Get-Content -LiteralPath $next -Raw
+          foreach ($marker in @(
+            "com.kelpie.browser.r5mothernextverify",
+            "SIGNER_MISMATCH",
+            "OwnerAuthorizesInstall",
+            "OwnerBackupConfirmed",
+            "expectedApkHash",
+            "expectedCert",
+            "PREFLIGHT_READY",
+            "INSTALLED_PENDING_ACCEPTANCE",
+            "POST_INSTALL_ACCEPTANCE_PASS",
+            "Assert-PostInstallEvidence",
+            "POST_INSTALL_CANDIDATE_NOT_INSTALLED",
+            "Get-FileHash",
+            "ApkSigner",
+            "versionCode",
+            "ReviewedManifestSha256",
+            "ReviewedEvidenceSha256",
+            "COLD_RESTORE_NOT_PROVEN",
+            "ROLLBACK_NOT_PROVEN",
+            "CI_NOT_GREEN",
+            "EXISTING_SINGLE_APK_REQUIRED_NO_PARALLEL_INSTALL",
+            "BETA_INSTALL_NO_GO"
+          )) {
+            if (-not $newSource.Contains($marker)) { throw "MotherNext safety requirement missing: $marker" }
+          }
+          $installAt=$newSource.IndexOf("ADB @('install'")
+          $certAt=$newSource.IndexOf("SIGNER_MISMATCH")
+          if ($installAt -lt 0 -or $certAt -lt 0 -or $certAt -ge $installAt) {
+            throw 'Install must be after the installed signing certificate comparison.'
+          }
+          if ($newSource -match '(?im)^\s*(?:&\s*)?adb\s+uninstall|\bpm\s+clear\b') {
+            throw 'MotherNext must never uninstall or clear app data.'
+          }
+          Write-Host 'PASS: original deployment and 18463 signer/backup gates parse correctly.'
+      - name: Exercise preinstall safety, owner authorization and read-only postinstall acceptance
+        shell: pwsh
+        run: ./scripts/qa/tests/test_mothernext_gates.ps1

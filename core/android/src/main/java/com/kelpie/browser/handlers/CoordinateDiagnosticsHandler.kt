@@ -73,7 +73,7 @@ fun coordinateDiagnosticsScript(configJSON: String): String =
         function elementInfo(node) {
             if (!node || node.nodeType !== 1) return null;
             var r = node.getBoundingClientRect();
-            return {tag: node.tagName.toLowerCase(), id: null, classes: [],
+            return {tag: kelpieSafeTag(node), id: null, classes: [],
                 text: kelpieSafeName(node).substring(0, 100),
                 sensitivity: kelpiePrivateElement(node) ? 'private' : 'public',
                 rect: {x:r.x,y:r.y,width:r.width,height:r.height}, visible: r.width > 0 && r.height > 0};

@@ -26,8 +26,6 @@
 namespace kelpie::windows {
 namespace {
 
-constexpr UINT_PTR kCloseRetryTimerId = 0x4B51;
-
 std::optional<TabLease> ActiveLease(DesktopApp* app) {
   if (app == nullptr) return std::nullopt;
   std::vector<TabSnapshot> tabs;
@@ -68,13 +66,16 @@ WindowsApp::~WindowsApp() {
   // normal WM_CLOSE. A DesktopApp with live CEF callbacks must remain owned
   // until its HTTP workers and browser close have drained.
   while (!ShutdownDesktopRuntime()) {
-    if (desktop_app_ != nullptr) desktop_app_->Tick();
+    PumpDesktopRuntimeOnce();
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
 }
 
 bool WindowsApp::Start(int show_command) {
   ResolveProfileDirectory();
+  wchar_t trace_flag[2]{};
+  shutdown_trace_.Enable(config_.profile_dir_overridden &&
+      GetEnvironmentVariableW(L"KELPIE_TEST_SHUTDOWN_TRACE", trace_flag, 2) == 1 && trace_flag[0] == L'1');
   std::string session_error;
   startup_diagnostics_.Enter(StartupStage::kProfileOwnership);
   if (!profile_session_.Open(config_.profile_dir, config_.readiness_path, &session_error)) {
@@ -116,7 +117,7 @@ int WindowsApp::Run(int show_command) {
   // WM_QUIT bypasses the shell timer. Keep the native owner available for HTTP
   // handlers admitted before the close gate and for bounded CEF close retries.
   while (!TryCompleteClose()) {
-    if (desktop_app_ != nullptr) desktop_app_->Tick();
+    PumpDesktopRuntimeOnce();
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
   return browser_ready ? 0 : 1;
@@ -131,9 +132,26 @@ bool WindowsApp::ProcessMessage(const MSG& message) {
 }
 
 void WindowsApp::Tick() {
-  if (desktop_app_) desktop_app_->Tick();
+  if (close_lifecycle_.requested()) ++shutdown_owner_ticks_;
+  TraceShutdownProgress(ShutdownStage::kOwnerTick);
+  if (desktop_app_) {
+    // Keep direct-work diagnostics while sharing ownership with timer pumps.
+    struct DepthObservation {
+      unsigned& depth;
+      explicit DepthObservation(unsigned& value) : depth(value) { ++depth; }
+      ~DepthObservation() { --depth; }
+    } observation{direct_cef_pump_depth_};
+    TraceShutdownProgress(ShutdownStage::kBeforeDirectPump);
+    PumpDesktopRuntimeOnce();
+  }
+  TraceShutdownProgress(ShutdownStage::kAfterDirectPump);
   UpdateBrowserStateFromRuntime();
-  if (desktop_app_ && !close_lifecycle_.requested()) PollComputerApproval(desktop_app_->http_server().approvals(), shell_->hwnd());
+  TraceShutdownProgress(ShutdownStage::kAfterBrowserState);
+  if (desktop_app_ && !close_lifecycle_.requested()) {
+    const auto* runtime = desktop_app_.get();
+    PollComputerApproval(desktop_app_->http_server().approvals(), shell_->hwnd(),
+        [this, runtime] { return !IsClosing() && desktop_app_.get() == runtime; });
+  }
   TryCompleteClose();
 }
 
@@ -291,6 +309,7 @@ SettingsValues WindowsApp::CurrentSettings() const {
 }
 
 void WindowsApp::PersistForClose() {
+  TraceShutdown(ShutdownStage::kPersist);
   // Persist while the engine-owned stores and tab model still exist. This runs
   // only after the HTTP listener has retired every handler it admitted before
   // close, so no acknowledged mutation can be written after this snapshot.
@@ -312,12 +331,23 @@ bool WindowsApp::TryCompleteClose() {
   if (!close_lifecycle_.requested() || close_lifecycle_.completed()) {
     return close_lifecycle_.completed();
   }
+  ++shutdown_close_polls_;
+  TraceShutdownProgress(ShutdownStage::kClosePoll);
   if (desktop_app_ != nullptr) {
     desktop_app_->BeginShutdown();
     if (!desktop_app_->IsShutdownReady()) {
+      TraceShutdown(desktop_app_->http_server().IsDrained()
+          ? ShutdownStage::kPreviewDrain : ShutdownStage::kHttpDrain);
       ArmCloseRetry();
       return false;
     }
+  }
+  // A timer also arrives inside native/CEF nested loops. Continue the close
+  // state machine there, but never tear CEF down while either pump is active.
+  if (direct_cef_pump_depth_ != 0 || ExternalCefPumpActive()) {
+    TraceShutdown(ShutdownStage::kCefPumpDrain);
+    ArmCloseRetry();
+    return false;
   }
   const bool completed = close_lifecycle_.Advance(
       true, [this] { PersistForClose(); }, [this] { return ShutdownDesktopRuntime(); });
@@ -329,16 +359,33 @@ bool WindowsApp::TryCompleteClose() {
     KillTimer(shell_->hwnd(), kCloseRetryTimerId);
   }
   running_ = false;
+  TraceShutdown(ShutdownStage::kCompleted);
   if (shell_ != nullptr) shell_->Close();
   return true;
 }
 
+void WindowsApp::OnWindowCloseRetry() { TryCompleteClose(); }
+
 void WindowsApp::OnWindowCloseRequested() {
+  TraceShutdownProgress(ShutdownStage::kCloseRequested);
   if (inference_) inference_->Cancel();
   if (account_) account_->Shutdown();
   close_lifecycle_.Request();
+  TraceShutdown(ShutdownStage::kBeginDrain);
   if (desktop_app_ != nullptr) desktop_app_->BeginShutdown();
   TryCompleteClose();
+}
+void WindowsApp::TraceShutdown(ShutdownStage stage) {
+  shutdown_trace_.Record(config_.profile_dir, stage);
+}
+void WindowsApp::TraceShutdownProgress(ShutdownStage stage) {
+  if (!shutdown_trace_.enabled()) return;
+  if (!close_lifecycle_.requested() && stage != ShutdownStage::kCloseRequested) return;
+  const auto drain = desktop_app_ ? desktop_app_->http_server().GetDrainState()
+                                 : DesktopHttpServer::DrainState{false, 0, true, "not-running"};
+  shutdown_trace_.RecordProgress(config_.profile_dir, stage,
+      {shutdown_owner_ticks_, shutdown_close_polls_, direct_cef_pump_depth_, ExternalCefPumpActive(),
+       drain.active_requests, drain.accepting_requests, drain.listener_thread_finished, drain.transport_version});
 }
 void WindowsApp::OnBrowserStateChanged(const BrowserState& state) {
   browser_state_ = state;

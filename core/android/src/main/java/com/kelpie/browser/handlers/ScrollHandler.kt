@@ -3,6 +3,9 @@ package com.kelpie.browser.handlers
 import com.kelpie.browser.network.Router
 import com.kelpie.browser.network.errorResponse
 import com.kelpie.browser.network.successResponse
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 
 class ScrollHandler(
     private val ctx: HandlerContext,
@@ -18,11 +21,42 @@ class ScrollHandler(
     private suspend fun scroll(body: Map<String, Any?>): Map<String, Any?> {
         val dx = (body["deltaX"] as? Number)?.toDouble() ?: 0.0
         val dy = (body["deltaY"] as? Number)?.toDouble() ?: 0.0
-        val js = "window.scrollBy($dx, $dy); ({scrollX: window.scrollX, scrollY: window.scrollY})"
+        if (!dx.isFinite() || !dy.isFinite() || kotlin.math.abs(dx) > 100_000 || kotlin.math.abs(dy) > 100_000) {
+            return errorResponse("INVALID_PARAMS", "Finite bounded CSS scroll offsets are required")
+        }
+        var dispatched = false
         return try {
-            successResponse(ctx.evaluateJSReturningJSON(js))
-        } catch (e: Exception) {
-            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
+            val before =
+                ScrollEffectEvidence.read(ctx.evaluateJSReturningJSON(ScrollEffectEvidence.SNAPSHOT))
+                    ?: return errorResponse("INVALID_VIEWPORT", "A measured CSS viewport is required")
+            if (!before.wouldMove(dx, dy)) return errorResponse("AT_SCROLL_BOUNDARY", "The requested scroll cannot change this viewport")
+            // The shared per-request guard fences the actual posted JS dispatch and each readback.
+            dispatched = true
+            ctx.evaluateJSReturningJSON(ScrollEffectEvidence.dispatch(dx, dy))
+            val after =
+                withTimeoutOrNull(1000L) {
+                    var last: ScrollEffectEvidence? = null
+                    repeat(20) {
+                        val observed = ScrollEffectEvidence.read(ctx.evaluateJSReturningJSON(ScrollEffectEvidence.SNAPSHOT))
+                        if (observed != null && before.confirms(observed, dx, dy) && observed == last) return@withTimeoutOrNull observed
+                        last = observed
+                        delay(50L)
+                    }
+                    null
+                } ?: return errorResponse("EFFECT_UNVERIFIED", "Scroll was dispatched but its effect is unverified") + ("mayHaveCompleted" to true)
+            successResponse(
+                mapOf(
+                    "scrollX" to after.x,
+                    "scrollY" to after.y,
+                    "preScrollX" to before.x,
+                    "preScrollY" to before.y,
+                    "postconditionStatus" to "VERIFIED_SCROLL_OFFSET",
+                ),
+            )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            errorResponse("EFFECT_UNVERIFIED", "Scroll could not be verified") + ("mayHaveCompleted" to dispatched)
         }
     }
 

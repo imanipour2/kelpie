@@ -57,12 +57,20 @@ fun fillElementScript(
 ): String =
     """
     (function() {
-        ${elementSelectorBuilderScript()}
-        ${interactionHelpersScript()}
-        ${formControlMutationScript()}
-        var selector = '${JSEscape.string(selector)}';
-        var value = '${JSEscape.string(value)}';
-        var targets = document.querySelectorAll(selector);
+        ${formFillHelpersScript()}
+        return kelpieFillElement('${JSEscape.string(selector)}', '${JSEscape.string(value)}');
+    })()
+    """.trimIndent()
+
+/** One mutation implementation is shared by ordinary handlers and observed R5 actions. */
+fun formFillHelpersScript(): String =
+    """
+    ${elementSelectorBuilderScript()}
+    ${interactionHelpersScript()}
+    ${formControlMutationScript()}
+    function kelpieFillElement(selector, value) {
+        var targets;
+        try { targets = document.querySelectorAll(selector); } catch (_) { return {error: 'not_found'}; }
         if (targets.length > 1) return {error: 'ambiguous_target'};
         var el = targets.length === 1 ? targets[0] : null;
         if (!el) {
@@ -114,7 +122,7 @@ fun fillElementScript(
             sensitivity: 'private',
             element: kelpieElementSummary(el)
         };
-    })()
+    }
     """.trimIndent()
 
 @Suppress("UNUSED_PARAMETER")
@@ -141,7 +149,7 @@ fun interactionHelpersScript(): String =
             ? node.getBoundingClientRect()
             : {x: 0, y: 0, width: 0, height: 0};
         return {
-            tag: node.tagName ? node.tagName.toLowerCase() : null,
+            tag: node.tagName ? kelpieSafeTag(node) : null,
             role: kelpieSafeRole(node),
             text: kelpieSafeName(node).substring(0, 100),
             sensitivity: kelpiePrivateElement(node) ? 'private' : 'public',
@@ -198,7 +206,7 @@ fun interactionHelpersScript(): String =
         return diagnostics;
     }
     function kelpieEditableDiagnostics(el, selector, annotationIndex) {
-        var tag = el.tagName ? el.tagName.toLowerCase() : null;
+        var tag = el.tagName ? kelpieSafeTag(el) : null;
         var diagnostics = kelpieBaseDiagnostics(selector, annotationIndex);
         diagnostics.tag = tag;
         diagnostics.targetRect = kelpieRectJSON(el.getBoundingClientRect());
@@ -291,7 +299,7 @@ private fun activationScript(
         |        return {error: 'uncertain', diagnostics: {mayHaveCompleted: true, status: 'UNCERTAIN'}};
         |    }
         |    return {
-        |        tag: el.tagName.toLowerCase(),
+        |        tag: kelpieSafeTag(el),
         |        role: kelpieSafeRole(el),
         |        name: kelpieSafeName(el).substring(0, 50),
         |        selector: kelpieSafeSelector(el),

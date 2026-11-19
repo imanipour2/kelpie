@@ -231,6 +231,11 @@ int main() {
   // Retried native close requests must not close the same listener twice.
   server.BeginDrain();
   assert(!server.IsDrained());
+  const auto held_drain = server.GetDrainState();
+  assert(!held_drain.accepting_requests);
+  assert(held_drain.active_requests == 1);
+  assert(!held_drain.listener_thread_finished);
+  assert(held_drain.transport_version == CPPHTTPLIB_VERSION);
   httplib::Client late_client("127.0.0.1", server.bound_port());
   const auto late_mutation = late_client.Post("/v1/set-home", control_headers, "{}", "application/json");
   assert(!late_mutation || late_mutation->status == 503);
@@ -250,6 +255,10 @@ int main() {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
   assert(server.IsDrained());
+  const auto completed_drain = server.GetDrainState();
+  assert(!completed_drain.accepting_requests);
+  assert(completed_drain.active_requests == 0);
+  assert(completed_drain.listener_thread_finished);
 
   server.Stop();
 

@@ -131,7 +131,7 @@ std::string CollectBrowserSelectorSnapshotExpression(const nlohmann::json& optio
       "const count=read.snapshot.elements.length;"
       "read.snapshot.elements=read.snapshot.elements.flatMap(item=>{"
       "const node=read.targets[item.ref],selector=kelpieBuildSelector(node,true);"
-      "return selector?[{...item,selector,tag:node.tagName.toLowerCase(),label:item.name}]:[];});"
+      "return selector?[{...item,selector,tag:kelpieSafeTag(node),label:item.name}]:[];});"
       "if(read.snapshot.elements.length!==count){read.snapshot.truncated=true;"
       "if(read.snapshot.coverage){read.snapshot.coverage.observed=read.snapshot.elements.length;"
       "read.snapshot.coverage.truncated=true;read.snapshot.coverage.unobserved=null;"
@@ -227,7 +227,7 @@ struct BrowserGateway::Impl {
       const std::string refusal = ReferenceError(tab, ref);
       if (!refusal.empty()) { Finish(Failure(refusal)); return; }
       operation_epoch = invalidation_epoch;
-      const std::string expression = "(" + std::string(browser_assets::action) + ")(" + json(ref).dump() + "," + json(key).dump() + "," + json(method).dump() + "," + json(params.value("text", std::string())).dump() + ")";
+      const std::string expression = "(" + std::string(browser_assets::action) + ")(" + json(ref).dump() + "," + json(key).dump() + "," + json(method).dump() + "," + json(params.value("text", std::string())).dump() + "," + json(config.value("requireActionEffect", false)).dump() + ")";
       Dispatch("browser-control-evaluate", {{"tabId", tab}, {"expression", expression}}, "action", true); return;
     }
     if (method == "tab.screenshot" && (params.value("fullPage", false) || params.value("format", std::string("png")) != "png" || params.contains("quality"))) {
@@ -365,13 +365,18 @@ json BrowserGateway::Advance(json result) {
       if (impl_->operation_epoch != impl_->invalidation_epoch) { impl_->Finish(Failure("STALE_OBSERVATION", true)); return Next(); }
       if (!impl_->ReferenceError(tab, impl_->request["params"]["ref"]).empty()) { impl_->Finish(Failure("STALE_OBSERVATION", true)); return Next(); }
       const json action = result.at("result");
-      // Legacy success acknowledges dispatch; it is not an EFFECT_VERIFIED receipt.
-      if (action.value("ok", false)) impl_->Finish(Success(nullptr));
+      // R5 requires local observable effect, not a dispatch acknowledgement.
+      if (action.value("ok", false)) {
+        if (impl_->config.value("requireActionEffect", false)) {
+          if (!action.value("effectVerified", false)) impl_->Finish(Failure("EFFECT_UNVERIFIED", true));
+          else impl_->Finish(Success({{"executionStatus", "EXECUTED"}, {"postconditionStatus", "VERIFIED_LOCAL_DOM_EFFECT"}}));
+        } else impl_->Finish(Success(nullptr));
+      }
       else {
         // The fixed script can prove refusal before any mutation; preserve prior tab-selection uncertainty.
         const std::string code = action.value("error", std::string());
         static const std::set<std::string> refusals = {"STALE_REFERENCE", "UNSUPPORTED", "STALE_ELEMENT",
-          "STALE_OBSERVATION", "AMBIGUOUS_TARGET", "OCCLUDED", "NEEDS_HUMAN"};
+          "STALE_OBSERVATION", "AMBIGUOUS_TARGET", "OCCLUDED", "NEEDS_HUMAN", "EFFECT_UNVERIFIED"};
         if (!refusals.count(code)) { fail(); return Next(); }
         impl_->uncertain = action.value("mayHaveCompleted", true) || impl_->selected_effect;
         impl_->Finish(Failure(code));

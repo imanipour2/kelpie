@@ -58,6 +58,17 @@ path needs a separately reviewed connector Refresh/reconnect and hardware QA.
 See [owner-session acceptance](qa/EF-OPS-KELPIE-R5-OWNER-SESSION-ENTRY-20261118.md).
 No APK deployment, parity acceptance, main merge or public release is implied.
 
+## Android R5 owner-initiated Termux reconnect — source-only QA, 2026-11-19
+
+If no unique paired agent was observed in 120 seconds, an explicit Kelpie
+button can queue one fixed background command in the **existing** Termux.
+The command reads its existing private bearer and asks the unchanged local
+18463 session endpoint for native approval. The owner must still tap Approve.
+No token is sent by Intent, no second app/tunnel is started, and HTTP 500 does
+not itself mean approval failed. Requires explicit QA-only Termux permission,
+pre-reviewed script and S24 testing; not installed or released.
+See [architecture and acceptance gates](specs/r5-owner-initiated-termux-reconnect.md).
+
 ## Android R5 private agent QA — not released
 
 The source-only draft PR #41 adds a separate, explicitly write-capable
@@ -942,8 +953,7 @@ alone does not revoke an approved session. Process death still ends the grant.
 An existing app instance does not silently gain privileges from enabling the
 preference; notification and keyguard requirements still apply.
 
-**Important:** the currently installed `com.kelpie.browser.r5motherverify`
-comparison profile on port `18462` explicitly has
+**Historical profile:** `com.kelpie.browser.r5motherverify` on port `18462` has
 `R5_BACKGROUND_AGENT_QA_ENABLED=false` and
 `R5_NATIVE_CONSENT_QA_ENABLED=false`. Consequently, this standalone
 startup-choice improvement does NOT turn on its private background renderer,
@@ -954,35 +964,36 @@ overriding it with `R5PrivateMcpBridge` remains a separate integration task.
 
 ### Native R5 renderer behind standard mother MCP (private Android QA only)
 
-The owner-directed `r5motherverify` QA app v0.2.19 (versionCode 39, same port
-18462) enables native first-entry background opt-in and one process-local
-owner-consented agent session. Existing mother `BrowserGatewayBinding`,
-standard `/mcp`, Ed25519 pairing and the same Termux outbound tunnel remain
-in place; `R5PrivateMcpBridge` is **not** registered over them. Only one
-recently verified non-localhost agent can be approved by an affirmative native
-tap, and native STOP, lock suspension, process death and pairing revocation
-retain their distinct meanings.
+Wave 1 targets the existing `com.kelpie.browser.r5mothernextverify` package and
+port 18463, with candidate versionCode 41 / `0.2.21-r5-wave1-qa`. Source and CI are separate from the APK installed on the owner's phone. Standard mother
+`BrowserGatewayBinding`, `/mcp`, pairing and the existing outbound tunnel remain
+in place; no alternate app identity or private MCP replacement is introduced.
 
-The real Kelpie WebView remains in the visible host until the Activity pauses.
-When a valid process session exists, HOME initiates the native VirtualDisplay
-transfer. An authenticated call to the existing `tab.screenshot` receives a
-nonce-verified ImageReader PNG only from the transferred WebView. If transfer,
-principal, STOP notification, fresh pixels or device state is invalid, the
-screenshot operation **fails**, rather than returning the uniform gray
-`WebView.draw(Canvas)` bitmap previously observed on S24. Full-page offscreen
-screenshot is not supported in this QA mode. Standard browsing through mother
-MCP remains gated by the same owner-approved principal while WebView ownership
-is private, and authority is rechecked before result delivery.
+A uniquely paired native client can initialize, list tools, ping and request or
+inspect native consent before approval. Browser work requires the same owner
+session in foreground and background, with principal, session generation, lock
+safety epoch and paired credentials checked before execution and delivery.
+STOP, unpair, lock/resume or STOP/reapprove invalidate an in-flight grant.
+Sensitive export and unbound action aliases fail closed even after broad approval.
 
-The device-local **Connection Status** screen uses colon-delimited labels,
-weight hierarchy, green ✓ for verified local success, red × for proven local
-failures, and neutral ? for missing or stale evidence. Color is never the
-only indication. It displays actual owner process consent separately from
-local tunnel readiness and never labels unproven ChatGPT remote control as
-connected. Owners can open native **Manage AI agent approval** from this panel.
+WebView transfer, document identity and real pixels require independent evidence.
+Native ownership and frame freshness do not establish privacy. Real-page images
+currently return `NEEDS_HUMAN` until a verified pixel-redaction path exists;
+synthetic fixture proof cannot enable those images. No cached, gray, unredacted
+or wrong-tab image is a successful screenshot. This is a remaining beta gate.
 
-Source/CI are not proof of on-device behavior. This feature must not replace
-the installed QA APK, decommission the former beta, or ship publicly until
-fresh background screenshots, STOP, lock, reboot/network and 25-cycle physical
-S24 acceptance pass, along with Android/iOS parity or approved exception.
-Details: [EF-OPS-KELPIE-MOTHER-R5-RENDERER-AND-STATUS-20261118](qa/EF-OPS-KELPIE-MOTHER-R5-RENDERER-AND-STATUS-20261118.md).
+The native connection page first uses a recently verified paired client and
+on-device consent. An optional fixed-script Termux bridge requires a separate
+owner choice and existing permission; dispatch never means connected or approved.
+**Connection Status** separates local diagnostics, remote tunnel, MCP activity,
+owner consent and browser control. Health 200/readiness 503 is an amber degraded
+probe, not a tunnel-down claim; missing evidence stays unknown.
+
+The candidate carries its source, build variant/time, APK digest and signer in
+one manifest. Read-only preflight requires reviewed matching CI, local rollback
+APK bytes equal to the installed APK, signer equality, cold restore and rollback
+records, physical-device acceptance and separate owner install authorization.
+Missing evidence is `BETA_INSTALL_NO_GO`; the current app/data/tunnel are preserved.
+Details: [Wave 1 admission and install gates](qa/r5-wave1-admission-and-install-gates-20261119.md).
+The [earlier mother renderer plan](qa/EF-OPS-KELPIE-MOTHER-R5-RENDERER-AND-STATUS-20261118.md)
+records historical profile 39/18462 and is not the installed-state authority.

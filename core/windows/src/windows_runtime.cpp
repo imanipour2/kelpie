@@ -337,19 +337,41 @@ bool WindowsApp::InitializeDesktopRuntime() {
   return true;
 }
 
+bool WindowsApp::ExternalCefPumpActive() const { return g_cef_pump.running(); }
+
+void WindowsApp::PumpDesktopRuntimeOnce() {
+  if (!desktop_app_) return;
+  CefPumpWorkGuard pump(g_cef_pump, [](CefPumpScheduler::Decision decision) {
+    ApplyPumpDecision(g_cef_pump_window, decision);
+  });
+  if (pump.acquired()) desktop_app_->Tick();
+}
+
 bool WindowsApp::ShutdownDesktopRuntime() {
   // CEF must deliver every OnBeforeClose before CefShutdown. Keep the owner
   // and message pump alive if shutdown is still draining browser callbacks.
+  std::optional<CefPumpWorkGuard> shutdown_pump;
   if (desktop_app_) {
+    TraceShutdown(ShutdownStage::kCookieSync);
     StopCookieSync();
+    TraceShutdown(ShutdownStage::kConnection);
     if(connection_) { connection_->Shutdown(); if(!connection_->Drain())return false; connection_.reset(); }
+    TraceShutdown(ShutdownStage::kAccount);
     if (account_) { account_->Shutdown(); if (!account_->Drain()) return false; }
+    TraceShutdown(ShutdownStage::kLoginWindow);
     if (!CloseAccountLoginWindow()) return false;
+    TraceShutdown(ShutdownStage::kPageAppearance);
     if (!page_color_sampler_.Drain()) return false;
+    TraceShutdown(ShutdownStage::kChromium);
+    shutdown_pump.emplace(g_cef_pump, [](CefPumpScheduler::Decision decision) {
+      ApplyPumpDecision(g_cef_pump_window, decision);
+    });
+    if (!shutdown_pump->acquired()) return false;
     if (!desktop_app_->Stop()) return false;
     account_.reset();
     desktop_app_.reset();
   }
+  TraceShutdown(ShutdownStage::kNativeControl);
   native_control_.Shutdown();
 #if defined(HAS_CEF)
   SetDesktopCefMessagePumpScheduler({});
@@ -359,7 +381,9 @@ bool WindowsApp::ShutdownDesktopRuntime() {
     DestroyWindow(g_cef_pump_window);
     g_cef_pump_window = nullptr;
   }
-  g_cef_pump.Reset();
+  if (shutdown_pump) shutdown_pump->Retire();
+  else g_cef_pump.Reset();
+  TraceShutdown(ShutdownStage::kReadiness);
   profile_session_.ClearReadiness();
   return true;
 }

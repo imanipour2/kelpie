@@ -1,6 +1,9 @@
 package com.kelpie.browser.capture
 
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -40,11 +43,25 @@ class OneShotFrameBufferTest {
         runBlocking {
             val disposed = mutableListOf<Any>()
             val buffer = OneShotFrameBuffer<Any> { disposed += it }
+            assertNull(withTimeoutOrNull(5L) { buffer.awaitTake() })
             buffer.close()
             val late = Any()
             assertFalse(buffer.publish(late))
             assertEquals(listOf(late), disposed)
             assertNull(buffer.awaitTake())
+        }
+
+    @Test fun cancelledWaitingConsumerCannotOrphanTheProducerFrame() =
+        runBlocking {
+            val disposed = mutableListOf<Any>()
+            val buffer = OneShotFrameBuffer<Any> { disposed += it }
+            val consumer = launch(start = CoroutineStart.UNDISPATCHED) { buffer.awaitTake() }
+            consumer.cancel()
+            val frame = Any()
+            assertTrue(buffer.publish(frame))
+            consumer.join()
+            buffer.close()
+            assertEquals(listOf(frame), disposed)
         }
 
     @Test fun failedQaScriptCannotPublishLateFrame() =

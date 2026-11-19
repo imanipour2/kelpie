@@ -41,6 +41,12 @@ class ScreenshotGeometryTest {
     }
 
     @Test
+    fun fullPageCannotExportUnverifiedCanvasTiles() {
+        val error = assertThrows(ScreenshotRefusal::class.java) { refuseUnverifiedFullPageCapture() }
+        assertEquals("UNSUPPORTED", error.code)
+    }
+
+    @Test
     fun bitmapBudgetIncludesRetainedImagesAndRejectsOverflowDimensions() {
         requireScreenshotAllocation(100, 100, 40_000L, 80_000L)
         assertThrows(ScreenshotRefusal::class.java) { requireScreenshotAllocation(100, 100, 40_001L, 80_000L) }

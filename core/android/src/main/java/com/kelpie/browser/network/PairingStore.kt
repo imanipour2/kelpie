@@ -1,6 +1,7 @@
 package com.kelpie.browser.network
 
 import android.content.Context
+import com.kelpie.browser.agent.session.AndroidAgentProcessSession
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
@@ -337,7 +338,10 @@ class PairingStore(
             persistent.removeAll { it.clientId == clientId }
             sessions.removeAll { it.clientId == clientId }
             val changed = sizeBefore != persistent.size + sessions.size
-            if (changed) persistLocked()
+            if (changed) {
+                persistLocked()
+                AndroidAgentProcessSession.revokePrincipal(clientId)
+            }
             return changed
         }
     }
@@ -349,6 +353,16 @@ class PairingStore(
             gcLocked(System.currentTimeMillis())
             sessions.toList()
         }
+
+    /** Current local trust only; native UI must not authorize from the observed-client TTL cache. */
+    fun hasPairedPrincipal(clientId: String): Boolean {
+        val local =
+            synchronized(lock) {
+                gcLocked(System.currentTimeMillis())
+                persistent.any { it.clientId == clientId } || sessions.any { it.clientId == clientId }
+            }
+        return local || trustedComputers.list().any { it.publicKey == clientId }
+    }
 
     fun listDeniedSources(): List<Pair<String, Long>> =
         synchronized(lock) {

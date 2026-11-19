@@ -3,14 +3,17 @@ package com.kelpie.browser.llm
 import com.kelpie.browser.handlers.HandlerContext
 import com.kelpie.browser.handlers.JSEscape
 import com.kelpie.browser.handlers.ScreenshotHandler
+import com.kelpie.browser.handlers.ScreenshotRefusal
 import com.kelpie.browser.handlers.ScreenshotResolution
 import com.kelpie.browser.handlers.annotationActivationScript
 import com.kelpie.browser.handlers.annotationElementsScript
 import com.kelpie.browser.handlers.elementSelectorBuilderScript
 import com.kelpie.browser.handlers.fillAnnotationScript
+import com.kelpie.browser.handlers.observationPrivacyScript
 import com.kelpie.browser.network.Router
 import com.kelpie.browser.network.errorResponse
 import com.kelpie.browser.network.successResponse
+import kotlinx.coroutines.CancellationException
 import java.util.UUID
 
 class LLMHandler(
@@ -20,7 +23,7 @@ class LLMHandler(
         router.register("get-accessibility-tree") { getAccessibilityTree(it) }
         router.register("get-visible-elements") { getVisibleElements(it) }
         router.register("get-page-text") { getPageText(it) }
-        router.register("get-form-state") { getFormState() }
+        router.register("get-form-state") { getFormState(it) }
         router.register("find-element") { findElement(it) }
         router.register("find-button") { findButton(it) }
         router.register("find-link") { findLink(it) }
@@ -32,13 +35,11 @@ class LLMHandler(
 
     private suspend fun getAccessibilityTree(body: Map<String, Any?>): Map<String, Any?> {
         val root = body["root"] as? String ?: "body"
-        val maxDepth = (body["maxDepth"] as? Int) ?: 5
+        val maxDepth = ((body["maxDepth"] as? Int) ?: 5).coerceIn(1, 20)
         val safe = JSEscape.string(root)
         val js =
-            "(function(){function walk(el,d){if(d>$maxDepth)return null;" +
-                "var role=el.getAttribute('role')||el.tagName.toLowerCase();" +
-                "var name=el.getAttribute('aria-label')||" +
-                "el.textContent?.trim().substring(0,50)||'';" +
+            "(function(){" + observationPrivacyScript() + "var budget=0;function walk(el,d){if(d>$maxDepth||++budget>2048||kelpieHiddenElement(el))return null;" +
+                "var role=kelpieSafeRole(el);var name=kelpieSafeName(el).substring(0,50);" +
                 "var node={role:role,name:name};" +
                 "if(el.getAttribute('aria-checked'))" +
                 "node.checked=el.getAttribute('aria-checked')==='true';" +
@@ -54,15 +55,19 @@ class LLMHandler(
             successResponse(PageTextSnapshot.readObject(ctx, body, js))
         } catch (error: com.kelpie.browser.ai.openai.OpenAIException) {
             errorResponse(error.code, error.message)
+        } catch (error: ScreenshotRefusal) {
+            errorResponse(error.code, error.message ?: "Capture refused")
+        } catch (error: CancellationException) {
+            throw error
         } catch (e: Exception) {
-            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
+            errorResponse("EVAL_ERROR", "Could not read or act on the requested document")
         }
     }
 
     private suspend fun getVisibleElements(body: Map<String, Any?>): Map<String, Any?> {
         val interactableOnly = body["interactableOnly"] as? Boolean ?: false
         val js =
-            "(function(){" + elementSelectorBuilderScript() + "var els=document.querySelectorAll('*');var visible=[];" +
+            "(function(){" + elementSelectorBuilderScript() + observationPrivacyScript() + "var els=document.querySelectorAll('*');var visible=[];" +
                 "for(var el of els){var r=el.getBoundingClientRect();" +
                 "if(r.width>0&&r.height>0&&r.top<window.innerHeight&&" +
                 "r.bottom>0&&r.left<window.innerWidth&&r.right>0){" +
@@ -70,19 +75,23 @@ class LLMHandler(
                 "if($interactableOnly&&" +
                 "!['a','button','input','select','textarea'].includes(tag)&&" +
                 "!el.onclick&&el.getAttribute('role')!=='button')continue;" +
-                "var selector=kelpieBuildSelector(el);if(!selector||selector.length>2000)continue;visible.push({selector:selector,tag:tag," +
-                "text:(el.textContent||'').trim().substring(0,100)," +
+                "var selector=kelpieSafeSelector(el);if(!selector||selector.length>2000)continue;visible.push({selector:selector,tag:kelpieSafeTag(el)," +
+                "text:kelpieSafeName(el).substring(0,100)," +
                 "rect:{x:r.x,y:r.y,width:r.width,height:r.height}," +
-                "role:el.getAttribute('role')||undefined," +
+                "role:kelpieSafeRole(el)," +
                 "interactable:['a','button','input','select','textarea']" +
                 ".includes(tag)});if(visible.length>=200)break;}}" +
                 "return{viewport:{width:window.innerWidth," +
                 "height:window.innerHeight,scrollX:window.scrollX," +
                 "scrollY:window.scrollY},elements:visible,count:visible.length};})()"
         return try {
-            successResponse(ctx.evaluateJSReturningJSON(js))
+            successResponse(PageTextSnapshot.readObject(ctx, body, js))
+        } catch (error: ScreenshotRefusal) {
+            errorResponse(error.code, error.message ?: "Capture refused")
+        } catch (error: CancellationException) {
+            throw error
         } catch (e: Exception) {
-            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
+            errorResponse("EVAL_ERROR", "Could not read or act on the requested document")
         }
     }
 
@@ -91,33 +100,39 @@ class LLMHandler(
             successResponse(PageTextSnapshot.read(ctx, body))
         } catch (error: com.kelpie.browser.ai.openai.OpenAIException) {
             errorResponse(error.code, error.message)
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
-            errorResponse("EVAL_ERROR", error.message ?: "Could not read page context")
+            errorResponse("EVAL_ERROR", "Could not read page context")
         }
 
-    private suspend fun getFormState(): Map<String, Any?> {
+    private suspend fun getFormState(body: Map<String, Any?>): Map<String, Any?> {
         val js =
-            "(function(){" + elementSelectorBuilderScript() + "var forms=document.querySelectorAll('form');" +
+            "(function(){" + elementSelectorBuilderScript() + observationPrivacyScript() + "var forms=document.querySelectorAll('form');" +
                 "if(!forms.length)return{forms:[],formCount:0};" +
-                "return{forms:Array.from(forms).map(function(f){" +
+                "return{forms:Array.from(forms).slice(0,100).map(function(f){" +
                 "var fields=Array.from(f.querySelectorAll('input,select,textarea'))" +
-                ".map(function(el){return{name:el.name||'',type:el.type||'text'," +
-                "selector:kelpieBuildSelector(el)," +
-                "value:el.value||'',required:el.required," +
-                "valid:el.checkValidity(),disabled:el.disabled};});" +
+                ".slice(0,200).map(function(el){return{name:kelpieSafeName(el),type:kelpieSafeType(el)," +
+                "selector:kelpieSafeSelector(el)," +
+                "value:'redacted',empty:!el.value,required:el.required," +
+                "valid:el.validity?el.validity.valid:null,disabled:el.disabled};});" +
                 "var btn=f.querySelector('button[type=submit],input[type=submit]');" +
-                "return{selector:kelpieBuildSelector(f)," +
-                "action:f.action||'',method:f.method||'get',fields:fields," +
-                "isValid:f.checkValidity()," +
+                "return{selector:kelpieSafeSelector(f)," +
+                "action:kelpieSafeURL(f.action),method:f.method==='post'?'post':'get',fields:fields," +
+                "isValid:fields.every(function(fl){return fl.valid!==false;})," +
                 "emptyRequired:fields.filter(function(fl){" +
-                "return fl.required&&!fl.value;}).map(function(fl){return fl.name;})," +
-                "submitButton:btn?{selector:kelpieBuildSelector(btn)," +
-                "text:btn.textContent?.trim()||btn.value||''," +
+                "return fl.required&&fl.empty;}).map(function(fl){return fl.name;})," +
+                "submitButton:btn?{selector:kelpieSafeSelector(btn)," +
+                "text:kelpieSafeName(btn)," +
                 "disabled:btn.disabled}:null};}),formCount:forms.length};})()"
         return try {
-            successResponse(ctx.evaluateJSReturningJSON(js))
+            successResponse(PageTextSnapshot.readObject(ctx, body, js))
+        } catch (error: ScreenshotRefusal) {
+            errorResponse(error.code, error.message ?: "Capture refused")
+        } catch (error: CancellationException) {
+            throw error
         } catch (e: Exception) {
-            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
+            errorResponse("EVAL_ERROR", "Could not read or act on the requested document")
         }
     }
 
@@ -157,22 +172,26 @@ class LLMHandler(
     ): Map<String, Any?> {
         val safe = JSEscape.string(text.lowercase())
         val js =
-            "(function(){" + elementSelectorBuilderScript() + "var all=document.querySelectorAll('*'),best=null,bt='';" +
+            "(function(){" + elementSelectorBuilderScript() + observationPrivacyScript() + "var all=document.querySelectorAll('*'),best=null,bt='';" +
                 "for(var el of all){if(!($filter))continue;" +
-                "var t=(el.textContent||'').trim();" +
+                "var t=kelpieSafeName(el);" +
                 "if(!t.toLowerCase().includes('$safe'))continue;" +
                 "var r=el.getBoundingClientRect();" +
                 "if(r.width<=0||r.height<=0)continue;" +
                 "if(!best||t.length<=bt.length){best=el;bt=t;}}" +
                 "if(!best)return{found:false};var b=best.getBoundingClientRect();" +
                 "return{found:true,element:{" +
-                "tag:best.tagName.toLowerCase(),text:bt.substring(0,100)," +
-                "selector:kelpieBuildSelector(best)," +
+                "tag:kelpieSafeTag(best),text:bt.substring(0,100)," +
+                "selector:kelpieSafeSelector(best)," +
                 "rect:{x:b.x,y:b.y,width:b.width,height:b.height}}};})()"
         return try {
             ctx.evaluateJSReturningJSON(js)
+        } catch (error: ScreenshotRefusal) {
+            errorResponse(error.code, error.message ?: "Capture refused")
+        } catch (error: CancellationException) {
+            throw error
         } catch (e: Exception) {
-            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
+            errorResponse("EVAL_ERROR", "Could not read or act on the requested document")
         }
     }
 
@@ -180,19 +199,23 @@ class LLMHandler(
         val label = body["label"] as? String ?: ""
         val safe = JSEscape.string(label.lowercase())
         val js =
-            "(function(){" + elementSelectorBuilderScript() + "var inputs=document.querySelectorAll('input,select,textarea');" +
+            "(function(){" + elementSelectorBuilderScript() + observationPrivacyScript() + "var inputs=document.querySelectorAll('input,select,textarea');" +
                 "for(var el of inputs){" +
                 "var lbl=el.getAttribute('aria-label')||el.placeholder||el.name||'';" +
                 "if(lbl.toLowerCase().includes('$safe')){" +
                 "var r=el.getBoundingClientRect();" +
-                "return{found:true,element:{tag:el.tagName.toLowerCase()," +
-                "type:el.type||'text',name:el.name||''," +
-                "selector:kelpieBuildSelector(el)," +
+                "return{found:true,element:{tag:kelpieSafeTag(el)," +
+                "type:kelpieSafeType(el),name:kelpieSafeName(el)," +
+                "selector:kelpieSafeSelector(el)," +
                 "rect:{x:r.x,y:r.y,width:r.width,height:r.height}}};}}return{found:false};})()"
         return try {
             ctx.evaluateJSReturningJSON(js)
+        } catch (error: ScreenshotRefusal) {
+            errorResponse(error.code, error.message ?: "Capture refused")
+        } catch (error: CancellationException) {
+            throw error
         } catch (e: Exception) {
-            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
+            errorResponse("EVAL_ERROR", "Could not read or act on the requested document")
         }
     }
 
@@ -226,8 +249,12 @@ class LLMHandler(
                         "hint" to "Annotations are valid until the page URL changes. Take a fresh screenshot-annotated if you navigate.",
                     ),
             )
+        } catch (error: ScreenshotRefusal) {
+            errorResponse(error.code, error.message ?: "Capture refused")
+        } catch (error: CancellationException) {
+            throw error
         } catch (e: Exception) {
-            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
+            errorResponse("EVAL_ERROR", "Could not read or act on the requested document")
         }
     }
 
@@ -243,8 +270,12 @@ class LLMHandler(
                 null -> successResponse(mapOf("element" to result))
                 else -> errorResponse("ELEMENT_NOT_FOUND", "Annotation index $index not found", diagnostics)
             }
+        } catch (error: ScreenshotRefusal) {
+            errorResponse(error.code, error.message ?: "Capture refused")
+        } catch (error: CancellationException) {
+            throw error
         } catch (e: Exception) {
-            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
+            errorResponse("EVAL_ERROR", "Could not read or act on the requested document")
         }
     }
 
@@ -258,11 +289,15 @@ class LLMHandler(
             when (result["error"]) {
                 "not_found" -> errorResponse("ELEMENT_NOT_FOUND", "Annotation index $index not found", diagnostics)
                 "not_editable" -> errorResponse("INVALID_PARAMS", "Annotated element $index is not an editable form control", diagnostics)
-                null -> successResponse(mapOf("element" to result, "value" to value))
+                null -> successResponse(mapOf("element" to result, "value" to "redacted"))
                 else -> errorResponse("ELEMENT_NOT_FOUND", "Annotation index $index not found", diagnostics)
             }
+        } catch (error: ScreenshotRefusal) {
+            errorResponse(error.code, error.message ?: "Capture refused")
+        } catch (error: CancellationException) {
+            throw error
         } catch (e: Exception) {
-            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
+            errorResponse("EVAL_ERROR", "Could not read or act on the requested document")
         }
     }
 

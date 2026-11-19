@@ -28,6 +28,10 @@ fun observationPrivacyScript(): String =
         try {
             var url = new URL(raw, location.href);
             url.searchParams.forEach(function(value) { kelpieRememberSecret(value); });
+            url.pathname.split('/').filter(Boolean).forEach(function(value) {
+                kelpieRememberSecret(value);
+                try { kelpieRememberSecret(decodeURIComponent(value)); } catch (_) {}
+            });
             if (url.hash) kelpieRememberSecret(url.hash.substring(1));
             kelpieRememberSecret(url.username);
             kelpieRememberSecret(url.password);
@@ -69,7 +73,7 @@ fun observationPrivacyScript(): String =
         try {
             var url = new URL(String(raw), location.href);
             if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
-            var clean = url.origin + url.pathname;
+            var clean = url.origin;
             return kelpiePrivacyBudgetExceeded ? null : kelpieReplaceSecrets(clean);
         } catch (_) { return null; }
     }
@@ -91,6 +95,16 @@ fun observationPrivacyScript(): String =
                 style.visibility === 'hidden' || style.visibility === 'collapse' || Number(style.opacity) === 0) return true;
         }
         return false;
+    }
+    function kelpieSafeTag(node) {
+        var tag = node && node.tagName ? node.tagName.toLowerCase() : '';
+        var known = 'a abbr address area article aside audio b base bdi bdo blockquote body br button canvas caption cite code '+
+            'col colgroup data datalist dd del details dfn dialog div dl dt em embed fieldset figcaption figure footer form '+
+            'h1 h2 h3 h4 h5 h6 head header hgroup hr html i iframe img input ins kbd label legend li link main map mark menu '+
+            'meta meter nav noscript object ol optgroup option output p picture pre progress q rp rt ruby s samp script search '+
+            'section select slot small source span strong style sub summary sup table tbody td template textarea tfoot th thead '+
+            'time title tr track u ul var video wbr svg path g rect circle ellipse line polyline polygon text tspan defs symbol use';
+        return known.split(' ').indexOf(tag) >= 0 ? tag : 'generic';
     }
     function kelpieSafeType(node) {
         var type = String(node && node.type || '').toLowerCase();
@@ -119,6 +133,13 @@ fun observationPrivacyScript(): String =
         var form = owner.form || owner.closest('form');
         if (owner.tagName === 'INPUT' && ['submit','image'].indexOf(type) >= 0) return true;
         if (owner.tagName === 'BUTTON' && type === 'submit' && form) return true;
+        var anchor = owner.closest('a[href]');
+        if (anchor && (!/^https?:$/i.test(anchor.protocol) || anchor.username || anchor.password)) return true;
+        if (form && Array.from(form.elements).some(function(field) {
+            return field.matches('input[type=password],[autocomplete="one-time-code" i],[autocomplete^="cc-" i]');
+        })) return true;
+        if (form && String(form.method || 'get').toLowerCase() !== 'get' &&
+            owner.matches('button,[role=button],input[type=submit]')) return true;
         var root = owner.getRootNode();
         var labels = Array.from(owner.labels || []).map(function(label) { return label.textContent || ''; }).join(' ');
         var labelled = (owner.getAttribute('aria-labelledby') || '').split(/\s+/).map(function(id) {
@@ -132,7 +153,7 @@ fun observationPrivacyScript(): String =
         }
         // Match the canonical snapshot sensitivity vocabulary; raw hints are never returned.
         var sensitiveCredentials = /password|one-time|otp|cc-|credit.?card|card.?number|cvv|cvc|token|cookie|secret|pin(?:$|[\s_-])|captcha|رمز|گذرواژه|کارت|امنیتی/i;
-        var sensitiveOperations = /checkout|payment|transfer|delete|erase|remove|publish|sign.?in|log.?in|پرداخت|انتقال|حذف|انتشار|ورود/i;
+        var sensitiveOperations = /checkout|payment|transfer|bank|iban|delete|erase|remove|publish|sign.?in|log.?in|پرداخت|بانک|درگاه|شبا|انتقال|حذف|انتشار|ورود/i;
         var containsPrivateValue = kelpiePrivateNodes.some(function(field) {
             if (!kelpieMayCarryPrivateValue(field)) return false;
             var value = field.value || (field.isContentEditable ? field.textContent : '');
@@ -145,7 +166,7 @@ fun observationPrivacyScript(): String =
             /passwd|pay now|purchase|auth(?:entication|orization)?|کپچا/i.test(hints);
     }
     function kelpieSafeClone(node) {
-        if (!node || node.nodeType !== 1 || kelpiePrivateElement(node) || kelpieHiddenElement(node)) return null;
+        if (!node || node.nodeType !== 1 || kelpiePrivateElement(node) || kelpieHiddenElement(node) || kelpieSafeTag(node) === 'generic') return null;
         var copy = node.cloneNode(true);
         var originals = [node].concat(Array.from(node.querySelectorAll('*')));
         var copies = [copy].concat(Array.from(copy.querySelectorAll('*')));
@@ -153,7 +174,7 @@ fun observationPrivacyScript(): String =
         for (var i = originals.length - 1; i >= 0; i--) {
             var original = originals[i], target = copies[i];
             var style = getComputedStyle(original);
-            if (kelpiePrivateElement(original) || /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|META|LINK|IFRAME|OBJECT|EMBED)$/.test(original.tagName) ||
+            if (kelpiePrivateElement(original) || kelpieSafeTag(original) === 'generic' || /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|META|LINK|IFRAME|OBJECT|EMBED)$/.test(original.tagName) ||
                 original.hidden || original.getAttribute('aria-hidden') === 'true' || style.display === 'none' ||
                 style.visibility === 'hidden' || style.visibility === 'collapse' || Number(style.opacity) === 0) {
                 if (i === 0) return null;

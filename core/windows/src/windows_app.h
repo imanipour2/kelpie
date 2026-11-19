@@ -22,6 +22,7 @@
 #include "kelpie/network_traffic_store.h"
 
 #include "close_lifecycle.h"
+#include "shutdown_trace.h"
 #include "device_info_windows.h"
 #include "profile_session.h"
 #include "native_window_control.h"
@@ -104,6 +105,7 @@ class WindowsApp final : public ShellDelegate, public BrowserStateObserver {
   void OnActivateTabRequested(std::string id, std::uint64_t generation) override;
   void OnCloseTabRequested(std::string id, std::uint64_t generation) override;
   void OnWindowCloseRequested() override;
+  void OnWindowCloseRetry() override;
 
   void OnBrowserStateChanged(const BrowserState& state) override;
 
@@ -127,6 +129,10 @@ class WindowsApp final : public ShellDelegate, public BrowserStateObserver {
   void PersistForClose();
   bool TryCompleteClose();
   void ArmCloseRetry();
+  void TraceShutdown(ShutdownStage stage);
+  void TraceShutdownProgress(ShutdownStage stage);
+  bool ExternalCefPumpActive() const;
+  void PumpDesktopRuntimeOnce();
   bool CreateShell(int show_command);
   std::wstring AppTitle() const;
   // Peer-to-peer cookie sync (windows_cookie_sync.cpp); standalone only.
@@ -141,6 +147,10 @@ class WindowsApp final : public ShellDelegate, public BrowserStateObserver {
   std::string connection_installation_id_;
   std::atomic<bool> running_{true};
   CloseLifecycle close_lifecycle_;
+  ShutdownTrace shutdown_trace_;
+  std::uint64_t shutdown_owner_ticks_ = 0;
+  std::uint64_t shutdown_close_polls_ = 0;
+  unsigned direct_cef_pump_depth_ = 0;
 
   DeviceInfoWindows device_info_provider_;
   BrowserState browser_state_;

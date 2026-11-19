@@ -9,6 +9,8 @@ import android.os.PowerManager
 import androidx.activity.ComponentActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
+import com.kelpie.browser.network.NetworkServiceState
+import com.kelpie.browser.network.R5AgentControlPlaneRoutes
 import com.kelpie.browser.network.Router
 import com.kelpie.browser.network.errorResponse
 import com.kelpie.browser.network.successResponse
@@ -68,6 +70,7 @@ class AgentSessionCoordinator(
                 verifiedClientId()?.takeIf(R5AgentPrincipalPolicy::eligible)
                     ?: return@register errorResponse("PERMISSION_REQUIRED", "Unique authenticated paired client required")
             withContext(Dispatchers.Main.immediate) {
+                R5AgentControlPlaneRoutes.rejectionIfRevoked()?.let { return@withContext it }
                 syncLock()
                 if (closed ||
                     deviceLocked() ||
@@ -94,6 +97,7 @@ class AgentSessionCoordinator(
                 verifiedClientId()?.takeIf(R5AgentPrincipalPolicy::eligible)
                     ?: return@register errorResponse("PERMISSION_REQUIRED", "Unique authenticated paired client required")
             withContext(Dispatchers.Main.immediate) {
+                R5AgentControlPlaneRoutes.rejectionIfRevoked()?.let { return@withContext it }
                 syncLock()
                 when (val state = AndroidAgentProcessSession.snapshot()) {
                     SessionConsentCore.State.Off -> successResponse(mapOf("status" to "OFF"))
@@ -126,6 +130,7 @@ class AgentSessionCoordinator(
                 verifiedClientId()?.takeIf(R5AgentPrincipalPolicy::eligible)
                     ?: return@register errorResponse("PERMISSION_REQUIRED", "Unique authenticated paired client required")
             withContext(Dispatchers.Main.immediate) {
+                R5AgentControlPlaneRoutes.rejectionIfRevoked()?.let { return@withContext it }
                 val current = AndroidAgentProcessSession.snapshot()
                 val owned =
                     when (current) {
@@ -158,7 +163,13 @@ class AgentSessionCoordinator(
             return false
         }
         val principal = R5ObservedAgentClients.registry.soleRecentPrincipal() ?: return false
-        return AndroidAgentProcessSession.request(principal) != null
+        if (!pairedPrincipalCurrent(principal)) return false
+        val requested = AndroidAgentProcessSession.request(principal) != null
+        if (!pairedPrincipalCurrent(principal)) {
+            AndroidAgentProcessSession.revokePrincipal(principal)
+            return false
+        }
+        return requested
     }
 
     /**
@@ -182,7 +193,7 @@ class AgentSessionCoordinator(
                 deviceUnlocked = !deviceLocked(),
                 stopNotificationEnabled = AgentSessionNotification.canNotify(activity),
             )
-        if (closed || !permitted) return false
+        if (closed || !permitted || !pairedPrincipalCurrent(expectedPrincipal)) return false
 
         val pending = AndroidAgentProcessSession.request(expectedPrincipal) ?: return false
         // No second confirmation dialog: the affirmative tap that invoked
@@ -197,6 +208,8 @@ class AgentSessionCoordinator(
 
     /** Called only from an affirmative native UI gesture, never HTTP. */
     fun approveFromNativeUi(promptId: String): Boolean {
+        val pending = AndroidAgentProcessSession.snapshot() as? SessionConsentCore.State.Pending ?: return false
+        if (pending.promptId != promptId || !pairedPrincipalCurrent(pending.principalId)) return false
         // Compose AlertDialog is a separate focused window. Requiring the
         // Activity's *main* window focus here rejects a genuine dialog tap.
         // This method is callable only by native onClick, never over HTTP.
@@ -213,12 +226,18 @@ class AgentSessionCoordinator(
         val granted =
             AndroidAgentProcessSession.approveFromNativeUi(promptId, deviceUnlocked = true)
                 ?: return false
+        if (!pairedPrincipalCurrent(granted.principalId)) {
+            AndroidAgentProcessSession.revokePrincipal(granted.principalId)
+            return false
+        }
         if (!AgentSessionNotification.show(activity, fullAgentQa)) {
             AndroidAgentProcessSession.stop()
             return false
         }
         return granted.generation.isNotBlank()
     }
+
+    private fun pairedPrincipalCurrent(principal: String): Boolean = NetworkServiceState.snapshot()?.httpServer?.hasPairedPrincipal(principal) == true
 
     /** Only the UI timer calls this; an old prompt ID cannot revoke a new request. */
     fun expireNativePromptIfDue(promptId: String): Boolean = AndroidAgentProcessSession.expirePendingIfDue(promptId)

@@ -349,6 +349,11 @@ bool DesktopHttpServer::IsDrained() const {
   return !impl_->running || impl_->IsDrained();
 }
 
+DesktopHttpServer::DrainState DesktopHttpServer::GetDrainState() const {
+  std::lock_guard<std::mutex> lock(impl_->admission_mutex);
+  return {impl_->accepting_requests, impl_->active_requests, impl_->server_thread_finished.load(), CPPHTTPLIB_VERSION};
+}
+
 void DesktopHttpServer::Stop() {
   if (!impl_->running) return;
   impl_->BeginDrain();

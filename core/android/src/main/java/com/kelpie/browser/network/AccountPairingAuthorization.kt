@@ -12,6 +12,7 @@ class AccountPairingAuthorization(
     private val session: suspend () -> String? = UOALocalPairing::session,
     private val verify: suspend (String, String, String, String) -> Long? = UOALocalPairing::verify,
     private val r5PrivateMcpQa: Boolean = false,
+    private val r5PrivateMcpWire: Boolean = r5PrivateMcpQa,
 ) {
     companion object {
         private fun parse(body: String): JsonObject? = runCatching { Json.parseToJsonElement(body) as? JsonObject }.getOrNull()
@@ -59,7 +60,7 @@ class AccountPairingAuthorization(
     }
 
     suspend fun evaluate(request: ParsedRequest): AuthDecision {
-        val middleware = AuthMiddleware(store, r5PrivateMcpQa)
+        val middleware = AuthMiddleware(store, r5PrivateMcpQa, r5PrivateMcpWire)
         val decision = middleware.evaluate(request)
         if (decision !is AuthDecision.Reject || decision.status != 401) return decision
         val header = request.headers["authorization"]?.firstOrNull()?.takeIf { it.lowercase().startsWith("bearer ") } ?: return decision

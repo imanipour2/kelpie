@@ -1,5 +1,7 @@
 package com.kelpie.browser.network
 
+import com.kelpie.browser.agent.session.R5AgentPrincipalPolicy
+
 /**
  * Parsed view of an HTTP request — enough for the auth middleware to apply
  * deny-by-default + CSRF policy before the request reaches the router.
@@ -39,6 +41,7 @@ sealed interface AuthDecision {
 class AuthMiddleware(
     private val store: PairingStore,
     private val r5PrivateMcpQa: Boolean = false,
+    private val r5PrivateMcpWire: Boolean = r5PrivateMcpQa,
 ) {
     companion object {
         val UNAUTH_ALLOWLIST: Set<String> =
@@ -72,11 +75,20 @@ class AuthMiddleware(
         val computerClient = trustedClient.takeIf { computerRejection == null }
         // R5 agent commands must never inherit a broad "localhost" principal.
         // Android loopback ports can be reached by other apps on the same device.
-        // Keep local metadata discovery available while preferring a uniquely
-        // paired bearer identity for this private QA surface.
+        // Public discovery was handled by the unauthenticated allowlist above.
+        // Every protected R5 path needs a unique verified principal, including
+        // metadata. A missing or invalid bearer must not fall back to localhost.
         val privateAgentPath =
             r5PrivateMcpQa &&
-                (req.path in setOf("/mcp", "/v1/mcp") || req.path.startsWith("/v1/agent-"))
+                (req.path == "/mcp" || req.path.startsWith("/v1/"))
+        if (privateAgentPath &&
+            (
+                req.headers.containsKey("origin") ||
+                    req.headers["sec-fetch-site"]?.let { it != listOf("none") && it != listOf("same-origin") } == true
+            )
+        ) {
+            return AuthDecision.Reject(403, "FORBIDDEN", "Browser requests are not permitted on R5 control")
+        }
         val explicitAgentClient =
             if (privateAgentPath && computerClient == "localhost") {
                 extractBearer(req.headers)?.let(store::validateBearer) ?: verifiedAccountClientId
@@ -89,11 +101,14 @@ class AuthMiddleware(
                 store.validateBearer(bearer) ?: verifiedAccountClientId
                     ?: return AuthDecision.Reject(401, "UNAUTHORIZED", "Invalid bearer token")
             }
+        if (privateAgentPath && !R5AgentPrincipalPolicy.eligible(clientId)) {
+            return AuthDecision.Reject(401, "UNAUTHORIZED", "Unique authenticated paired client required")
+        }
         if (req.path == "/mcp" || req.path == "/v1/mcp") {
             if (req.headers.containsKey("origin")) return AuthDecision.Reject(403, "FORBIDDEN", "Browser Origin is not permitted on MCP")
             val versions = req.headers["mcp-protocol-version"]
             val supportedVersions =
-                if (r5PrivateMcpQa && req.path == "/mcp") {
+                if (r5PrivateMcpWire && req.path == "/mcp") {
                     R5McpWireAdmission.SUPPORTED.toSet()
                 } else {
                     setOf("2025-03-26", "2025-06-18")

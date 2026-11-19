@@ -11,7 +11,7 @@ class TunnelReadinessSnapshotTest {
         val state = TunnelReadinessSnapshot(healthStatus = null, readyStatus = null)
         assertFalse(state.healthOk)
         assertFalse(state.readyOk)
-        assertEquals("Diagnostics unavailable", tunnelReadyLabel(state.healthStatus, state.readyStatus))
+        assertEquals("Probe unavailable; remote state unknown", tunnelReadyLabel(state.healthStatus, state.readyStatus))
     }
 
     @Test
@@ -19,19 +19,21 @@ class TunnelReadinessSnapshotTest {
         val state = TunnelReadinessSnapshot(healthStatus = 200, readyStatus = 503)
         assertTrue(state.healthOk)
         assertFalse(state.readyOk)
-        assertEquals("Running; not ready (HTTP 503)", tunnelReadyLabel(state.healthStatus, state.readyStatus))
+        val label = tunnelReadyLabel(state.healthStatus, state.readyStatus)
+        assertEquals("Probe degraded (ready HTTP 503)", label)
+        assertFalse(label.contains("down", ignoreCase = true))
     }
 
     @Test
     fun bothChecksOnlyProveLocalReadiness() {
         val state = TunnelReadinessSnapshot(healthStatus = 200, readyStatus = 200)
         assertTrue(state.readyOk)
-        assertEquals("Ready locally", tunnelReadyLabel(state.healthStatus, state.readyStatus))
+        assertEquals("Probe ready locally", tunnelReadyLabel(state.healthStatus, state.readyStatus))
     }
 
     @Test
     fun healthSuccessAndMissingReadyIsNotReportedAsReady() {
-        assertEquals("Running; readiness unknown", tunnelReadyLabel(200, null))
+        assertEquals("Probe running; readiness unknown", tunnelReadyLabel(200, null))
     }
 
     @Test
@@ -50,6 +52,6 @@ class TunnelReadinessSnapshotTest {
     fun healthFailureOverridesReadinessStatus() {
         val state = TunnelReadinessSnapshot(healthStatus = 500, readyStatus = 200)
         assertFalse(state.readyOk)
-        assertEquals("Diagnostics unhealthy (HTTP 500)", tunnelReadyLabel(state.healthStatus, state.readyStatus))
+        assertEquals("Probe unhealthy (HTTP 500); remote state unknown", tunnelReadyLabel(state.healthStatus, state.readyStatus))
     }
 }

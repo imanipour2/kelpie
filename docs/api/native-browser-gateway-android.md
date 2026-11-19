@@ -171,3 +171,31 @@ extension discovery, renderer timeout retirement, and the actual OpenAI agent
 catalog/admission/uncertainty stop using a local mock endpoint. It also runs the
 standard MCP SDK initialize/list/call journey from the CLI's installed dependency.
 Bearer contents stay in memory and stdin; no persistent pairing is created.
+
+## R5 MotherNext Wave 1 QA restrictions
+
+The MotherNext QA profile preserves standard mother MCP version negotiation
+(`2025-03-26` / `2025-06-18`) on `/mcp` and `/v1/mcp`; the private bridge retains
+its own versions. Unique paired-client authentication applies to every protected
+`/v1/*` route and `/mcp`. Missing/invalid bearers cannot fall back to localhost,
+and browser Origin/cross-site requests remain refused.
+
+Only exact `initialize`, `notifications/initialized`, `ping`, `tools/list` and
+native consent request/status/stop are exempt from the native owner grant.
+Their handlers do not obtain a browser lease. All browser operations, including
+the canonical fixed reader, revalidate the admitted grant and paired credentials
+before execution and result delivery. Foreground does not bypass this policy.
+STOP/reapprove and lock/resume change the original authority and suppress stale
+results. Unpair also cancels that principal's pending or active native session.
+
+The R5 allowlist excludes arbitrary evaluation, cookies, storage, raw network
+exports, clipboard/script helpers and unbound selector/index actions. Extension
+discovery and native authorization enforce the same boundary; an extension
+cannot acquire canonical observation-bound click/type authority by using an
+internal gateway flag. Sanitized observations and verified canonical actions
+remain available. Real-page image export remains fail-closed pending verified
+pixel redaction. Correlated safe errors never expose thrown messages or claim
+that a consent request was accepted when its result is uncertain.
+
+See [the Wave 1 gate record](../qa/r5-wave1-admission-and-install-gates-20261119.md)
+for recovery evidence, the physical acceptance boundary and test locations.

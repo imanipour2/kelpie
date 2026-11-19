@@ -56,6 +56,14 @@ internal object AndroidAgentProcessSession {
         publish()
     }
 
+    /** Pairing revocation cannot leave a cached one-tap principal or native grant. */
+    @Synchronized
+    fun revokePrincipal(principalId: String) {
+        core.revokePrincipal(principalId)
+        R5ObservedAgentClients.registry.forget(principalId)
+        publish()
+    }
+
     @Synchronized
     fun setDeviceLocked(locked: Boolean) {
         core.setDeviceLocked(locked)

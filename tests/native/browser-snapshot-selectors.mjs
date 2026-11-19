@@ -13,10 +13,15 @@ const builder = execFileSync(fixture, ["--builder"], { encoding: "utf8" });
 const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage();
+  await page.route("https://privacy.fixture.invalid/**", route => route.fulfill({contentType:"text/html",body:"<html><body></body></html>"}));
+  await page.goto("https://privacy.fixture.invalid/reset/PATH_SECRET");
   await page.setContent(`<html><body>
     <section id="duplicate-parent"><button id="duplicate">First action</button></section>
     <section id="duplicate-parent"><button id="duplicate">Second action</button></section>
     <button id="odd:escaped.id">Escaped action</button>
+    <account-secret-123 role="button">Unknown wrapper</account-secret-123>
+    <a href="/reset/LINK_PATH_SECRET?token=LINK_QUERY_SECRET">Public link</a>
+    <p>PATH_SECRET LINK_PATH_SECRET LINK_QUERY_SECRET</p>
     <input value="INPUT_SECRET"><textarea>TEXTAREA_SECRET</textarea>
     <div contenteditable="true">EDITABLE_SECRET</div>
     <button id="DOM_IDENTIFIER_FIXTURE" name="DOM_NAME_FIXTURE" aria-label="Public label">Public action</button>
@@ -30,7 +35,7 @@ try {
   assert.ok(roots.length >= 8);
   assert.ok(roots.every(({ selector, exact }) => selector && selector.length <= 2000 && exact));
   const snapshot = await page.evaluate(expression);
-  for (const secret of ["INPUT_SECRET", "TEXTAREA_SECRET", "EDITABLE_SECRET", "DOM_IDENTIFIER_FIXTURE", "DOM_NAME_FIXTURE"]) {
+  for (const secret of ["INPUT_SECRET", "TEXTAREA_SECRET", "EDITABLE_SECRET", "DOM_IDENTIFIER_FIXTURE", "DOM_NAME_FIXTURE", "account-secret-123", "PATH_SECRET", "LINK_PATH_SECRET", "LINK_QUERY_SECRET"]) {
     assert.ok(!JSON.stringify(snapshot).includes(secret));
   }
   for (const label of ["First action", "Second action", "Escaped action", "Public label"]) {
@@ -47,6 +52,7 @@ try {
     assert.equal(element.sensitivity, "PUBLIC");
     assert.ok(!element.selector.includes("#") && !element.selector.includes("[name="));
   }
+  assert.equal(snapshot.url, "https://privacy.fixture.invalid");
   assert.equal(snapshot.coverage.observed, snapshot.elements.length);
   assert.equal(snapshot.coverage.status, "UNKNOWN");
   assert.equal(snapshot.screenshotBlocked, true);

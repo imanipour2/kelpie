@@ -23,6 +23,7 @@ internal class R5VerifiedFrameEncoder(
     fun encode(
         frame: Bitmap,
         capture: R5VisionCaptureRequest,
+        privacy: CapturePrivacyEvidence,
     ): Map<String, Any>? {
         val manager = activity.getSystemService(ActivityManager::class.java)
         val power = activity.getSystemService(PowerManager::class.java)
@@ -97,17 +98,6 @@ internal class R5VerifiedFrameEncoder(
             val result =
                 mutableMapOf<String, Any>(
                     "image" to Base64.getEncoder().encodeToString(bytes.toByteArray()),
-                    "width" to output.width,
-                    "height" to output.height,
-                    "format" to "png",
-                    "coordinateSpace" to
-                        if (capture.quality == R5VisionCaptureRequest.Quality.LEGACY) {
-                            "viewport-css-pixels"
-                        } else if (output === frame) {
-                            "viewport-css-pixels"
-                        } else {
-                            "scaled-image-pixels"
-                        },
                 )
             if (capture.quality != R5VisionCaptureRequest.Quality.LEGACY) {
                 result["qualityUsed"] = capture.quality.name.lowercase()
@@ -118,6 +108,8 @@ internal class R5VerifiedFrameEncoder(
                 result["imageToSourceScaleX"] = frame.width.toDouble() / output.width
                 result["imageToSourceScaleY"] = frame.height.toDouble() / output.height
             }
+            result.putAll(privacy.imageMetadata(output.width, output.height))
+            result.putAll(privacy.metadata())
             result
         } catch (_: Exception) {
             // Includes the bounded-stream overflow exception. Never log pixels.

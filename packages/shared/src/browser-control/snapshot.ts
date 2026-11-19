@@ -41,12 +41,26 @@ export function collectBrowserSnapshot(options: {
     const normalized = value.replace(/\s+/g, " ").trim();
     if (normalized) privateValues.add(normalized);
   };
+  const privateUrl = (raw: string): void => {
+    try {
+      const parsed = new URL(raw, location.href);
+      const pathValues = ["http:", "https:"].includes(parsed.protocol) ? parsed.pathname.split("/").filter(Boolean) : [];
+      for (const value of [parsed.username, parsed.password, parsed.hash.slice(1),
+        ...pathValues, ...Array.from(parsed.searchParams.values())]) {
+        privateValue(value, "PRIVATE_URL_DATA");
+        try { privateValue(decodeURIComponent(value), "PRIVATE_URL_DATA"); } catch { /* Encoded data stays private. */ }
+      }
+    } catch { /* Invalid and opaque URLs export no data. */ }
+  };
   // Values are used locally only to remove reflected copies from public labels.
   // They are never copied into targets, metadata, diagnostics or the return value.
   for (const root of roots) {
     for (const el of root.querySelectorAll("*")) {
       if (++scanned > 5000) { privacyUnknown = true; reasons.add("PRIVACY_SCAN_LIMIT"); break; }
       const tag = el.tagName.toLowerCase();
+      for (const name of ["href", "src", "action", "formaction", "poster"]) {
+        const raw = el.getAttribute(name); if (raw) privateUrl(raw);
+      }
       if (["iframe", "frame", "object", "embed", "canvas", "video"].includes(tag)) reasons.add("OPAQUE_SURFACE");
       if (tag.includes("-")) reasons.add("CUSTOM_ELEMENT_OPAQUE");
       if (el.shadowRoot) { reasons.add("SHADOW_SURFACE"); roots.push(el.shadowRoot); }
@@ -72,20 +86,19 @@ export function collectBrowserSnapshot(options: {
     if (privacyUnknown) return "redacted";
     let value = text;
     for (const secret of privateValues) value = secret.length > 2 ? value.split(secret).join("redacted") : value.replace(shortValue(secret), "$1redacted");
-    value = value.replace(/\s+/g, " ").trim();
+    value = value.replace(/https?:\/\/[^\s<>"']+/gi, (url) => {
+      try { return new URL(url).origin; } catch { return "redacted"; }
+    }).replace(/\b(?:bearer\s+|(?:password|passwd|token|cookie|secret|otp)\s*[:=]\s*)[^\s,;]+/gi, "redacted")
+      .replace(/\b[0-9][0-9 -]{11,22}[0-9]\b/g, "redacted").replace(/\s+/g, " ").trim();
     if (value.length > limit) budget.truncated = true;
     return value.slice(0, limit);
   };
   let safeUrl = "redacted";
   try {
     const parsed = new URL(location.href);
-    for (const value of [parsed.username, parsed.password, parsed.hash.slice(1), ...Array.from(parsed.searchParams.values())]) {
-      privateValue(value, "PRIVATE_URL_DATA");
-      try { privateValue(decodeURIComponent(value), "PRIVATE_URL_DATA"); } catch { /* Encoded data stays private. */ }
-    }
-    if (parsed.search || parsed.hash || parsed.username || parsed.password) reasons.add("PRIVATE_URL_DATA");
-    // Query, fragment and credentials never belong in an observation.
-    safeUrl = ["http:", "https:"].includes(parsed.protocol) ? parsed.origin + parsed.pathname
+    privateUrl(location.href);
+    // URL paths can contain reset/session tokens; only the origin is public metadata.
+    safeUrl = ["http:", "https:"].includes(parsed.protocol) ? parsed.origin
       : parsed.protocol === "about:" ? "about:blank" : parsed.protocol;
   } catch { /* Invalid and opaque URLs remain redacted. */ }
   const url = clean(safeUrl, Math.min(4096, Math.floor(maxChars / 2)));
@@ -119,6 +132,10 @@ export function collectBrowserSnapshot(options: {
       if (context instanceof HTMLLabelElement && context.control) contexts.add(context.control);
       const form = (context instanceof HTMLInputElement || context instanceof HTMLTextAreaElement || context instanceof HTMLSelectElement || context instanceof HTMLButtonElement)
         ? context.form : context.closest("form");
+      const anchor = context.closest("a[href]");
+      if (anchor instanceof HTMLAnchorElement && (!/^https?:$/i.test(anchor.protocol) || anchor.username || anchor.password)) return true;
+      if (form && Array.from(form.elements).some(field => field.matches('input[type=password],[autocomplete="one-time-code" i],[autocomplete^="cc-" i]'))) return true;
+      if (form && form.method.toLowerCase() !== "get" && context.matches('button,[role="button"],input[type=submit]')) return true;
       const root = context.getRootNode();
       const labelled = (context.getAttribute("aria-labelledby")?.split(/\s+/) ?? []).map((id) => root instanceof Document || root instanceof ShadowRoot ? root.getElementById(id)?.textContent ?? "" : "").join(" ");
       const labels = context instanceof HTMLInputElement || context instanceof HTMLTextAreaElement || context instanceof HTMLSelectElement || context instanceof HTMLButtonElement

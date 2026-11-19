@@ -1,0 +1,72 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# ENERFOAM Kelpie S24 private QA — fixed owner-request bridge.
+# Executed ONLY from an explicit native Kelpie button via Termux RUN_COMMAND.
+# Never prints, changes, copies or stores the bearer value. Never grants approval.
+set -eu
+
+if ! command -v proot-distro >/dev/null 2>&1; then
+    echo "TERMUX_PROOT_UNAVAILABLE"
+    exit 10
+fi
+
+exec proot-distro login ubuntu -- python3 -c '
+import json
+import pathlib
+import re
+import urllib.error
+import urllib.request
+
+owner_auth = pathlib.Path(
+    "/root/.local/share/kelpie-r5-owner/authorization-header.txt"
+)
+if not owner_auth.is_file():
+    print("AUTH_FILE_UNAVAILABLE")
+    raise SystemExit(11)
+
+try:
+    auth = owner_auth.read_text(encoding="utf-8").strip()
+except Exception:
+    print("AUTH_READ_FAILED")
+    raise SystemExit(11)
+
+if not auth.lower().startswith("bearer ") or len(auth) < 12:
+    print("AUTH_FORMAT_INVALID")
+    raise SystemExit(11)
+
+request = urllib.request.Request(
+    "http://127.0.0.1:18463/v1/agent-session-request",
+    data=b"{}",
+    headers={
+        "Authorization": auth,
+        "Content-Type": "application/json",
+    },
+    method="POST",
+)
+try:
+    with urllib.request.urlopen(request, timeout=10) as response:
+        code, body = response.status, response.read(8192)
+except urllib.error.HTTPError as error:
+    code, body = error.code, error.read(8192)
+except Exception:
+    print("REQUEST_RESULT_UNKNOWN_NETWORK_OR_TIMEOUT")
+    raise SystemExit(12)
+
+try:
+    value = json.loads(body)
+except Exception:
+    print("REQUEST_RESULT_UNKNOWN_HTTP_" + str(code))
+    raise SystemExit(13)
+
+native_status = value.get("status") if isinstance(value, dict) else None
+if code == 200 and native_status == "PENDING_NATIVE_APPROVAL":
+    print("NATIVE_APPROVAL_PENDING")
+    raise SystemExit(0)
+
+error = value.get("error") if isinstance(value, dict) else None
+error_code = error.get("code") if isinstance(error, dict) else None
+if isinstance(error_code, str) and re.fullmatch(r"[A-Z0-9_]{1,48}", error_code):
+    print("REQUEST_HTTP_" + str(code) + "_ERROR_" + error_code)
+else:
+    print("REQUEST_RESULT_UNKNOWN_HTTP_" + str(code))
+raise SystemExit(14)
+'

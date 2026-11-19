@@ -3,9 +3,11 @@ package com.kelpie.browser.browser
 import android.annotation.SuppressLint
 import android.content.Context
 import android.view.View
+import android.view.ViewGroup
 import android.webkit.WebView
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
+import com.kelpie.browser.capture.PrivateCaptureCleanupSequence
 import com.kelpie.browser.handlers.HandlerContext
 import com.kelpie.browser.handlers.WebSocketHandler
 import com.kelpie.browser.kelpieActivity
@@ -20,6 +22,7 @@ class TabStore(
 ) {
     private val previewSampler = context.kelpieActivity()?.window?.let(::ChromeSampler)
     private val previewTabs = mutableListOf<String>()
+    private val retiredRenderers = java.util.WeakHashMap<WebView, Boolean>()
 
     fun captureActivePreview() {
         val tab = activeTab ?: return
@@ -159,6 +162,66 @@ class TabStore(
     }
 
     /**
+     * Android forbids reusing a WebView after renderer death. Retire the exact
+     * instance, revoke outstanding native work, and recover a blank native tab.
+     * History remains in HistoryStore; recovery never silently reloads an account.
+     */
+    internal fun retireDeadRenderer(dead: WebView): Boolean {
+        if (retiredRenderers.put(dead, true) != null) return true
+        val lost = _tabs.value.firstOrNull { it.webView === dead }
+        val lostWasActive = lost != null && activeTab === lost
+        val cleanup = PrivateCaptureCleanupSequence()
+        // Private owner must clear its witnesses BEFORE STOP/cancellation can
+        // resume a capture finally block against this unusable shared renderer.
+        cleanup.release { handlerContext.nativeRendererGone?.invoke(dead) }
+        cleanup.release {
+            com.kelpie.browser.agent.session.AndroidAgentProcessSession
+                .stop()
+        }
+        cleanup.release { handlerContext.browserRetirement.retireTarget(dead) }
+        cleanup.release { lost?.let { handlerContext.browserDocumentChanged?.invoke(it.id) } }
+        handlerContext.retireVisibleWebView(dead)
+        cleanup.release { (dead.parent as? ViewGroup)?.removeView(dead) }
+        // Do not call stopLoading/evaluateJavascript/removeJavascriptInterface on
+        // the unusable renderer. destroy() follows native hierarchy removal.
+        cleanup.release { dead.destroy() }
+        if (lost == null) return true
+        lost.remoteNavigationLease = null
+        previewTabs.remove(lost.id)
+        lost.preview = null
+        val replacement =
+            runCatching {
+                val profile = lost.partition?.let { PartitionRegistry.resolve(it, restoring = true) }
+                createTab(partition = lost.partition, profile = profile, name = lost.name, id = lost.id)
+            }.getOrNull()
+        _tabs.value =
+            _tabs.value.flatMap { tab ->
+                if (tab !== lost) listOf(tab) else listOfNotNull(replacement)
+            }
+        // Resource exhaustion can also prevent creating a replacement WebView.
+        // An empty native tab list is safer than propagating from this callback
+        // or retaining a renderer-dead instance as the selected tab.
+        if (_tabs.value.isEmpty()) _tabs.value = listOfNotNull(runCatching { createTab() }.getOrNull())
+        if (_tabs.value.none { it.id == _activeTabId.value }) _activeTabId.value = _tabs.value.firstOrNull()?.id
+        if (lostWasActive) {
+            cleanup.release { handlerContext.dialogState.dismissPending() }
+            browserState.updateUrl("")
+            browserState.updateTitle("")
+            browserState.updateLoading(false)
+            browserState.updateCanGoBack(false)
+            browserState.updateCanGoForward(false)
+        }
+        handlerContext.lastNavigationError =
+            if (_tabs.value.isEmpty()) {
+                "Renderer terminated; native tab recovery requires the owner to reopen Kelpie"
+            } else {
+                "Renderer terminated; a new empty tab requires owner navigation"
+            }
+        cleanup.release { persistSession() }
+        return true
+    }
+
+    /**
      * Destroys every tab's WebView. Call this from the Activity's onDestroy so per-tab WebView,
      * JavaScript interface, and WebChromeClient references do not leak across Activity recreation.
      */
@@ -177,6 +240,10 @@ class TabStore(
         partition: String? = null,
         profile: String? = null,
         name: String? = null,
+        id: String =
+            java.util.UUID
+                .randomUUID()
+                .toString(),
     ): BrowserTab {
         val webView =
             WebView(context).apply {
@@ -204,12 +271,13 @@ class TabStore(
                 addJavascriptInterface(JsBridge(handlerContext), JS_BRIDGE_NAME)
                 WebSocketHandler.installBridge(this)
             }
-        val tab = BrowserTab(webView = webView, isStartPage = isStartPage, partition = partition, name = name)
+        val tab = BrowserTab(id = id, webView = webView, isStartPage = isStartPage, partition = partition, name = name)
         installTabWebViewClients(webView, tab, this, browserState, handlerContext)
         return tab
     }
 
     private fun destroyWebView(webView: WebView) {
+        if (retiredRenderers.containsKey(webView)) return
         try {
             webView.removeJavascriptInterface(JS_BRIDGE_NAME)
         } catch (_: Exception) {

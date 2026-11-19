@@ -74,7 +74,7 @@ class DOMHandler(
                 ${observationPrivacyScript()}
                 function summary(el) {
                     var r = el.getBoundingClientRect();
-                    return {tag: el.tagName.toLowerCase(), text: kelpieSafeNodeText(el).substring(0,200),
+                    return {tag: kelpieSafeTag(el), text: kelpieSafeNodeText(el).substring(0,200),
                         classes: [], id: null, sensitivity: kelpiePrivateElement(el) ? 'private' : 'public',
                         rect: {x:r.x,y:r.y,width:r.width,height:r.height}};
                 }

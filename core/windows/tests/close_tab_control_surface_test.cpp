@@ -13,10 +13,15 @@
 
 #include <windows.h>
 
+#include "shutdown_trace.h"
+#include "held_http_request.h"
+
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <cwchar>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -38,6 +43,64 @@ bool Check(bool condition, const std::string& what) {
 
 void Wait(int milliseconds) {
   std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
+}
+
+std::vector<wchar_t> FixtureEnvironment(bool trace) {
+  std::vector<wchar_t> result;
+  wchar_t* inherited = GetEnvironmentStringsW();
+  if (!inherited) return result;
+  std::vector<std::wstring> entries;
+  constexpr wchar_t key[] = L"KELPIE_TEST_SHUTDOWN_TRACE=";
+  for (const wchar_t* entry = inherited; *entry; entry += std::wcslen(entry) + 1) {
+    if (_wcsnicmp(entry, key, std::size(key) - 1) != 0)
+      entries.emplace_back(entry);
+  }
+  FreeEnvironmentStringsW(inherited);
+  if (trace) entries.emplace_back(L"KELPIE_TEST_SHUTDOWN_TRACE=1");
+  std::sort(entries.begin(), entries.end(), [](const auto& left, const auto& right) {
+    return _wcsicmp(left.c_str(), right.c_str()) < 0;
+  });
+  for (const auto& entry : entries) {
+    result.insert(result.end(), entry.begin(), entry.end());
+    result.push_back(L'\0');
+  }
+  result.push_back(L'\0');
+  return result;
+}
+
+void PrintShutdownTrace(const std::filesystem::path& profile) {
+  std::ifstream stream(profile / kelpie::windows::kShutdownTraceFile);
+  std::string line;
+  unsigned count = 0;
+  while (count++ < 128 && std::getline(stream, line))
+    std::cout << "     shutdown " << line.substr(0, 256) << '\n';
+}
+
+void ProbeOwnedWindow(DWORD process_id) {
+  struct OwnedWindow { DWORD process_id; HWND window = nullptr; } owned{process_id};
+  EnumWindows([](HWND window, LPARAM parameter) -> BOOL {
+    auto& target = *reinterpret_cast<OwnedWindow*>(parameter);
+    DWORD pid = 0;
+    GetWindowThreadProcessId(window, &pid);
+    wchar_t name[32]{};
+    if (pid == target.process_id && GetClassNameW(window, name, 32) && std::wcscmp(name, L"Kelpie") == 0) {
+      target.window = window;
+      return FALSE;
+    }
+    return TRUE;
+  }, reinterpret_cast<LPARAM>(&owned));
+  DWORD current_pid = 0;
+  if (owned.window) GetWindowThreadProcessId(owned.window, &current_pid);
+  if (!owned.window || current_pid != process_id) {
+    std::cout << "     owned-owner-window=unavailable\n";
+    return;
+  }
+  DWORD_PTR response = 0;
+  SetLastError(ERROR_SUCCESS);
+  const bool responsive = SendMessageTimeoutW(owned.window, WM_NULL, 0, 0,
+      SMTO_ABORTIFHUNG | SMTO_BLOCK, 2000, &response) != 0;
+  const DWORD error = GetLastError();
+  std::cout << "     owned-owner-responsive=" << responsive << " error=" << error << '\n';
 }
 
 // Reserve and release a loopback port so the test instance does not collide
@@ -146,6 +209,7 @@ class ProcessGuard {
   }
 
   bool Exited() const { return ::WaitForSingleObject(process_, 0) == WAIT_OBJECT_0; }
+  bool ExitCode(DWORD* code) const { return ::GetExitCodeProcess(process_, code) != FALSE; }
 
  private:
   HANDLE process_ = nullptr;
@@ -154,10 +218,11 @@ class ProcessGuard {
 }  // namespace
 
 int main(int argc, char** argv) {
-  if (argc < 2) {
-    std::cerr << "usage: close_tab_control_surface_test <kelpie-binary-directory>\n";
+  if (argc < 2 || argc > 3 || (argc == 3 && std::string(argv[2]) != "--hold-http-body")) {
+    std::cerr << "usage: close_tab_control_surface_test <kelpie-binary-directory> [--hold-http-body]\n";
     return 2;
   }
+  const bool hold_http_body = argc == 3;
   const std::filesystem::path binary_dir(argv[1]);
   const std::filesystem::path executable = binary_dir / "kelpie.exe";
   if (!Check(std::filesystem::exists(executable), "the packaged kelpie.exe exists")) return 1;
@@ -167,7 +232,7 @@ int main(int argc, char** argv) {
 
   const std::filesystem::path profile_dir =
       std::filesystem::temp_directory_path() /
-      ("kelpie-close-tab-" + std::to_string(::GetCurrentProcessId()));
+      ("kelpie-close-tab-" + std::to_string(::GetCurrentProcessId()) + (hold_http_body ? "-held" : "-trace"));
   std::error_code code;
   std::filesystem::remove_all(profile_dir, code);
   std::filesystem::create_directories(profile_dir, code);
@@ -182,7 +247,10 @@ int main(int argc, char** argv) {
   startup.dwFlags = STARTF_USESHOWWINDOW;
   startup.wShowWindow = SW_SHOWNOACTIVATE;
   PROCESS_INFORMATION information{};
-  if (!Check(::CreateProcessW(nullptr, command.data(), nullptr, nullptr, FALSE, 0, nullptr,
+  auto environment = FixtureEnvironment(!hold_http_body);
+  if (!Check(!environment.empty(), "an isolated child environment is available")) return 1;
+  if (!Check(::CreateProcessW(nullptr, command.data(), nullptr, nullptr, FALSE,
+                              CREATE_UNICODE_ENVIRONMENT, environment.data(),
                               binary_dir.wstring().c_str(), &startup, &information) != FALSE,
              "the test instance launched")) {
     return 1;
@@ -249,15 +317,38 @@ int main(int argc, char** argv) {
   Check(std::filesystem::exists(readiness_path),
         "readiness.json still advertises the live control surface");
 
+  HeldHttpRequest held;
+  if (hold_http_body && !Check(held.Start(readiness.port, readiness.token),
+      "HTTP 100 confirms an incomplete transport request before route admission")) return 1;
+
   // Orderly shutdown must still exit and must still retract readiness.
-  client.Post("close-browser", nlohmann::json::object());
+  const auto closing = client.Post("close-browser", nlohmann::json::object());
+  Check(closing.value("httpStatus", 0) == 200 && closing.value("success", false) &&
+        closing.value("accepted", false), "close-browser is accepted by the control surface");
+  std::cout << "     close-browser http=" << closing.value("httpStatus", 0)
+            << " success=" << closing.value("success", false)
+            << " accepted=" << closing.value("accepted", false) << '\n';
+  if (hold_http_body) {
+    Wait(200);
+    Check(held.IsPending(), "the owned request body is still held before its five-second read deadline");
+    Check(!process.Exited(), "shutdown waits for the held transport worker");
+    Check(std::filesystem::exists(readiness_path), "readiness is retained while the transport worker drains");
+    held.Release();
+  }
   bool exited = false;
   for (int attempt = 0; attempt < 600 && !exited; ++attempt) {
     exited = process.Exited();
     if (!exited) Wait(100);
   }
   Check(exited, "close-browser shuts the app down");
+  DWORD exit_code = STILL_ACTIVE;
+  Check(exited && process.ExitCode(&exit_code) && exit_code == 0, "orderly shutdown exits with code zero");
+  if (exited) std::cout << "     child-exit-code=" << exit_code << '\n';
   Check(!std::filesystem::exists(readiness_path), "orderly shutdown removes readiness.json");
+  if (!exited) ProbeOwnedWindow(information.dwProcessId);
+  PrintShutdownTrace(profile_dir);
+  if (hold_http_body) Check(!std::filesystem::exists(profile_dir / kelpie::windows::kShutdownTraceFile),
+                            "held-drain regression runs with shutdown diagnostics disabled");
 
   std::filesystem::remove_all(profile_dir, code);
   if (g_failures == 0) std::cout << "close_tab_control_surface_test passed\n";
