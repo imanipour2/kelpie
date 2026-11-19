@@ -1,4 +1,6 @@
 #pragma once
+#include <chrono>
+#include <functional>
 #include <memory>
 #include <nlohmann/json.hpp>
 namespace kelpie {
@@ -12,7 +14,10 @@ std::string CollectBrowserSelectorSnapshotExpression(const nlohmann::json& optio
 // including its policy callback. next/advance bridge synchronous C++ to async renderers.
 class BrowserGateway {
  public:
-  explicit BrowserGateway(nlohmann::json config);
+  // The native clock bounds reference lifetime even when page JavaScript changes
+  // its clock. Injection is for deterministic tests, never an HTTP/JSON setting.
+  using MonotonicClock = std::function<std::chrono::steady_clock::time_point()>;
+  explicit BrowserGateway(nlohmann::json config, MonotonicClock now = std::chrono::steady_clock::now);
   ~BrowserGateway();
   nlohmann::json Begin(nlohmann::json request);
   nlohmann::json BeginMcp(nlohmann::json request);
