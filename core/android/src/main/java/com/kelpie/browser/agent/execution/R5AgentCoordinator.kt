@@ -125,18 +125,7 @@ class R5AgentCoordinator(
         }
 
     init {
-        // Mother MCP must rehost the exact R5 WebView before reporting a private tab as selected.
-        val motherSwitch =
-            R5MotherTabSwitch(
-                activity = activity,
-                consent = consent,
-                nativeTabCommands = tabCommands,
-                ready = { ready },
-                selectedTab = { currentTabId },
-                closed = { closed },
-                cancelInFlight = { runtime.cancelInFlight() },
-            )
-        ctx.motherPrivateTabSwitch = motherSwitch::select
+        ctx.motherPrivateTabSwitch = R5MotherTabSwitch(activity, consent, tabCommands, { ready }, { currentTabId }, { closed }, { runtime.cancelInFlight() })::select
         if (focusObserver.isAlive) {
             focusObserver.addOnWindowFocusChangeListener(focusRegainedListener)
         }
