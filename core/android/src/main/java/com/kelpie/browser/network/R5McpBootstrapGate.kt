@@ -17,5 +17,5 @@ internal object R5McpBootstrapGate {
         outerMethod == "mcp" &&
             !verifiedClientId.isNullOrBlank() &&
             verifiedClientId != "localhost" &&
-            inner["method"] in controlMethods
+            (inner["method"] as? String)?.let { it in controlMethods } == true
 }
