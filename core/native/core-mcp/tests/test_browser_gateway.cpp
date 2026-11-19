@@ -93,6 +93,27 @@ void Mcp() {
   assert(fallback.Capabilities()["methods"].size() == 2);
   assert(fallback.Begin(Request("tab.goto", {{"url", "url"}}))["response"]["error"]["code"] == "UNSUPPORTED");
 }
+void McpControlWithoutOwnerGrant() {
+  kelpie::BrowserGateway gateway({{"nativeMethods", {"screenshot", "get-tabs"}}, {"requireAuthorization", true}});
+  for (const auto& method : {"initialize", "ping", "tools/list", "notifications/initialized"}) {
+    json request = {{"jsonrpc", "2.0"}, {"method", method}};
+    if (std::string(method) != "notifications/initialized") request["id"] = 41;
+    const auto step = gateway.BeginMcp(request);
+    assert(step["kind"] == "complete");
+    assert(!step.contains("method"));  // No WebView dispatch or owner authorization.
+    if (std::string(method) == "initialize") {
+      assert(step["response"]["result"]["protocolVersion"] == "2025-06-18");
+    }
+  }
+  auto step = gateway.BeginMcp({{"jsonrpc", "2.0"}, {"id", 42}, {"method", "tools/call"},
+    {"params", {{"name", "kelpie_browser_control"}, {"arguments", {{"request", Request("tab.screenshot")}}}}}});
+  assert(step["kind"] == "authorize");
+  step = gateway.Advance({{"success", false}});
+  assert(step["kind"] == "complete");
+  assert(step["response"]["result"]["isError"] == true);
+  assert(step.dump().find("image/png") == std::string::npos);
+  assert(gateway.BeginMcp({{"jsonrpc", "2.0"}, {"id", 43}, {"method", "ping"}})["kind"] == "complete");
+}
 void ExtensionReachability() {
   const json schema = {{"type", "object"}, {"properties", {{"url", {{"type", "string"}}}}}, {"required", {"url"}}, {"additionalProperties", false}};
   const json tool = {{"name", "kelpie_bookmarks_add"}, {"method", "bookmarks-add"}, {"mutates", true}, {"inputSchema", schema}};
@@ -338,4 +359,29 @@ void NativeAuthorizationRecheck() {
   assert(step["kind"] == "complete" && step["response"]["error"]["code"] == "STALE_OBSERVATION");
   assert(step["response"]["error"]["mayHaveCompleted"] == false);
 }
-int main() { ObservationMetadata(); NativeReferenceLifetime(); RefusalAndAtomicPublication(); NativeAuthorizationRecheck(); ReadOnlySnapshotLifetime(); Notifications(); Contracts(); Sequencing(); References(); Mcp(); ExtensionReachability(); SelectedAndMapping(); CAbi(); std::cout << "Browser gateway contracts passed\n"; }
+void R5RequiresObservedActionEffect() {
+  kelpie::BrowserGateway gateway({{"nativeMethods", {"click", "type"}}, {"fixedReader", true},
+    {"requireAuthorization", false}, {"requireActionEffect", true}});
+  for (const auto& method : {"tab.click", "tab.type"}) {
+    auto ref = Observe(gateway);
+    json params = {{"ref", ref}};
+    if (std::string(method) == "tab.type") params["text"] = "fixture";
+    auto step = gateway.Begin(Request(method, params));
+    const auto expression = step["params"]["expression"].get<std::string>();
+    assert(expression.substr(expression.size() - 6) == ",true)");
+    step = gateway.Advance({{"success", true}, {"result", {{"ok", true}}}});
+    assert(step["response"]["error"]["code"] == "EFFECT_UNVERIFIED");
+    assert(step["response"]["error"]["mayHaveCompleted"] == true);
+    params["ref"] = Observe(gateway);
+    gateway.Begin(Request(method, params));
+    step = gateway.Advance({{"success", true}, {"result", {{"ok", true}, {"effectVerified", true}}}});
+    assert(step["response"]["ok"] == true);
+    assert(step["response"]["value"]["postconditionStatus"] == "VERIFIED_LOCAL_DOM_EFFECT");
+    params["ref"] = Observe(gateway);
+    gateway.Begin(Request(method, params));
+    step = gateway.Advance({{"success", true}, {"result", {{"error", "EFFECT_UNVERIFIED"}, {"mayHaveCompleted", true}}}});
+    assert(step["response"]["error"]["code"] == "EFFECT_UNVERIFIED");
+    assert(step["response"]["error"]["mayHaveCompleted"] == true);
+  }
+}
+int main() { R5RequiresObservedActionEffect(); McpControlWithoutOwnerGrant(); ObservationMetadata(); NativeReferenceLifetime(); RefusalAndAtomicPublication(); NativeAuthorizationRecheck(); ReadOnlySnapshotLifetime(); Notifications(); Contracts(); Sequencing(); References(); Mcp(); ExtensionReachability(); SelectedAndMapping(); CAbi(); std::cout << "Browser gateway contracts passed\n"; }
