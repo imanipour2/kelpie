@@ -1,6 +1,7 @@
 package com.kelpie.browser.agent.session
 
 import android.os.SystemClock
+import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,6 +27,7 @@ internal object AndroidAgentProcessSession {
     @Synchronized
     fun request(verifiedPrincipalId: String): SessionConsentCore.State.Pending? {
         val result = core.requestNativeConsent(verifiedPrincipalId)
+        Log.i("R5ConsentState", if (result != null) "native request pending" else "native request refused")
         publish()
         return result
     }
@@ -37,6 +39,7 @@ internal object AndroidAgentProcessSession {
         deviceUnlocked: Boolean,
     ): SessionConsentCore.State.Active? {
         val result = core.approveFromNativeUi(promptId, deviceUnlocked)
+        Log.i("R5ConsentState", if (result != null) "native grant activated" else "native approval rejected")
         publish()
         return result
     }
@@ -52,21 +55,30 @@ internal object AndroidAgentProcessSession {
     /** Local STOP and verified owner-stop converge here, including notification STOP. */
     @Synchronized
     fun stop() {
+        val prior = core.snapshot()
         core.stop()
+        if (prior != SessionConsentCore.State.Off) {
+            Log.i("R5ConsentState", "consent stopped from " + stateKind(prior))
+        }
         publish()
     }
 
     /** Pairing revocation cannot leave a cached one-tap principal or native grant. */
     @Synchronized
     fun revokePrincipal(principalId: String) {
-        core.revokePrincipal(principalId)
+        val wasRevoked = core.revokePrincipal(principalId)
         R5ObservedAgentClients.registry.forget(principalId)
+        if (wasRevoked) Log.i("R5ConsentState", "paired principal revoked; consent off")
         publish()
     }
 
     @Synchronized
     fun setDeviceLocked(locked: Boolean) {
+        val before = core.snapshot()
         core.setDeviceLocked(locked)
+        if (before != core.snapshot()) {
+            Log.i("R5ConsentState", if (locked) "active consent suspended by lock" else "active consent resumed after unlock")
+        }
         publish()
     }
 
@@ -75,10 +87,18 @@ internal object AndroidAgentProcessSession {
         val current = core.snapshot()
         if (current is SessionConsentCore.State.Pending && SystemClock.elapsedRealtime() >= current.deadlineMs) {
             core.stop()
+            Log.i("R5ConsentState", "native approval prompt expired")
             publish()
         }
         return core.snapshot()
     }
+
+    private fun stateKind(value: SessionConsentCore.State): String =
+        when (value) {
+            SessionConsentCore.State.Off -> "off"
+            is SessionConsentCore.State.Pending -> "pending"
+            is SessionConsentCore.State.Active -> "active"
+        }
 
     private fun publish() {
         val state = core.snapshot()
