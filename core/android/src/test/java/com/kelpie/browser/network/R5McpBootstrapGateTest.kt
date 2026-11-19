@@ -59,9 +59,25 @@ class R5McpBootstrapGateTest {
 
     @Test
     fun nonMcpRoutesAndMalformedRequestsCannotBypassOwnerGrant() {
-        assertFalse(R5McpBootstrapGate.maySkipNativeSession("browser-control", mapOf("method" to "initialize"), "verified-paired-computer"))
-        assertFalse(R5McpBootstrapGate.maySkipNativeSession("agent-command", mapOf("method" to "tools/list"), "verified-paired-computer"))
-        assertFalse(R5McpBootstrapGate.maySkipNativeSession("mcp", emptyMap(), "verified-paired-computer"))
-        assertFalse(R5McpBootstrapGate.maySkipNativeSession("mcp", mapOf("method" to 1), "verified-paired-computer"))
+        assertFalse(
+            R5McpBootstrapGate.maySkipNativeSession(
+                "browser-control",
+                mapOf("method" to "initialize"),
+                "verified-paired-computer",
+            ),
+        )
+        assertFalse(
+            R5McpBootstrapGate.maySkipNativeSession(
+                "agent-command",
+                mapOf("method" to "tools/list"),
+                "verified-paired-computer",
+            ),
+        )
+        assertFalse(
+            R5McpBootstrapGate.maySkipNativeSession("mcp", emptyMap(), "verified-paired-computer"),
+        )
+        assertFalse(
+            R5McpBootstrapGate.maySkipNativeSession("mcp", mapOf("method" to 1), "verified-paired-computer"),
+        )
     }
 }
