@@ -48,6 +48,8 @@ class R5AgentCoordinator(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val transferMutex = Mutex()
+    // Monotonic main-thread epoch invalidates old background handoffs on resume.
+    private var lifecycleVisibilityEpoch = 0L
     private val released = MutableStateFlow(false)
     val relinquished = released.asStateFlow()
     private val renderer =
@@ -320,16 +322,34 @@ class R5AgentCoordinator(
 
     /** Called from Activity lifecycle, not from a remote JSON argument. */
     fun onPause() {
+        val pauseEpoch = ++lifecycleVisibilityEpoch
         scope.launch {
+            val stillBackground = {
+                R5PausedVisibilityGate.mayCommit(
+                    pauseEpoch = pauseEpoch,
+                    currentEpoch = lifecycleVisibilityEpoch,
+                    activityResumed = activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED),
+                )
+            }
             val active = consent.snapshot() as? SessionConsentCore.State.Active
-            if (active != null && !active.locked && renderer.state.value == PrivateWebViewDisplay.State.IDLE) {
+            if (stillBackground() && active != null && !active.locked &&
+                renderer.state.value == PrivateWebViewDisplay.State.IDLE
+            ) {
                 activateRenderer(active)
             }
-            renderer.setActivityVisible(false)
+            if (stillBackground()) {
+                renderer.setActivityVisible(false)
+            } else if (renderer.state.value == PrivateWebViewDisplay.State.PRIVATE_DISPLAY) {
+                // onResume may have run while the asynchronous handoff was still
+                // in progress. Never leave an old background transfer active
+                // in the foreground, even though frame capture is already fenced.
+                restoreForeground()
+            }
         }
     }
 
     fun onResume() {
+        ++lifecycleVisibilityEpoch
         renderer.setActivityVisible(true)
         scope.launch {
             when (renderer.state.value) {
@@ -495,4 +515,16 @@ class R5AgentCoordinator(
         renderer.dispose()
         scope.cancel()
     }
+}
+
+/**
+ * A suspended onPause coroutine must not overwrite a later onResume.
+ * No remote operation or renderer ownership is granted by this predicate.
+ */
+internal object R5PausedVisibilityGate {
+    fun mayCommit(
+        pauseEpoch: Long,
+        currentEpoch: Long,
+        activityResumed: Boolean,
+    ): Boolean = pauseEpoch == currentEpoch && !activityResumed
 }
