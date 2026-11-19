@@ -41,6 +41,22 @@ class R5WebViewActionScriptsTest {
     }
 
     @Test
+    fun r5SnapshotReusesPrivacyContractAndNeverRawInnerText() {
+        val snapshot = R5WebViewActionScripts.SNAPSHOT
+        assertTrue(snapshot.contains("kelpieSafeNodeText(document.body)"))
+        assertTrue(snapshot.contains("kelpieSafeName(e)"))
+        assertTrue(snapshot.contains("kelpieSafeURL(location.href)"))
+        assertTrue(snapshot.contains("kelpiePrivacyBudgetExceeded"))
+        assertTrue(snapshot.contains("kelpieSafeText(document.title)"))
+        assertTrue(snapshot.contains("coverage:'INCOMPLETE'"))
+        assertTrue(snapshot.contains("redacted:true"))
+        assertFalse(snapshot.contains("document.body?.innerText"))
+        assertFalse(snapshot.contains("url:location.href"))
+        assertFalse(snapshot.contains("title:document.title"))
+        assertFalse(snapshot.contains("e.getAttribute('placeholder')||e.innerText"))
+    }
+
+    @Test
     fun selectorCannotBreakOutOfQuotedJavaScriptData() {
         val malicious = """x');window.location='https://other.example';//"""
         val script = R5WebViewActionScripts.click(malicious)

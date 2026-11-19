@@ -1,5 +1,6 @@
 package com.kelpie.browser.agent.execution
 
+import com.kelpie.browser.handlers.observationPrivacyScript
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -7,8 +8,9 @@ import kotlinx.serialization.json.Json
 internal object R5WebViewActionScripts {
     private fun q(text: String) = Json.encodeToString(text)
 
-    const val SNAPSHOT = """
-        (() => {const uniqueSelector=e=>{
+    val SNAPSHOT = """
+        (() => {${observationPrivacyScript()}
+          const uniqueSelector=e=>{
           if(e.id){const byId='#'+CSS.escape(e.id);
             if(document.querySelectorAll(byId).length===1)return byId;}
           const parts=[];let node=e;
@@ -26,13 +28,14 @@ internal object R5WebViewActionScripts {
           const css=parts.join(' > ');
           if(css.length>500)return '';
           try{return document.querySelectorAll(css).length===1?css:'';}catch(_){return '';}};
-        return JSON.stringify({url:location.href,title:document.title,
-          text:(document.body?.innerText||'').slice(0,28000),
+        if(kelpiePrivacyBudgetExceeded) return JSON.stringify({url:null,title:'redacted',text:'redacted',
+          elements:[],coverage:'INCOMPLETE',redacted:true,humanChallengeDetected:false});
+        return JSON.stringify({url:kelpieSafeURL(location.href),title:kelpieSafeText(document.title),
+          text:kelpieSafeNodeText(document.body).slice(0,28000),coverage:'INCOMPLETE',redacted:true,
           elements:[...document.querySelectorAll('a,button,input,textarea,select,[role=tab]')]
             .filter(e=>e.getClientRects().length).slice(0,160).map(e=>({
-              tag:e.tagName.toLowerCase(),name:(e.getAttribute('aria-label')||
-              e.getAttribute('placeholder')||e.innerText||'').slice(0,120),
-              selector:uniqueSelector(e),
+              tag:e.tagName.toLowerCase(),name:kelpieSafeName(e).slice(0,120),
+              selector:(()=>{const selector=uniqueSelector(e);return kelpieSafeText(selector)===selector?selector:'';})(),
               role:(e.getAttribute('role')||'').slice(0,48),
               type:(e.getAttribute('type')||'').slice(0,24)})),
           scroll:{x:scrollX,y:scrollY},

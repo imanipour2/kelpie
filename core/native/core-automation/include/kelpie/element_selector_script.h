@@ -15,7 +15,7 @@ function kelpieEscapeIdentifier(value) {
 function kelpieEscapeAttribute(value) {
   return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
-function kelpieBuildSelector(node) {
+function kelpieBuildSelector(node, structuralOnly) {
   if (!node || node.nodeType !== 1) return null;
   function identifiesNode(candidate) {
     if (candidate.length > 2000) return false;
@@ -24,7 +24,7 @@ function kelpieBuildSelector(node) {
       return matches.length === 1 && matches[0] === node;
     } catch (error) { return false; }
   }
-  if (node.id) {
+  if (!structuralOnly && node.id) {
     var id = '#' + kelpieEscapeIdentifier(node.id);
     if (identifiesNode(id)) return id;
   }
@@ -33,12 +33,12 @@ function kelpieBuildSelector(node) {
   while (current && current.nodeType === 1) {
     var tag = current.tagName.toLowerCase();
     var segment = tag;
-    if (current.id) {
+    if (!structuralOnly && current.id) {
       var identified = [tag + '#' + kelpieEscapeIdentifier(current.id)].concat(segments).join(' > ');
       if (identifiesNode(identified)) return identified;
     }
-    var name = current.getAttribute && current.getAttribute('name');
-    if (name) {
+    var name = !structuralOnly && current.getAttribute && current.getAttribute('name');
+    if (!structuralOnly && name) {
       var named = tag + '[name="' + kelpieEscapeAttribute(name) + '"]';
       var namedPath = [named].concat(segments).join(' > ');
       if (identifiesNode(namedPath)) return namedPath;

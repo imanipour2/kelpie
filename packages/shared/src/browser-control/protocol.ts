@@ -50,8 +50,25 @@ export const BrowserControlRequestSchema = z.discriminatedUnion("method", [
 export type BrowserControlRequest = z.infer<typeof BrowserControlRequestSchema>;
 export type BrowserControlMethod = BrowserControlRequest["method"];
 export interface BrowserTabInfo { id: string; url?: string; title?: string }
-export interface BrowserElement { ref: string; role: string; name: string }
-export interface BrowserSnapshot { url: string; title: string; text: string; truncated: boolean; elements?: BrowserElement[] }
+export interface BrowserRect { x: number; y: number; width: number; height: number }
+export interface BrowserElement {
+  ref: string; role: string; name: string;
+  rect?: BrowserRect; visible?: boolean; enabled?: boolean;
+  sensitivity?: "PUBLIC" | "PRIVATE" | "SENSITIVE"; value?: null; allowedOperations?: string[];
+}
+export interface BrowserSnapshot {
+  url: string; title: string; text: string; truncated: boolean; elements?: BrowserElement[];
+  viewport?: { width: number; height: number };
+  devicePixelRatio?: number;
+  observationId?: string; tabId?: string; ttlMs?: number;
+  visualViewport?: { offsetLeft: number; offsetTop: number; pageLeft: number; pageTop: number; width: number; height: number; scale: number } | null;
+  scroll?: { x: number; y: number };
+  privacyRects?: BrowserRect[]; screenshotBlocked?: boolean; screenshotBlockReasons?: string[];
+  coverage?: {
+    status: "INCOMPLETE" | "UNKNOWN"; observed: number; scanned: number; totalCandidates: number | null;
+    truncated: boolean; unobserved: number | null; limitations: string[];
+  };
+}
 export interface BrowserImage { type: "image"; mimeType: "image/png" | "image/jpeg" | "image/webp"; data: string }
 export interface BrowserCapabilities { version: 1; methods: BrowserControlMethod[]; extensions: string[] }
 export interface BrowserControlFailure { code: string; message: string; mayHaveCompleted: boolean }
