@@ -129,6 +129,8 @@ class WindowsApp final : public ShellDelegate, public BrowserStateObserver {
   bool TryCompleteClose();
   void ArmCloseRetry();
   void TraceShutdown(ShutdownStage stage);
+  void TraceShutdownProgress(ShutdownStage stage);
+  bool ExternalCefPumpActive() const;
   bool CreateShell(int show_command);
   std::wstring AppTitle() const;
   // Peer-to-peer cookie sync (windows_cookie_sync.cpp); standalone only.
@@ -144,6 +146,9 @@ class WindowsApp final : public ShellDelegate, public BrowserStateObserver {
   std::atomic<bool> running_{true};
   CloseLifecycle close_lifecycle_;
   ShutdownTrace shutdown_trace_;
+  std::uint64_t shutdown_owner_ticks_ = 0;
+  std::uint64_t shutdown_close_polls_ = 0;
+  unsigned direct_cef_pump_depth_ = 0;
 
   DeviceInfoWindows device_info_provider_;
   BrowserState browser_state_;

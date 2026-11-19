@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <cstddef>
 #include <string>
 #include <functional>
 #include <string_view>
@@ -43,6 +44,14 @@ class DesktopHttpServer {
   // IsDrained becomes true; Windows keeps its owner pump running in the meantime.
   void BeginDrain();
   bool IsDrained() const;
+  struct DrainState {
+    bool accepting_requests;
+    std::size_t active_requests;
+    bool listener_thread_finished;
+    std::string_view transport_version;
+  };
+  // Read-only native diagnostics; never exposes request contents or authority.
+  DrainState GetDrainState() const;
   void Stop();
 
   bool IsRunning() const;

@@ -41,7 +41,7 @@ gap. No extra decision authority or duplicate historical master was created.
 | Correction | Root cause | Production files / reused boundary | Executable evidence | Device acceptance still required |
 | --- | --- | --- | --- | --- |
 | CI baseline | Eight Android workflows independently stopped at formatting in four files; macOS failed to acquire a runner | Existing ktlint configuration; no checks disabled | Per-job log/excerpt and full 37b9 retest in [CI baseline](wave1-ci-baseline-20261119.md) | CI is not an installed APK |
-| Windows shutdown | Existing close-state transition allowed reentrant teardown; the hosted process-exit failure still needs stage evidence | `CloseLifecycle`, Windows shutdown boundaries, opt-in `ShutdownTrace`, existing close lifecycle/control-surface tests | Old state-machine unit reproduces double persistence/teardown; guarded unit passes; real Windows 73/74 baseline retained for hosted retest | Independent desktop regression scope; no S24/device changes |
+| Windows shutdown | Existing close-state transition allowed reentrant teardown; the observed process-exit failure is separate and its first false HTTP-drain check does not establish continued owner-loop progress | `CloseLifecycle`, Windows shutdown boundaries, opt-in `ShutdownTrace`, existing close lifecycle/control-surface tests | Old state-machine unit reproduces double persistence/teardown; guarded unit passes; 8a hosted acceptance succeeds but Windows remains 73/74, requiring numeric drain/owner-progress evidence | Independent desktop regression scope; no S24/device changes |
 | Metadata and consent | Browser grant was tested at the wrong boundary; private state could deadlock negotiation while foreground could bypass owner authority | `HTTPServer`, `Router`, `AuthenticatedRequestDispatcher`, `R5McpBootstrapGate`, `AgentSessionCoordinator`, existing native consent reducer | Dispatcher suspended-race tests; exact-method gate tests; compiled real HTTP/JNI wire fixture | Authenticated metadata at STOP/lock, one native prompt and actual response delivery |
 | Principal and protocol | R5 invalid/missing bearer could fall back to localhost; mother/private protocol sets were conflated | `AuthMiddleware`, `AccountPairingAuthorization`, `AuthenticatedClientContext`, `R5RequestAuthorization`, `BrowserGatewayBinding` | Original `AccountPairingTests` retained; scoped protocol/authentication matrix and real native gateway tests | Same live paired client and current bearer, without exposing/resetting credentials |
 | Revocation | A new grant or unlock could accidentally validate an old asynchronous operation; unpair did not retire every native reference | `SessionConsentCore`, `AndroidAgentProcessSession`, `R5ObservedAgentClients`, `PairingStore`, `TrustedComputers` | STOP/reapprove, lock/resume, unpair, pre-dispatch credential revocation and queued-Main consent tests | STOP-in-flight and lock/unlock on the exact APK |
@@ -154,6 +154,15 @@ and are not reported as success or proof that the service is down. A connector
 403 is an upstream denial, not evidence of a broken tunnel. Previous successful
 tab/DOM/image observations in Issue #98 are historical and do not validate this
 new source or the current session.
+
+A separate read-only refresh at **2026-11-19 16:55:39 UTC** (20:25:39
+Asia/Tehran) reconfirmed the same package, version 40, exact installed APK digest,
+WebView provider 157.0.8103.50, and only that Kelpie package in user 0. It does not
+retimestamp the earlier memory or transport samples. A subsequent package-manager
+dump at **17:04:23 UTC** reported `apkSigningVersion=2` and
+`past signatures:[]`. This is actual package-manager signing metadata, not a new
+certificate SHA-256 or an invented SigningInfo API result. The known certificate
+fingerprint remains linked through the identical previously verified APK bytes.
 
 Automatic approval review rejected a proposed installed-APK export because
 metadata could be checked without copying its payload to the connector. That
@@ -353,6 +362,50 @@ failure still requires its next Windows run. The independently proved reentry
 defect is not silently relabeled as that failure's root cause without runtime
 evidence. No readiness file is deleted early to satisfy the test.
 
+The [actual 8a Windows rerun](https://github.com/imanipour2/kelpie/actions/runs/44570167504/job/135722707481)
+still passed **73/74** targets. Its new assertions proved that `close-browser`
+returned HTTP 200, `success=true` and `accepted=true`. The trace then recorded
+`close-requested`, `begin-drain` and the first `waiting-http-drain` at 10545 ms;
+there was no persistence or CEF-teardown stage. Because consecutive stage labels
+were deduplicated, that single entry does not prove repeated HTTP-drain polling
+for the full 60-second wait: owner-loop progress could itself have stopped.
+The same run's real HTTP-server drain test passed. The next change therefore
+adds only bounded numeric admission/listener snapshots and owner Tick/pump
+progress in the isolated diagnostic path; it does not guess a new shutdown
+policy, bypass the drain barrier, or weaken the original process-exit assertion.
+
+Primary upstream reports were also compared on 2026-11-19:
+[cpp-httplib #1645](https://github.com/yhirose/cpp-httplib/issues/1645)
+concerns stop-before-listen startup; Kelpie already waits for listener readiness
+and the observed control request completed. [Issue #2373](https://github.com/yhirose/cpp-httplib/issues/2373)
+concerns newer timed thread-pool waits with an older MSVC implementation; it is
+not established as this failure's cause. The [CMake 4.5.1 FetchContent reference](https://cmake.org/cmake/help/latest/module/FetchContent.html)
+confirms that the first declaration wins, so a later Windows dependency tag is
+not proof of the effective built version. Diagnostics record the actual compiled
+HTTP-library version; no dependency upgrade or forced worker termination is
+justified by these unrelated reports.
+
+On that same `8a1563fcc310d3c4c8636b9527d49b39ae7d0831` head,
+[Wave 1 contracts and actual Android execution](https://github.com/imanipour2/kelpie/actions/runs/44570167627)
+passed: 94 shared, 664 CLI, 31 Chromium, 3 native CTest, selector conformance,
+and all 11 Android cases with zero failures/errors/skips. Android evidence ZIP
+`14553743300` independently matched SHA-256
+`ef74b38668994254cd3320a462bd17f90919cf3f23dafec3a8739e07d3185a8f`.
+All Android build families and the 88-case installation guard also passed.
+The previous Maven metadata failures did not recur with the same declared
+versions/repositories; their underlying infrastructure cause remains unproven.
+
+The [8a MotherNext producer](https://github.com/imanipour2/kelpie/actions/runs/44570167739)
+produced artifact `14555195629`: independently verified ZIP SHA-256
+`6d7aaaf2c1063c87fd954d49089dc4fa57a623170047544906172db0f1d286f7`,
+83,341,017 APK bytes, APK SHA-256
+`9a62874bbde660bb0933f5e326ae9353ecf51ac86d07e49f331d3e9b9f3657af`,
+and valid v2 certificate
+`62fbb7d89db7435d1154be8ec0a895bc380b188f158ab602ae1055dfee952fc8`.
+Package/version/port and manifest matched the actual bytes. This signer differs
+from the installed signer. The artifact is historical after the next diagnostic
+commit and is not relabeled or selected as that newer source's final APK.
+
 Both Apple jobs failed before any build step: the hosted runner was not acquired
 after multiple attempts, with provider annotations identifying macOS arm64
 capacity constraints. This is runner admission evidence, not a Swift/iOS compile
@@ -388,7 +441,7 @@ and whole CI matrix must agree.
 | Physical behavior | Candidate has not been installed; 20 tab cycles/3 tabs, 25 WebView frames, 50 display cycles, lock/HOME/network/render crash and real effects are NOT_RUN |
 | Real-page pixel export | FAIL_CLOSED; usable verified redaction remains open |
 | Governance | CDG ratification, authority mirror synchronization and parity/exception remain open |
-| Owner install approval | Separate final approval remains required after all technical gates pass |
+| Owner install approval | Separate Gate E follows the pre-install review/safety gates A-D; candidate acceptance Gate F follows permitted installation |
 
 The strengthened existing PowerShell guard reads the actual device, exact app
 inventory, free space and installed byte digest; verifies local rollback bytes

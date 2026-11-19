@@ -134,8 +134,21 @@ bool WindowsApp::ProcessMessage(const MSG& message) {
 }
 
 void WindowsApp::Tick() {
-  if (desktop_app_) desktop_app_->Tick();
+  if (close_lifecycle_.requested()) ++shutdown_owner_ticks_;
+  TraceShutdownProgress(ShutdownStage::kOwnerTick);
+  if (desktop_app_) {
+    // Observation only: retain the existing pump call and ordering.
+    struct DepthObservation {
+      unsigned& depth;
+      explicit DepthObservation(unsigned& value) : depth(value) { ++depth; }
+      ~DepthObservation() { --depth; }
+    } observation{direct_cef_pump_depth_};
+    TraceShutdownProgress(ShutdownStage::kBeforeDirectPump);
+    desktop_app_->Tick();
+  }
+  TraceShutdownProgress(ShutdownStage::kAfterDirectPump);
   UpdateBrowserStateFromRuntime();
+  TraceShutdownProgress(ShutdownStage::kAfterBrowserState);
   if (desktop_app_ && !close_lifecycle_.requested()) PollComputerApproval(desktop_app_->http_server().approvals(), shell_->hwnd());
   TryCompleteClose();
 }
@@ -316,6 +329,8 @@ bool WindowsApp::TryCompleteClose() {
   if (!close_lifecycle_.requested() || close_lifecycle_.completed()) {
     return close_lifecycle_.completed();
   }
+  ++shutdown_close_polls_;
+  TraceShutdownProgress(ShutdownStage::kClosePoll);
   if (desktop_app_ != nullptr) {
     desktop_app_->BeginShutdown();
     if (!desktop_app_->IsShutdownReady()) {
@@ -341,7 +356,7 @@ bool WindowsApp::TryCompleteClose() {
 }
 
 void WindowsApp::OnWindowCloseRequested() {
-  TraceShutdown(ShutdownStage::kCloseRequested);
+  TraceShutdownProgress(ShutdownStage::kCloseRequested);
   if (inference_) inference_->Cancel();
   if (account_) account_->Shutdown();
   close_lifecycle_.Request();
@@ -351,6 +366,15 @@ void WindowsApp::OnWindowCloseRequested() {
 }
 void WindowsApp::TraceShutdown(ShutdownStage stage) {
   shutdown_trace_.Record(config_.profile_dir, stage);
+}
+void WindowsApp::TraceShutdownProgress(ShutdownStage stage) {
+  if (!shutdown_trace_.enabled()) return;
+  if (!close_lifecycle_.requested() && stage != ShutdownStage::kCloseRequested) return;
+  const auto drain = desktop_app_ ? desktop_app_->http_server().GetDrainState()
+                                 : DesktopHttpServer::DrainState{false, 0, true, "not-running"};
+  shutdown_trace_.RecordProgress(config_.profile_dir, stage,
+      {shutdown_owner_ticks_, shutdown_close_polls_, direct_cef_pump_depth_, ExternalCefPumpActive(),
+       drain.active_requests, drain.accepting_requests, drain.listener_thread_finished, drain.transport_version});
 }
 void WindowsApp::OnBrowserStateChanged(const BrowserState& state) {
   browser_state_ = state;

@@ -72,7 +72,34 @@ void PrintShutdownTrace(const std::filesystem::path& profile) {
   std::string line;
   unsigned count = 0;
   while (count++ < 128 && std::getline(stream, line))
-    std::cout << "     shutdown " << line.substr(0, 100) << '\n';
+    std::cout << "     shutdown " << line.substr(0, 256) << '\n';
+}
+
+void ProbeOwnedWindow(DWORD process_id) {
+  struct OwnedWindow { DWORD process_id; HWND window = nullptr; } owned{process_id};
+  EnumWindows([](HWND window, LPARAM parameter) -> BOOL {
+    auto& target = *reinterpret_cast<OwnedWindow*>(parameter);
+    DWORD pid = 0;
+    GetWindowThreadProcessId(window, &pid);
+    wchar_t name[32]{};
+    if (pid == target.process_id && GetClassNameW(window, name, 32) && std::wcscmp(name, L"Kelpie") == 0) {
+      target.window = window;
+      return FALSE;
+    }
+    return TRUE;
+  }, reinterpret_cast<LPARAM>(&owned));
+  DWORD current_pid = 0;
+  if (owned.window) GetWindowThreadProcessId(owned.window, &current_pid);
+  if (!owned.window || current_pid != process_id) {
+    std::cout << "     owned-owner-window=unavailable\n";
+    return;
+  }
+  DWORD_PTR response = 0;
+  SetLastError(ERROR_SUCCESS);
+  const bool responsive = SendMessageTimeoutW(owned.window, WM_NULL, 0, 0,
+      SMTO_ABORTIFHUNG | SMTO_BLOCK, 2000, &response) != 0;
+  const DWORD error = GetLastError();
+  std::cout << "     owned-owner-responsive=" << responsive << " error=" << error << '\n';
 }
 
 // Reserve and release a loopback port so the test instance does not collide
@@ -301,6 +328,7 @@ int main(int argc, char** argv) {
   }
   Check(exited, "close-browser shuts the app down");
   Check(!std::filesystem::exists(readiness_path), "orderly shutdown removes readiness.json");
+  if (!exited) ProbeOwnedWindow(information.dwProcessId);
   PrintShutdownTrace(profile_dir);
 
   std::filesystem::remove_all(profile_dir, code);

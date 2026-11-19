@@ -64,6 +64,7 @@ void TraceIsOptInAndBounded() {
   std::filesystem::create_directory(profile);
   const auto path = profile / kelpie::windows::kShutdownTraceFile;
   trace.Record(profile, ShutdownStage::kCloseRequested);
+  trace.RecordProgress(profile, ShutdownStage::kClosePoll, {1, 1, 1, true, 1, false, false});
   assert(!std::filesystem::exists(path));
   trace.Enable(true);
   trace.Record(profile, ShutdownStage::kCloseRequested);
@@ -80,6 +81,28 @@ void TraceIsOptInAndBounded() {
     ++count;
   }
   assert(count == 128);
+  stream.close();
+  std::filesystem::remove_all(profile);
+}
+
+void ProgressSamplingRetainsDrainAndPumpEvidence() {
+  using kelpie::windows::ShutdownStage;
+  kelpie::windows::ShutdownTrace trace;
+  const auto profile = std::filesystem::temp_directory_path() /
+      ("kelpie-shutdown-progress-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  std::filesystem::create_directory(profile);
+  trace.Enable(true);
+  for (std::uint64_t poll = 1; poll <= 512; ++poll)
+    trace.RecordProgress(profile, ShutdownStage::kClosePoll, {poll, poll, 1, true, 1, false, false, "0.18.3"});
+  std::ifstream stream(profile / kelpie::windows::kShutdownTraceFile);
+  std::string line;
+  unsigned count = 0;
+  while (std::getline(stream, line)) {
+    assert(line.ends_with(" directPumpDepth=1 externalPump=1 activeRequests=1 accepting=0 listenerFinished=0 httpVersion=0.18.3"));
+    assert(line.find(" polls=5 ") == std::string::npos);
+    if (++count == 11) assert(line.find(" ticks=512 polls=512 ") != std::string::npos);
+  }
+  assert(count == 11);
   stream.close();
   std::filesystem::remove_all(profile);
 }
@@ -109,5 +132,6 @@ int main() {
   const bool nested_shutdown = ReentrantCloseDoesNotRunTwice(false);
   ExceptionsReleaseTheAttempt();
   TraceIsOptInAndBounded();
+  ProgressSamplingRetainsDrainAndPumpEvidence();
   return nested_persist && nested_shutdown ? 0 : 1;
 }

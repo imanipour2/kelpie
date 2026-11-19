@@ -337,6 +337,8 @@ bool WindowsApp::InitializeDesktopRuntime() {
   return true;
 }
 
+bool WindowsApp::ExternalCefPumpActive() const { return g_cef_pump.running(); }
+
 bool WindowsApp::ShutdownDesktopRuntime() {
   // CEF must deliver every OnBeforeClose before CefShutdown. Keep the owner
   // and message pump alive if shutdown is still draining browser callbacks.
