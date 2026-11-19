@@ -1,18 +1,30 @@
 # S24 QA deployment. No changes to the Termux tunnel, bearer or plugin.
 [CmdletBinding()]
 param(
-  [ValidateSet('Preflight','BackupOldApk','Install','Verify','RetireOld')]
+  [ValidateSet('Preflight','InspectInstalledSigner','BackupOldApk','Install','Verify','RetireOld')]
   [string]$Phase='Preflight',
   [string]$Apk='',
   [string]$Adb='C:\Android\platform-tools\adb.exe',
   [string]$SdkRoot='',
-  [string]$AcceptanceFile=''
+  [string]$AcceptanceFile='',
+  [ValidateSet('Mother18462','MotherNext18463')]
+  [string]$QaProfile='Mother18462',
+  [switch]$OwnerBackupConfirmed
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$newPkg='com.kelpie.browser.r5motherverify'
 $oldPkg='com.kelpie.browser.r5betaverify'
-$devicePort=18462
+if ($QaProfile -eq 'MotherNext18463') {
+  $newPkg='com.kelpie.browser.r5mothernextverify'
+  $devicePort=18463
+  $expectedVersionCode=40
+  $expectedVersionName='0.2.20-r5-mother-viewport-sidecar-qa'
+} else {
+  $newPkg='com.kelpie.browser.r5motherverify'
+  $devicePort=18462
+  $expectedVersionCode=38
+  $expectedVersionName='0.2.18-r5-mother-connection-qa'
+}
 
 function AdbCall([string[]]$items) {
   $result = & $script:Adb -s $script:serial @items 2>&1
@@ -20,7 +32,9 @@ function AdbCall([string[]]$items) {
   return (($result | Out-String).Trim())
 }
 function DetectPhone {
-  if (-not (Test-Path -LiteralPath $Adb -PathType Leaf)) {
+  if (Test-Path -LiteralPath $Adb -PathType Leaf) {
+    $script:Adb=(Resolve-Path -LiteralPath $Adb).Path
+  } else {
     $cmd=Get-Command adb -ErrorAction SilentlyContinue
     if ($null -eq $cmd) { throw 'ADB not found: install Android platform-tools.' }
     $script:Adb=$cmd.Source
@@ -35,7 +49,7 @@ function DetectPhone {
   $model=AdbCall -items @('shell','getprop','ro.product.model')
   $version=AdbCall -items @('shell','getprop','ro.build.version.release')
   if ($model -notmatch '^SM-S928') { throw "Unexpected device: $model" }
-  Write-Host "Connected Samsung $model Android $version, serial $script:serial"
+  Write-Host "Connected Samsung $model Android $version (one authorized USB device)"
 }
 function Installed([string]$pkg) {
   return ((AdbCall -items @('shell','pm','path',$pkg)) -match '(?m)^package:')
