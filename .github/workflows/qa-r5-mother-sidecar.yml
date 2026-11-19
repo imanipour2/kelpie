@@ -65,7 +65,7 @@ jobs:
             echo "port=18463"
             echo "connection=STANDARD_MOTHER_MCP_AND_OWNER_CONSENTED_R5_RENDERER"
             echo "signature=debug-only"
-            echo "install=SIDE_BY_SIDE_AFTER_HASH_AND_SIGNER_VERIFY"
+            echo "install=NO_AUTO_INSTALL_SINGLE_PACKAGE_SIGNER_MATCH_REQUIRED"
             echo "artifact_sha256=$(sha256sum "$APK" | awk '{print $1}')"
           } > apps/android/app/build/outputs/apk/debug/provenance.txt
       - uses: actions/upload-artifact@v4.6.2
