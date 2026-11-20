@@ -24,6 +24,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.net.InetAddress
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.math.abs
 
 /** Real HandlerContext expression wrapping and native gateway responses; synthetic loopback page only. */
 @RunWith(AndroidJUnit4::class)
@@ -145,6 +146,25 @@ class ScrollAndDeviceHandlerInstrumentedTest {
         return Position(number(value, "x"), number(value, "y"), number(value, "maxX"), number(value, "maxY"), value["direction"] as String)
     }
 
+    /** Choose the fixture origin explicitly; Android RTL load completion need not start at scrollX=0. */
+    private suspend fun establishScrollOrigin(ctx: HandlerContext): Position =
+        withTimeout(5_000L) {
+            val dispatched =
+                ctx.evaluateJSReturningJSON(
+                    "(()=>{window.scrollTo({left:0,top:0,behavior:'instant'});return{dispatched:true}})()",
+                )
+            assertEquals(true, dispatched["dispatched"])
+            var previous = observe(ctx)
+            var stable = 0
+            while (stable < 3) {
+                delay(50L)
+                val current = observe(ctx)
+                stable = if (abs(current.x) <= 0.5 && abs(current.y) <= 0.5 && current == previous) stable + 1 else 0
+                previous = current
+            }
+            previous
+        }
+
     private suspend fun extensionValue(
         router: Router,
         name: String,
@@ -213,7 +233,7 @@ class ScrollAndDeviceHandlerInstrumentedTest {
                             delay(50L)
                         }
                     }
-                    val initial = observe(ctx)
+                    val initial = establishScrollOrigin(ctx)
                     assertEquals("rtl", initial.direction)
                     assertTrue("Fixture needs measurable horizontal overflow: $initial", initial.maxX > 600.0)
                     assertTrue("Fixture needs measurable vertical overflow: $initial", initial.maxY > 1200.0)
