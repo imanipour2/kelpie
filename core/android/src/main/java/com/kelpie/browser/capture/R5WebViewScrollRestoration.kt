@@ -8,6 +8,21 @@ import kotlin.math.abs
 
 /** Stateless CSS-coordinate read/restore; lifecycle and the one owned WebView stay in the display. */
 internal object R5WebViewScrollRestoration {
+    suspend fun awaitRestoredHost(
+        view: WebView,
+        target: Pair<Double, Double>,
+        timeoutMs: Long,
+        attachedToOwner: () -> Boolean,
+        stillOwned: () -> Boolean,
+    ): Boolean {
+        val attached =
+            withTimeoutOrNull(timeoutMs) {
+                while (stillOwned() && !attachedToOwner()) delay(100)
+                stillOwned() && attachedToOwner()
+            } == true
+        return attached && restore(view, target) { stillOwned() && attachedToOwner() }
+    }
+
     suspend fun read(view: WebView): Pair<Double, Double>? {
         suspend fun coordinate(expression: String): Double? {
             if (!view.isAttachedToWindow) return null

@@ -144,6 +144,17 @@ class WebViewOwnershipState {
         identity = null
     }
 
+    /** Only after the adapter verified the same WebView in its real foreground host. */
+    @Synchronized
+    fun resetAfterVerifiedRestore() {
+        if (host !in setOf(Host.MOVING_PRIVATE, Host.PRIVATE, Host.RESTORING, Host.FAILED)) return
+        currentTicket = null
+        nextSequence++
+        identity = null
+        host = Host.ABSENT
+        ownershipEpoch++
+    }
+
     @Synchronized
     fun stop() {
         currentTicket = null

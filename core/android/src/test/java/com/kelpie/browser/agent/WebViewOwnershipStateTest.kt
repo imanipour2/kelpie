@@ -65,4 +65,31 @@ class WebViewOwnershipStateTest {
         assertFalse(owner.mayExecuteWebOperation("local", "renderer-1"))
         assertFalse(owner.bindForeground("local", "renderer-2"))
     }
+
+    @Test
+    fun verifiedRestoreRetiresInterruptedTicketButCannotTransferItsGeneration() {
+        val owner = WebViewOwnershipState()
+        assertTrue(owner.bindForeground("local", "renderer-1"))
+        assertTrue(owner.completePrivate(owner.moveToPrivate("local")!!))
+        val interrupted = owner.restoreForeground("local")!!
+        owner.resetAfterVerifiedRestore()
+        assertEquals(WebViewOwnershipState.Host.ABSENT, owner.status())
+        assertFalse(owner.completeRestore(interrupted))
+        assertFalse(owner.bindForeground("foreign", "renderer-1"))
+        assertTrue(owner.bindForeground("local", "renderer-1"))
+    }
+
+    @Test
+    fun physicalRestoreCannotClearLockOrExplicitStop() {
+        val owner = WebViewOwnershipState()
+        assertTrue(owner.bindForeground("local", "renderer-1"))
+        owner.lockDevice()
+        owner.resetAfterVerifiedRestore()
+        assertEquals(WebViewOwnershipState.Host.SUSPENDED, owner.status())
+        assertFalse(owner.bindForeground("local", "renderer-1"))
+        owner.stop()
+        owner.resetAfterVerifiedRestore()
+        assertEquals(WebViewOwnershipState.Host.CLOSED, owner.status())
+        assertFalse(owner.bindForeground("local", "renderer-1"))
+    }
 }

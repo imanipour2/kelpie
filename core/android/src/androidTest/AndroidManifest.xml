@@ -3,5 +3,6 @@
     <!-- Device tests run sync over plain HTTP on loopback, as the app does to LAN peers. -->
     <application android:usesCleartextTraffic="true">
         <activity android:name="com.kelpie.browser.capture.PrivacyFixtureActivity" android:exported="false" />
+        <activity android:name="com.kelpie.browser.capture.R5PrivateWebViewFixtureActivity" android:exported="false" />
     </application>
 </manifest>

@@ -41,6 +41,10 @@ class PrivateWebViewDisplay(
     private val stateFlow = MutableStateFlow(State.IDLE)
     val state = stateFlow.asStateFlow()
     private val ownershipGeneration = AtomicLong(0L)
+
+    // Resume retires frame evidence immediately; only physical teardown retires
+    // this lease. The latest serialized lifecycle intent settles a pending host.
+    private val hostGeneration = AtomicLong(0L)
     private val frames = R5PrivateFrameAcquisition { generation -> ownershipGeneration.get() == generation && canDeliverFrame() }
     private val main = Handler(Looper.getMainLooper())
     private val viewportReadiness = R5PrivateViewportReadiness { isLocked() }
@@ -101,12 +105,7 @@ class PrivateWebViewDisplay(
 
     suspend fun start(original: WebView): Boolean =
         withContext(Dispatchers.Main.immediate) {
-            val traceStartMs = android.os.SystemClock.elapsedRealtime()
-
-            fun trace(stage: String) {
-                val elapsed = android.os.SystemClock.elapsedRealtime() - traceStartMs
-                Log.i("KelpieR5Transfer", "stage=" + stage + " elapsedMs=" + elapsed)
-            }
+            val trace = R5PrivateTransferTrace()
             trace("START_ENTERED")
             // Diagnose the exact failed gate, not a combined status. These are
             // fixed labels: never log URLs, JavaScript results, pixels or principals.
@@ -121,11 +120,7 @@ class PrivateWebViewDisplay(
                     else -> null
                 }
             if (preconditionFailure != null) {
-                Log.w(
-                    "KelpieR5Transfer",
-                    "stage=START_PRECONDITION_DENIED_" + preconditionFailure +
-                        " elapsedMs=" + (android.os.SystemClock.elapsedRealtime() - traceStartMs),
-                )
+                trace("START_PRECONDITION_DENIED_" + preconditionFailure)
                 return@withContext false
             }
             val cssScroll =
@@ -134,7 +129,8 @@ class PrivateWebViewDisplay(
                     return@withContext false
                 }
             if (stateFlow.value != State.IDLE || isLocked() || !activityVisible) return@withContext false
-            val generation = ownershipGeneration.incrementAndGet()
+            cancelPendingCapture()
+            val generation = hostGeneration.incrementAndGet()
             previousCssScroll = cssScroll
             trace("COMPOSE_RELEASE_BEGIN")
             stateFlow.value = State.RELEASING_COMPOSE
@@ -144,7 +140,7 @@ class PrivateWebViewDisplay(
             val width = original.width.coerceIn(64, MAX_WIDTH)
             val height = original.height.coerceIn(64, MAX_HEIGHT)
 
-            fun current(): Boolean = ownershipGeneration.get() == generation && view === original && !isLocked()
+            fun current(): Boolean = hostGeneration.get() == generation && view === original && !isLocked()
             try {
                 if (useNativeFrameProof) {
                     previousOffscreenPreRaster = original.settings.offscreenPreRaster
@@ -158,8 +154,8 @@ class PrivateWebViewDisplay(
                         !original.isAttachedToWindow && current()
                     } == true
                 if (!detached) {
-                    trace("COMPOSE_RELEASE_TIMEOUT")
-                    if (ownershipGeneration.get() == generation) releaseAndRestore(State.FAILED)
+                    trace(if (current()) "COMPOSE_RELEASE_TIMEOUT" else "COMPOSE_RELEASE_OWNERSHIP_LOST")
+                    if (hostGeneration.get() == generation) releaseAndRestore(State.FAILED)
                     return@withContext false
                 }
                 trace("COMPOSE_DETACHED")
@@ -188,14 +184,16 @@ class PrivateWebViewDisplay(
                 host.setContentView(proof?.host(original) ?: original)
                 host.show()
                 trace("PRIVATE_HOST_SHOWN")
+                hostSnapshot(original).log("PRIVATE_HOST_SHOWN")
                 // A newly reparented offscreen WebView must be scheduled for a
                 // real draw; never confuse requestLayout with frame proof.
                 original.requestLayout()
                 original.postInvalidateOnAnimation()
                 host.window?.decorView?.postInvalidateOnAnimation()
-                if (!viewportReadiness.awaitCommittedViewport(original, ++visualRequestId, ::current) || !current()) {
+                if (!awaitPrivateViewport(original, ::current) || !current()) {
                     trace("PRIVATE_VIEWPORT_COMMIT_FAILED")
-                    if (ownershipGeneration.get() == generation) releaseAndRestore(State.FAILED)
+                    hostSnapshot(original).log("PRIVATE_VIEWPORT_COMMIT_FAILED")
+                    if (hostGeneration.get() == generation) releaseAndRestore(State.FAILED)
                     return@withContext false
                 }
                 active = true
@@ -203,11 +201,11 @@ class PrivateWebViewDisplay(
                 trace("PRIVATE_DISPLAY_COMMITTED")
                 true
             } catch (error: CancellationException) {
-                if (ownershipGeneration.get() == generation) releaseAndRestore(State.FAILED)
+                if (hostGeneration.get() == generation) releaseAndRestore(State.FAILED)
                 throw error
             } catch (_: RuntimeException) {
                 trace("PRIVATE_DISPLAY_RUNTIME_FAILURE")
-                if (ownershipGeneration.get() == generation) releaseAndRestore(State.FAILED)
+                if (hostGeneration.get() == generation) releaseAndRestore(State.FAILED)
                 false
             }
         }
@@ -236,7 +234,7 @@ class PrivateWebViewDisplay(
                     return
                 }
                 val swappedBack = proof.owns(old) || proof.swapWebView(next, old)
-                active = swappedBack && viewportReadiness.awaitCommittedViewport(old, ++visualRequestId, ::current) && current()
+                active = swappedBack && awaitPrivateViewport(old, ::current) && current()
                 if (!active && current()) releaseAndRestore(State.FAILED)
             }
             try {
@@ -244,7 +242,7 @@ class PrivateWebViewDisplay(
                     rollback()
                     return@withContext false
                 }
-                val ready = viewportReadiness.awaitCommittedViewport(next, ++visualRequestId, ::current)
+                val ready = awaitPrivateViewport(next, ::current)
                 val css = if (ready && current()) R5WebViewScrollRestoration.read(next) else null
                 if (!ready || css == null || !current() || !proof.owns(next)) {
                     rollback()
@@ -358,6 +356,7 @@ class PrivateWebViewDisplay(
     suspend fun stop() =
         withContext(Dispatchers.Main.immediate) {
             active = false
+            hostGeneration.incrementAndGet()
             cancelPendingCapture()
             if (stateFlow.value != State.IDLE && stateFlow.value != State.RESTORE_PENDING) {
                 val wasPrivate = stateFlow.value == State.PRIVATE_DISPLAY
@@ -378,6 +377,7 @@ class PrivateWebViewDisplay(
 
     fun dispose() {
         active = false
+        hostGeneration.incrementAndGet()
         cancelPendingCapture()
         if (Looper.myLooper() == Looper.getMainLooper()) releaseAndRestore(State.IDLE) else main.post { releaseAndRestore(State.IDLE) }
     }
@@ -404,18 +404,16 @@ class PrivateWebViewDisplay(
                     noteRestore("NO_VIEW_RESTORED")
                     return@withContext true
                 }
-            val generation = ownershipGeneration.get()
-            val attached =
-                withTimeoutOrNull(if (useNativeFrameProof) 5_000L else RELEASE_TIMEOUT_MS) {
-                    while (!original.isAttachedToWindow && ownershipGeneration.get() == generation) delay(100)
-                    original.isAttachedToWindow
-                } == true
+            val generation = hostGeneration.get()
             val matched =
-                attached &&
-                    R5WebViewScrollRestoration.restore(original, previousCssScroll) {
-                        ownershipGeneration.get() == generation && view === original && !isLocked()
-                    }
-            if (ownershipGeneration.get() != generation) return@withContext false
+                R5WebViewScrollRestoration.awaitRestoredHost(
+                    original,
+                    previousCssScroll,
+                    if (useNativeFrameProof) 5_000L else RELEASE_TIMEOUT_MS,
+                    attachedToOwner = { original.isAttachedToWindow && original.rootView === activity.window.decorView },
+                    stillOwned = { hostGeneration.get() == generation && view === original && !isLocked() },
+                )
+            if (hostGeneration.get() != generation) return@withContext false
             stateFlow.value = if (matched) State.IDLE else State.FAILED
             noteRestore(if (matched) "CSS_RESTORED" else "CSS_STABILITY_FAILED")
             if (matched) view = null
@@ -432,6 +430,7 @@ class PrivateWebViewDisplay(
     ) {
         check(Looper.myLooper() == Looper.getMainLooper())
         active = false
+        hostGeneration.incrementAndGet()
         cancelPendingCapture()
         val original = view
         val cleanup = PrivateCaptureCleanupSequence()
@@ -474,6 +473,13 @@ class PrivateWebViewDisplay(
                 else -> result
             }
     }
+
+    private fun hostSnapshot(webView: WebView): R5PrivateHostSnapshot = R5PrivateHostSnapshot.read(webView, display, presentation, reader, nativeFrameProof?.owns(webView) ?: attachedToPrivateHost)
+
+    private suspend fun awaitPrivateViewport(
+        webView: WebView,
+        stillOwned: () -> Boolean,
+    ): Boolean = viewportReadiness.awaitCommittedViewport(webView, ++visualRequestId, stillOwned) { hostSnapshot(webView).failure() }
 
     private fun isLocked(): Boolean =
         activity.isFinishing ||

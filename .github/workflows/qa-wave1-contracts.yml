@@ -136,7 +136,7 @@ jobs:
       - name: Build fixture APK with the existing ARM64 and x86_64 ABI configuration
         working-directory: apps/android
         run: ./gradlew --no-daemon -PkelpieR5MotherNextQaProfile=true :kelpie-browser:assembleDebugAndroidTest
-      - name: Execute all 11 new Wave 1 Android fixture tests
+      - name: Execute all 13 Android protocol, privacy and lifecycle fixture tests
         working-directory: apps/android
         shell: bash
         run: |
@@ -147,7 +147,7 @@ jobs:
           timeout --kill-after=2s 10s "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell input keyevent KEYCODE_WAKEUP
           timeout --kill-after=2s 10s "$ANDROID_HOME/platform-tools/adb" -s emulator-5554 shell wm dismiss-keyguard
           ./gradlew --no-daemon -PkelpieR5MotherNextQaProfile=true \
-            -Pandroid.testInstrumentationRunnerArguments.class=com.kelpie.browser.network.R5ControlPlaneWireTest,com.kelpie.browser.capture.R5ImageReaderCaptureInstrumentedTest,com.kelpie.browser.capture.CapturePrivacyInstrumentedTest,com.kelpie.browser.handlers.NavigationHandlerInstrumentedTest \
+            -Pandroid.testInstrumentationRunnerArguments.class=com.kelpie.browser.network.R5ControlPlaneWireTest,com.kelpie.browser.capture.R5ImageReaderCaptureInstrumentedTest,com.kelpie.browser.capture.CapturePrivacyInstrumentedTest,com.kelpie.browser.handlers.NavigationHandlerInstrumentedTest,com.kelpie.browser.capture.R5PrivateWebViewLifecycleInstrumentedTest \
             :kelpie-browser:connectedDebugAndroidTest
       - name: Require the complete fixture scope with no skipped, failed or missing cases
         if: always()
@@ -160,6 +160,7 @@ jobs:
               'com.kelpie.browser.capture.R5ImageReaderCaptureInstrumentedTest': 2,
               'com.kelpie.browser.capture.CapturePrivacyInstrumentedTest': 6,
               'com.kelpie.browser.handlers.NavigationHandlerInstrumentedTest': 2,
+              'com.kelpie.browser.capture.R5PrivateWebViewLifecycleInstrumentedTest': 2,
           }
           reports = list(pathlib.Path('core/android/build/outputs/androidTest-results/connected').rglob('TEST-*.xml'))
           counts = collections.Counter()
@@ -179,13 +180,13 @@ jobs:
           summary = {'sourceCommit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(), 'scope': 'API34_SYNTHETIC_EMULATOR_ONLY',
                      'classCounts': dict(counts), 'failures': failures, 'errors': errors, 'skipped': skipped,
                      'unsuccessfulCases': case_failures,
-                     'minimumRequiredCases': 11, 'physicalS24Acceptance': 'NOT_TESTED'}
+                     'minimumRequiredCases': 13, 'physicalS24Acceptance': 'NOT_TESTED'}
           pathlib.Path(os.environ['RUNNER_TEMP'], 'kelpie-android-fixture-summary.json').write_text(json.dumps(summary, indent=2) + '\n')
           assert reports, 'No Android instrumentation result XML was produced'
           assert not case_failures, summary
           assert failures == errors == skipped == 0, summary
           assert all(counts[name] >= count for name, count in expected.items()), summary
-          assert sum(counts.values()) >= 11, summary
+          assert sum(counts.values()) >= 13, summary
           print(json.dumps(summary, indent=2))
           PY
       - name: Collect only synthetic emulator diagnostics and stop that emulator
