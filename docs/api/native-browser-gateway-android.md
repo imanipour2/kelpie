@@ -188,6 +188,13 @@ before execution and result delivery. Foreground does not bypass this policy.
 STOP/reapprove and lock/resume change the original authority and suppress stale
 results. Unpair also cancels that principal's pending or active native session.
 
+The exact `get-device-info` handler, including `kelpie_get_device_info` through
+the native MCP extension route, reads native device/app metadata without resolving
+a WebView or waiting for private-renderer readiness. It retains the same admitted
+native grant, computer-proof provenance, STOP, lock, revocation and result-delivery
+checks. It is not part of the compiled-static discovery exemption. Viewport, tab
+and page operations still require their real renderer readiness and target proofs.
+
 The R5 allowlist excludes arbitrary evaluation, cookies, storage, raw network
 exports, clipboard/script helpers and unbound selector/index actions. Extension
 discovery and native authorization enforce the same boundary; an extension

@@ -65,6 +65,7 @@ class Router(
         if (motherR5BackgroundQa &&
             !controlOnly &&
             method != "mcp" &&
+            BrowserGatewayDispatch.requiresRenderer(method) &&
             handlerContext?.motherPrivateAgentActive?.invoke() == true &&
             handlerContext?.motherGatewayAuthorization?.invoke() != true
         ) {

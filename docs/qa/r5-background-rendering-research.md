@@ -189,6 +189,51 @@ clamping, boundary refusal and metadata-envelope assertions remain required.
 The fixture uses production viewport settings and enough vertical content for
 the expanded layout viewport; its complete setup stays bounded to five seconds.
 
+## Follow-up: device metadata and renderer availability
+
+A later authenticated readback returned compiled documentation, capabilities and
+extension discovery, while both tab listing and device information reported
+`RENDERER_NOT_READY` with computer approval unchanged. The device inspection and
+installation bridge was unavailable at that observation. These results identify
+an availability boundary; they do not establish whether the actual phone was
+locked, stopped, backgrounded, or recovering a renderer.
+
+The upstream `get-device-info` handler at commit
+`f47ebeb23a3e56fb01ab89ba42034e30940a15b2` uses `DeviceInfo` and Android build
+metadata, without reading a WebView. [13] The fork added a blanket private-renderer
+readiness check before this handler. The focused correction classifies only that
+exact native method as renderer-independent in the existing dispatch boundary.
+Router and gateway dispatch retain native computer-proof provenance and the
+admitted owner generation, safety epoch, STOP, lock and pre/post-delivery revocation
+checks. Device identity/network metadata does not become unauthenticated or
+compiled-static discovery. Tab, viewport, document and image operations keep their
+existing readiness requirements; no Activity is started by this request.
+
+The native Android regression executes both the MCP extension envelope and the
+direct route with no WebView and unavailable renderer callbacks. It requires the
+real device handler to succeed without consulting those callbacks, while tab and
+viewport calls remain unavailable. Wrong proof origin, revoked credentials,
+locked/stopped consent and a grant retired during the handler must still reject
+or suppress the result. A dispatch unit case separately checks tab changes cannot
+invalidate renderer-independent metadata, without removing initial target/pin
+validation. CI and device-installation results must be recorded for the exact
+candidate revision; this source note is not evidence of installation.
+
+Inspection also identified a separate recovery boundary: a native unlock while
+the Activity remains backgrounded can leave suspended private ownership waiting
+for the real foreground reconciliation path. The current private host requires
+verified foreground attachment before a new transfer; toggling its visibility
+flag or reusing old geometry would manufacture that evidence. Automatic background
+reattachment requires its own native ownership/host-readiness design and physical
+lock/STOP/race validation. It is not claimed fixed by the metadata correction,
+and it is not established as the cause of the observed device response.
+
+Android distinguishes authentication lock from Keyguard visibility; their APIs
+cannot be interchanged merely to obtain readiness. [14] A terminated WebView
+renderer is a different condition again: its dead WebView must be removed and
+destroyed, and recovery needs a new instance. [10] These boundaries keep an
+availability diagnosis from silently weakening execution authorization.
+
 ## Primary sources
 
 1. [WebView visual-state API](https://developer.android.com/reference/android/webkit/WebView.html#postVisualStateCallback(long,%20android.webkit.WebView.VisualStateCallback)).
@@ -203,3 +248,5 @@ the expanded layout viewport; its complete setup stays bounded to five seconds.
 10. [Manage WebView objects](https://developer.android.com/develop/ui/views/layout/webapps/managing-webview).
 11. [Process lifecycle](https://developer.android.com/guide/components/activities/process-lifecycle), [Android 17 all-app changes](https://developer.android.com/about/versions/17/behavior-changes-all), and [Android 17 target-specific changes](https://developer.android.com/about/versions/17/behavior-changes-17).
 12. Chromium at commit `fcc56177d69e3b0ac50f90c85a38f8a0cab99f92`: [LocalDOMWindow](https://github.com/chromium/chromium/blob/fcc56177d69e3b0ac50f90c85a38f8a0cab99f92/third_party/blink/renderer/core/frame/local_dom_window.cc), [Element client geometry](https://github.com/chromium/chromium/blob/fcc56177d69e3b0ac50f90c85a38f8a0cab99f92/third_party/blink/renderer/core/dom/element.cc), and [PaintLayerScrollableArea bounds](https://github.com/chromium/chromium/blob/fcc56177d69e3b0ac50f90c85a38f8a0cab99f92/third_party/blink/renderer/core/paint/paint_layer_scrollable_area.cc).
+13. Mother Kelpie at commit `f47ebeb23a3e56fb01ab89ba42034e30940a15b2`: [DeviceHandler](https://github.com/UnlikeOtherAI/kelpie/blob/f47ebeb23a3e56fb01ab89ba42034e30940a15b2/core/android/src/main/java/com/kelpie/browser/handlers/DeviceHandler.kt) and [BrowserGatewayDispatch](https://github.com/UnlikeOtherAI/kelpie/blob/f47ebeb23a3e56fb01ab89ba42034e30940a15b2/core/android/src/main/java/com/kelpie/browser/network/BrowserGatewayDispatch.kt).
+14. [Android KeyguardManager](https://developer.android.com/reference/android/app/KeyguardManager): `isDeviceLocked` and `isKeyguardLocked` have distinct documented meanings; reviewed again on 2026-11-20.

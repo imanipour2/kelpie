@@ -16,7 +16,13 @@ class BrowserGatewayDispatch<T>(
             return errorResponse("TAB_CHANGED", "The requested tab is no longer active")
         }
         val management = method in setOf("switch-tab", "close-tab", "new-tab", "delete-partition")
-        val result = operation(if (management) null else renderer())
-        return if (!management && active() != admitted) errorResponse("TAB_CHANGED", "The requested tab changed during dispatch") else result
+        val requiresRenderer = requiresRenderer(method)
+        val result = operation(if (management || !requiresRenderer) null else renderer())
+        return if (!management && requiresRenderer && active() != admitted) errorResponse("TAB_CHANGED", "The requested tab changed during dispatch") else result
+    }
+
+    companion object {
+        /** Native device metadata never reads a page. Every other method keeps its renderer requirements. */
+        internal fun requiresRenderer(method: String): Boolean = method != "get-device-info"
     }
 }

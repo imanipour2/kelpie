@@ -12,6 +12,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -169,6 +170,24 @@ class BrowserGatewayTests {
             assertFalse(invoked)
             val noPage = BrowserGatewayDispatch<String>({ "0" }, { null })
             assertEquals(true, noPage.execute("get-device-info", emptyMap(), null) { mapOf("success" to (it == null)) }["success"])
+        }
+
+    @Test fun deviceMetadataDoesNotResolveARendererOrDependOnLaterTabChanges() =
+        runBlocking {
+            var active = "one"
+            val boundary = BrowserGatewayDispatch<String>({ active }, { error("Device metadata must not resolve a renderer") })
+            val result =
+                boundary.execute("get-device-info", emptyMap(), null) { captured ->
+                    assertNull(captured)
+                    active = "two"
+                    successResponse(mapOf("device" to "synthetic"))
+                }
+            assertEquals(true, result["success"])
+            assertEquals("synthetic", result["device"])
+            val wrongTarget = boundary.execute("get-device-info", mapOf("tabId" to "one"), null) { error("Wrong target was admitted") }
+            val wrongPin = boundary.execute("get-device-info", emptyMap(), "one") { error("Wrong pin was admitted") }
+            assertEquals("TAB_CHANGED", (wrongTarget["error"] as Map<*, *>)["code"])
+            assertEquals("TAB_CHANGED", (wrongPin["error"] as Map<*, *>)["code"])
         }
 
     @Test fun protocolFailureKeepsUncertaintyOnSuccessfulTransport() =
