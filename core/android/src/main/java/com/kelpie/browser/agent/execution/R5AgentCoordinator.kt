@@ -143,7 +143,12 @@ class R5AgentCoordinator(
                     currentGeneration = state.generation
                     ownership = WebViewOwnershipState()
                     runtime = newRuntime()
-                    if (!deferPrivateUntilBackground || !activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                    // Mother mode must transfer only from the matching onPause
+                    // lifecycle epoch. Treating !RESUMED as a transfer trigger
+                    // races with an earlier onPause that already set
+                    // activityVisible=false, causing immediate fail-closed
+                    // START_PRECONDITION_DENIED_ACTIVITY_VISIBILITY_CHANGED.
+                    if (R5MotherActivationGate.canEagerlyActivate(deferPrivateUntilBackground)) {
                         scope.launch { activateRenderer(state) }
                     }
                 } else if (ownership.status() == WebViewOwnershipState.Host.SUSPENDED) {
@@ -550,4 +555,13 @@ internal object R5PausedVisibilityGate {
         currentEpoch: Long,
         activityResumed: Boolean,
     ): Boolean = pauseEpoch == currentEpoch && !activityResumed
+}
+
+/**
+ * Mother profile requires an actual, epoch-verified onPause transfer. A
+ * temporarily non-RESUMED lifecycle while collecting native consent does not
+ * authorize a separate renderer ownership change.
+ */
+internal object R5MotherActivationGate {
+    fun canEagerlyActivate(deferPrivateUntilBackground: Boolean): Boolean = !deferPrivateUntilBackground
 }
