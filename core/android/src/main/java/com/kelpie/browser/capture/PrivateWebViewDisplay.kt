@@ -56,6 +56,7 @@ class PrivateWebViewDisplay(
     private var previousCssScroll = 0.0 to 0.0
     private var qaFrameSequence = 0
     private var visualRequestId = 0L
+
     // This belongs to the single temporarily transferred WebView only.
     // Restore the user's original setting on STOP, failure or foreground return.
     private var previousOffscreenPreRaster: Boolean? = null
