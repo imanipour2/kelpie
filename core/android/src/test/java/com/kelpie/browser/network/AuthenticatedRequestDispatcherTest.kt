@@ -177,10 +177,10 @@ class AuthenticatedRequestDispatcherTest {
             router.register("get-tabs") { successResponse(mapOf("tabs" to emptyList<Any>())) }
             val outcome = request("get-tabs")
             assertEquals(200, outcome.status)
-            assertTrue(dispatcher.mayDeliver(principal.clientId, outcome))
+            assertTrue(dispatcher.mayDeliver(principal, outcome))
             consent.stop()
             approve()
-            assertFalse(dispatcher.mayDeliver(principal.clientId, outcome))
+            assertFalse(dispatcher.mayDeliver(principal, outcome))
         }
 
     @Test

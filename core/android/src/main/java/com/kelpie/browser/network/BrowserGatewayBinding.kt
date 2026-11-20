@@ -322,12 +322,13 @@ class BrowserGatewayBinding(
         val guard =
             if (router.motherR5BackgroundQa) {
                 val principal = verifiedClientId()
+                val computerKey = verifiedComputerKey()
                 val admitted = verifiedOwnerGrant()
                 val store = ctx.tabStore
                 val tab = store?.activeTab
                 val document = tab?.documentVersion
                 BrowserOperationGuard(
-                    authorityCurrent = { R5RequestAuthorization.permits(principal, admitted, router.nativeConsentSnapshot()) },
+                    authorityCurrent = { R5RequestAuthorization.permits(principal, admitted, router.nativeConsentSnapshot(), computerKey) },
                     targetCurrent = {
                         tab != null && store != null && store === ctx.tabStore && store.activeTab === tab && tab.webView === view
                     },

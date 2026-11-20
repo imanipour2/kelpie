@@ -27,7 +27,7 @@ class TrustedComputerSessionContinuityTest {
         }
         clock += 86_400_000L
         assertEquals(admitted, session.restoreTrustedComputer(computer, paused = false, deviceUnlocked = true))
-        assertTrue(R5RequestAuthorization.permits(computer, admitted, session.snapshot()))
+        assertTrue(R5RequestAuthorization.permits(computer, admitted, session.snapshot(), computerKey = computer))
         assertNull(session.requestNativeConsent(computer))
     }
 
@@ -67,14 +67,14 @@ class TrustedComputerSessionContinuityTest {
         val locked = session.snapshot() as SessionConsentCore.State.Active
         assertTrue(locked.locked)
         assertEquals(admitted.generation, locked.generation)
-        assertFalse(R5RequestAuthorization.permits(computer, admitted, locked))
+        assertFalse(R5RequestAuthorization.permits(computer, admitted, locked, computerKey = computer))
 
         val resumed = session.restoreTrustedComputer(computer, paused = false, deviceUnlocked = true)!!
         assertFalse(resumed.locked)
         assertEquals(admitted.generation, resumed.generation)
         assertEquals(admitted.safetyEpoch + 2L, resumed.safetyEpoch)
-        assertFalse(R5RequestAuthorization.permits(computer, admitted, resumed))
-        assertTrue(R5RequestAuthorization.permits(computer, resumed, resumed))
+        assertFalse(R5RequestAuthorization.permits(computer, admitted, resumed, computerKey = computer))
+        assertTrue(R5RequestAuthorization.permits(computer, resumed, resumed, computerKey = computer))
     }
 
     @Test
@@ -90,8 +90,8 @@ class TrustedComputerSessionContinuityTest {
         }
         val resumed = session.restoreTrustedComputer(computer, paused = false, deviceUnlocked = true)!!
         assertNotEquals(admitted.generation, resumed.generation)
-        assertFalse(R5RequestAuthorization.permits(computer, admitted, resumed))
-        assertTrue(R5RequestAuthorization.permits(computer, resumed, resumed))
+        assertFalse(R5RequestAuthorization.permits(computer, admitted, resumed, computerKey = computer))
+        assertTrue(R5RequestAuthorization.permits(computer, resumed, resumed, computerKey = computer))
     }
 
     @Test
@@ -109,7 +109,7 @@ class TrustedComputerSessionContinuityTest {
         val owner = session.restoreTrustedComputer(computer, paused = false, deviceUnlocked = true)!!
         assertNull(session.restoreTrustedComputer(otherComputer, paused = false, deviceUnlocked = true))
         assertEquals(owner, session.snapshot())
-        assertFalse(R5RequestAuthorization.permits(otherComputer, owner, session.snapshot()))
+        assertFalse(R5RequestAuthorization.permits(otherComputer, owner, session.snapshot(), computerKey = otherComputer))
     }
 
     @Test
@@ -122,11 +122,11 @@ class TrustedComputerSessionContinuityTest {
         assertEquals(admitted.locked, recovering.locked)
         assertNotEquals(admitted.generation, recovering.generation)
         assertEquals(admitted.safetyEpoch + 1L, recovering.safetyEpoch)
-        assertFalse(R5RequestAuthorization.permits(computer, admitted, recovering))
+        assertFalse(R5RequestAuthorization.permits(computer, admitted, recovering, computerKey = computer))
         assertEquals(recovering, session.restoreTrustedComputer(computer, paused = false, deviceUnlocked = true))
         assertNull(session.requestNativeConsent(computer))
         // Renderer readiness remains a separate execution gate, outside this trust/epoch core.
-        assertTrue(R5RequestAuthorization.permits(computer, recovering, recovering))
+        assertTrue(R5RequestAuthorization.permits(computer, recovering, recovering, computerKey = computer))
     }
 
     @Test
@@ -170,6 +170,52 @@ class TrustedComputerSessionContinuityTest {
     }
 
     @Test
+    fun sameNamedLegacyBearerCannotBorrowTheTrustedComputerEpoch() {
+        val session = SessionConsentCore({ 10L })
+        val restored = session.restoreTrustedComputer(computer, paused = false, deviceUnlocked = true)!!
+        assertEquals(computer, restored.trustedComputerKey)
+        assertFalse(R5RequestAuthorization.permits(computer, restored, restored))
+        assertFalse(R5RequestAuthorization.permits(computer, restored, restored, computerKey = otherComputer))
+        assertTrue(R5RequestAuthorization.permits(computer, restored, restored, computerKey = computer))
+        assertFalse(R5RequestAuthorization.owns(computer, null, restored))
+        assertTrue(R5RequestAuthorization.owns(computer, computer, restored))
+
+        session.setDeviceLocked(true)
+        val locked = session.snapshot() as SessionConsentCore.State.Active
+        assertEquals(computer, locked.trustedComputerKey)
+        assertFalse(R5RequestAuthorization.permits(computer, locked, locked, computerKey = computer))
+        // Native owner status/STOP still work while locked; a namesake cannot own them.
+        assertTrue(R5RequestAuthorization.owns(computer, computer, locked))
+        assertFalse(R5RequestAuthorization.owns(computer, null, locked))
+        session.setDeviceLocked(false)
+        assertTrue(session.invalidateRuntime())
+        val recovered = session.snapshot() as SessionConsentCore.State.Active
+        assertEquals(computer, recovered.trustedComputerKey)
+        assertFalse(R5RequestAuthorization.permits(computer, recovered, recovered))
+        assertTrue(R5RequestAuthorization.permits(computer, recovered, recovered, computerKey = computer))
+    }
+
+    @Test
+    fun verifiedComputerUpgradeRetiresTheSameNamedLegacyGrantWithoutAnotherPrompt() {
+        val session = SessionConsentCore({ 10L })
+        val pending = session.requestNativeConsent(computer)!!
+        val legacy = session.approveFromNativeUi(pending.promptId, deviceUnlocked = true)!!
+        assertNull(legacy.trustedComputerKey)
+        assertTrue(R5RequestAuthorization.permits(computer, legacy, legacy))
+
+        val upgraded = session.restoreTrustedComputer(computer, paused = false, deviceUnlocked = true)!!
+        assertEquals(computer, upgraded.principalId)
+        assertEquals(computer, upgraded.trustedComputerKey)
+        assertNotEquals(legacy.generation, upgraded.generation)
+        assertTrue(upgraded.safetyEpoch > legacy.safetyEpoch)
+        assertFalse(R5RequestAuthorization.permits(computer, legacy, upgraded))
+        assertFalse(R5RequestAuthorization.permits(computer, upgraded, upgraded))
+        assertTrue(R5RequestAuthorization.permits(computer, upgraded, upgraded, computerKey = computer))
+        assertEquals(upgraded, session.restoreTrustedComputer(computer, paused = false, deviceUnlocked = true))
+        assertNull(session.requestNativeConsent(computer))
+    }
+
+    @Test
     fun processRecreationRestoresTheComputerWithANewExecutionEpoch() {
         val firstProcess = SessionConsentCore({ 10L })
         val prior = firstProcess.restoreTrustedComputer(computer, paused = false, deviceUnlocked = true)!!
@@ -177,8 +223,8 @@ class TrustedComputerSessionContinuityTest {
         val restored = restartedProcess.restoreTrustedComputer(computer, paused = false, deviceUnlocked = true)!!
         assertEquals(prior.principalId, restored.principalId)
         assertNotEquals(prior.generation, restored.generation)
-        assertFalse(R5RequestAuthorization.permits(computer, prior, restored))
-        assertTrue(R5RequestAuthorization.permits(computer, restored, restored))
+        assertFalse(R5RequestAuthorization.permits(computer, prior, restored, computerKey = computer))
+        assertTrue(R5RequestAuthorization.permits(computer, restored, restored, computerKey = computer))
 
         val stoppedProcess = SessionConsentCore({ 30L })
         assertNull(stoppedProcess.restoreTrustedComputer(computer, paused = true, deviceUnlocked = true))

@@ -381,7 +381,7 @@ class HTTPServer(
                     Log.e("HTTPServer", "request=$id type=${error.javaClass.simpleName}\n$trace")
                 },
             )
-        if (!dispatcher.mayDeliver(principal.clientId, outcome)) {
+        if (!dispatcher.mayDeliver(principal, outcome)) {
             call.respondText(
                 mapToJsonString(AuthenticatedRequestDispatcher.correlatedError("SESSION_REVOKED", "Native owner approval changed before delivery", correlationId)),
                 ContentType.Application.Json,

@@ -60,7 +60,7 @@ internal class AuthenticatedRequestDispatcher(
                 return denied("AUTHORIZATION_REVOKED", "Paired client authorization changed during execution-session restoration")
             }
             val admitted = if (required) consentSnapshot() as? SessionConsentCore.State.Active else null
-            if (required && !R5RequestAuthorization.permits(principal.clientId, admitted, consentSnapshot())) {
+            if (required && !R5RequestAuthorization.permits(principal.clientId, admitted, consentSnapshot(), principal.computerKey)) {
                 if (principal.computerKey == principal.clientId && admitted != null && admitted.principalId != principal.clientId) {
                     return Outcome(409, correlatedError("CONTROLLER_BUSY", "Another trusted computer currently owns the browser runtime", correlationId, "REJECTED"), false, null)
                 }
@@ -76,7 +76,7 @@ internal class AuthenticatedRequestDispatcher(
                 val (status, result) = router.handle(method, body)
                 if (!verifiedRequestAuthorityCurrent()) {
                     denied("AUTHORIZATION_REVOKED", "Paired client authorization changed before delivery")
-                } else if (required && !R5RequestAuthorization.permits(principal.clientId, admitted, consentSnapshot())) {
+                } else if (required && !R5RequestAuthorization.permits(principal.clientId, admitted, consentSnapshot(), principal.computerKey)) {
                     denied("SESSION_REVOKED", "Native owner approval changed before delivery")
                 } else {
                     if (method == "mcp" &&
@@ -105,11 +105,11 @@ internal class AuthenticatedRequestDispatcher(
     }
 
     fun mayDeliver(
-        principal: String,
+        principal: AuthDecision.Authenticated,
         outcome: Outcome,
     ): Boolean =
         !outcome.ownerGrantRequired ||
-            R5RequestAuthorization.permits(principal, outcome.admittedGrant, consentSnapshot())
+            R5RequestAuthorization.permits(principal.clientId, outcome.admittedGrant, consentSnapshot(), principal.computerKey)
 
     companion object {
         fun correlatedError(

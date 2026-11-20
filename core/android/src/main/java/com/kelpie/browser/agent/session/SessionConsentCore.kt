@@ -22,6 +22,8 @@ class SessionConsentCore(
             val locked: Boolean = false,
             /** Monotonic safety epoch: lock/unlock races invalidate in-flight work. */
             val safetyEpoch: Long = 0L,
+            /** Native computer proof bound to a restored epoch; null for explicit legacy consent. */
+            val trustedComputerKey: String? = null,
         ) : State
     }
 
@@ -46,12 +48,20 @@ class SessionConsentCore(
             is State.Pending -> return null
             is State.Active -> {
                 if (state.principalId != computerKey) return null
+                if (state.trustedComputerKey != computerKey) {
+                    current =
+                        state.copy(
+                            generation = nonce(),
+                            safetyEpoch = state.safetyEpoch + 1L,
+                            trustedComputerKey = computerKey,
+                        )
+                }
                 setDeviceLocked(!deviceUnlocked)
                 return current as State.Active
             }
             State.Off -> {
                 if (!deviceUnlocked) return null
-                return State.Active(computerKey, nonce()).also { current = it }
+                return State.Active(computerKey, nonce(), trustedComputerKey = computerKey).also { current = it }
             }
         }
     }

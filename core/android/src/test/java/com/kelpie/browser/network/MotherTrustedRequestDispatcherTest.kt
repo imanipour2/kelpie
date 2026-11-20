@@ -4,8 +4,10 @@ import com.kelpie.browser.agent.session.SessionConsentCore
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -52,6 +54,67 @@ class MotherTrustedRequestDispatcherTest {
             }
             assertEquals(0, restores)
             assertEquals(SessionConsentCore.State.Off, consent.snapshot())
+        }
+
+    @Test
+    fun sameNamedLegacyBearerCannotReuseOrDeliverATrustedComputerRequest() =
+        runBlocking {
+            var calls = 0
+            router.register("get-tabs") {
+                calls++
+                successResponse()
+            }
+            val accepted = request()
+            assertEquals(200, accepted.status)
+            val admitted = consent.snapshot() as SessionConsentCore.State.Active
+            assertEquals(key, admitted.trustedComputerKey)
+            val legacy = AuthDecision.Authenticated(key)
+            val wrongProof = AuthDecision.Authenticated(key, "b".repeat(64))
+            assertEquals(403, request(legacy).status)
+            assertEquals(403, request(wrongProof).status)
+            assertEquals(1, calls)
+            assertEquals(1, restores)
+            assertTrue(dispatcher.mayDeliver(computer, accepted))
+            assertFalse(dispatcher.mayDeliver(legacy, accepted))
+            assertFalse(dispatcher.mayDeliver(wrongProof, accepted))
+            withContext(AuthenticatedClientContext.fromVerifiedDecision(legacy, admitted)) {
+                assertFalse(R5RequestAuthorization.current(consent::snapshot))
+            }
+            withContext(AuthenticatedClientContext.fromVerifiedDecision(computer, admitted)) {
+                assertTrue(R5RequestAuthorization.current(consent::snapshot))
+            }
+            assertEquals(admitted, consent.snapshot())
+        }
+
+    @Test
+    fun inFlightLegacyWorkCannotInheritAVerifiedComputerUpgrade() =
+        runBlocking {
+            val pending = consent.requestNativeConsent(key)!!
+            val legacyGrant = consent.approveFromNativeUi(pending.promptId, deviceUnlocked = true)!!
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            var calls = 0
+            router.register("get-tabs") {
+                if (calls++ == 0) {
+                    entered.complete(Unit)
+                    release.await()
+                    successResponse(mapOf("privateFixture" to "legacy-result-must-not-escape"))
+                } else {
+                    successResponse()
+                }
+            }
+            val oldRequest = async { request(AuthDecision.Authenticated(key)) }
+            entered.await()
+            assertEquals(200, request().status)
+            val upgraded = consent.snapshot() as SessionConsentCore.State.Active
+            assertEquals(key, upgraded.trustedComputerKey)
+            assertNotEquals(legacyGrant.generation, upgraded.generation)
+            release.complete(Unit)
+            val rejected = oldRequest.await()
+            assertEquals(403, rejected.status)
+            assertFalse(rejected.body.toString().contains("legacy-result-must-not-escape"))
+            assertEquals(200, request().status)
+            assertEquals(upgraded, consent.snapshot())
         }
 
     @Test

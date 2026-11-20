@@ -39,6 +39,12 @@ current trusted-computer membership. It does not infer durable permission from
 a client ID, a recent observation, or generic localhost admission. Existing R5
 bearer safeguards are retained.
 
+Each restored execution epoch also retains its native computer-proof origin in
+memory. A same-named legacy/account bearer cannot inherit that epoch, read its
+generation, stop it, or deliver its results. Upgrading an explicitly approved
+legacy epoch with verified computer authority rotates the generation and retires
+in-flight legacy work. This introduces no additional owner prompt.
+
 ## Connection contract
 
 | Event | Candidate behavior |
@@ -72,11 +78,11 @@ write; native feedback asks the owner to retry STOP before restarting the app.
 
 ## Verification
 
-The candidate adds 26 JUnit cases:
+The candidate adds 30 JUnit cases:
 
-- 10 trusted-session continuity cases.
+- 12 trusted-session continuity cases.
 - 5 bounded static-metadata admission cases.
-- 10 authenticated dispatcher and compatibility-route cases.
+- 12 authenticated dispatcher and compatibility-route cases.
 - 1 actual middleware discriminator case.
 
 One native gateway regression covers metadata without browser dispatch,

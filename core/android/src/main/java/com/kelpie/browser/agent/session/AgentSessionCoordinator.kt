@@ -11,10 +11,12 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import com.kelpie.browser.network.NetworkServiceState
 import com.kelpie.browser.network.R5AgentControlPlaneRoutes
+import com.kelpie.browser.network.R5RequestAuthorization
 import com.kelpie.browser.network.Router
 import com.kelpie.browser.network.errorResponse
 import com.kelpie.browser.network.successResponse
 import com.kelpie.browser.network.verifiedClientId
+import com.kelpie.browser.network.verifiedComputerKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -127,7 +129,7 @@ class AgentSessionCoordinator(
                             mapOf("status" to if (state.principalId == principal) "PENDING_NATIVE_APPROVAL" else "NOT_FOUND"),
                         )
                     is SessionConsentCore.State.Active -> {
-                        if (state.principalId != principal) {
+                        if (!R5RequestAuthorization.owns(principal, verifiedComputerKey(), state)) {
                             successResponse(mapOf("status" to "NOT_FOUND"))
                         } else if (state.locked) {
                             successResponse(mapOf("status" to "SUSPENDED_LOCKED"))
@@ -155,7 +157,7 @@ class AgentSessionCoordinator(
                 val current = AndroidAgentProcessSession.snapshot()
                 val owned =
                     when (current) {
-                        is SessionConsentCore.State.Active -> current.principalId == principal
+                        is SessionConsentCore.State.Active -> R5RequestAuthorization.owns(principal, verifiedComputerKey(), current)
                         is SessionConsentCore.State.Pending -> current.principalId == principal
                         SessionConsentCore.State.Off -> false
                     }
