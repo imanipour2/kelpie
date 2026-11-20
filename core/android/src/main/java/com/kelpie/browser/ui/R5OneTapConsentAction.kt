@@ -76,11 +76,11 @@ internal fun R5OneTapConsentAction(
     Column {
         if (compact) {
             TextButton(onClick = start, modifier = Modifier.heightIn(min = 48.dp)) {
-                Text("Allow control for this session")
+                Text(if (coordinator.motherConnectionMode) "Resume browser control" else "Allow control for this session")
             }
         } else {
             Button(onClick = start, modifier = Modifier.heightIn(min = 48.dp)) {
-                Text("Allow control for this session")
+                Text(if (coordinator.motherConnectionMode) "Resume browser control" else "Allow control for this session")
             }
         }
         if (error != null) {

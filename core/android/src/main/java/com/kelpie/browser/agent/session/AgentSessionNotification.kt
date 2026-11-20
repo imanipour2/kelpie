@@ -93,7 +93,15 @@ class AgentSessionStopReceiver : BroadcastReceiver() {
         intent: Intent,
     ) {
         if (intent.action != AgentSessionNotification.ACTION_STOP) return
-        AndroidAgentProcessSession.stop()
+        // This receiver may start in a fresh process before any Activity/server.
+        // Persist the owner action using its own Context before any reconnect.
+        val saved = AndroidAgentProcessSession.pauseByOwner(context)
+        if (!saved) {
+            android.util.Log.e("R5Connection", "OWNER_STOP_PERSISTENCE_FAILED")
+            android.widget.Toast
+                .makeText(context, "Control is paused now. The pause could not be saved. Retry STOP before restarting Kelpie.", android.widget.Toast.LENGTH_LONG)
+                .show()
+        }
         AgentSessionNotification.hide(context)
     }
 }

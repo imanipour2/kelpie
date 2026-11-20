@@ -68,7 +68,7 @@ class Router(
             handlerContext?.motherPrivateAgentActive?.invoke() == true &&
             handlerContext?.motherGatewayAuthorization?.invoke() != true
         ) {
-            return 403 to errorResponse("PERMISSION_REQUIRED", "Private browser requires native owner-authorized agent")
+            return 503 to errorResponse("RENDERER_NOT_READY", "Computer remains approved; the private browser renderer is temporarily unavailable")
         }
         // This QA build has no real agent browser-action authorization adapter.
         // Reject legacy routes, including nested MCP and any gateway bypass.
@@ -220,6 +220,7 @@ private fun statusForErrorCode(code: String?): Int =
         "WATCH_NOT_FOUND",
         -> 404
         "TIMEOUT" -> 408
+        "RENDERER_NOT_READY" -> 503
         "NAVIGATION_ERROR" -> 502
         "PLATFORM_NOT_SUPPORTED", "PARTITION_UNSUPPORTED" -> 501
         "IFRAME_ACCESS_DENIED",

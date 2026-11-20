@@ -29,7 +29,28 @@ handoff UX, process-recreation handling and live device verification remain
 follow-on K1 tasks. Never copy Google account tokens, passwords, OTPs or
 other apps' cookies. Draft only: no installation, merge or public release.
 
-## Android R5 explicit owner-session entry — draft QA, 2026-11-18
+## Android R5 mother connection policy — source candidate, 2026-11-20
+
+The mother MCP profile uses the existing durable computer-key approval for ordinary
+browser control, including reconnects and process recreation. It no longer requires
+a second routine native session approval for that approved computer. HTTP
+authentication still revalidates the bearer and key; temporary account grants and
+legacy client IDs do not become durable computer trust. A process-local execution
+epoch continues to reject work admitted before lock, STOP or renderer loss.
+
+Native **STOP** persists a pause until native **Resume**, while Settings revocation
+removes computer trust. A transient renderer failure preserves approval and reports
+renderer unavailability; it does not tell the owner to pair again. Exact static
+capabilities, documentation and tool-schema discovery remain accessible to an
+authenticated eligible principal even while control is paused or locked. The private
+runtime remains limited to one active controller. This source candidate changes no
+WebView rendering implementation and is not installed or device-accepted. See
+[connection policy and acceptance](qa/KELPIE-CONNECT-MOTHER-PARITY-20261120.md).
+
+## Android R5 legacy explicit owner-session entry — draft QA, 2026-11-18
+
+The following session-consent workflow remains for legacy R5 profiles. The mother
+MCP profile uses the computer-approval policy above.
 
 The private QA browser now advertises explicit `session.request`, `session.status`
 and `session.stop` operations inside the paired `kelpie_browser_control` MCP

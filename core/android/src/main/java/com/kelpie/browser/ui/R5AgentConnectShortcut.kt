@@ -21,23 +21,32 @@ internal fun R5AgentConnectShortcut(
     onOpenCenter: () -> Unit,
 ) {
     if (coordinator == null) return
-    val clients by coordinator.observedAgents.collectAsState()
+    val clients by coordinator.connectionAgents.collectAsState()
+    val paused by coordinator.paused.collectAsState()
     val pending by coordinator.pending.collectAsState()
     val active by coordinator.active.collectAsState()
-    R5ObservedAgentExpiryEffect(coordinator, clients.isNotEmpty())
+    if (!coordinator.motherConnectionMode) R5ObservedAgentExpiryEffect(coordinator, clients.isNotEmpty())
     if (active != null || pending != null) return
 
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
         Text(
             text =
-                when (clients.size) {
-                    0 -> "AI agent not yet paired"
-                    1 -> "Verified agent " + clients.single().take(8) + "... ready"
-                    else -> "Choose a verified agent"
+                if (coordinator.motherConnectionMode) {
+                    when {
+                        paused -> "Browser control paused"
+                        clients.isNotEmpty() -> "Trusted computer reconnects automatically"
+                        else -> "Connect a trusted computer"
+                    }
+                } else {
+                    when (clients.size) {
+                        0 -> "AI agent not yet paired"
+                        1 -> "Verified agent " + clients.single().take(8) + "... ready"
+                        else -> "Choose a verified agent"
+                    }
                 },
             style = MaterialTheme.typography.labelMedium,
         )
-        if (clients.size == 1) {
+        if (clients.size == 1 && !coordinator.motherConnectionMode) {
             // The single owner gesture begins and approves this process session.
             // Multiple clients never use the one-tap shortcut.
             R5OneTapConsentAction(coordinator, clients.single(), compact = true)
@@ -46,7 +55,15 @@ internal fun R5AgentConnectShortcut(
                 onClick = onOpenCenter,
                 modifier = Modifier.heightIn(min = 48.dp),
             ) {
-                Text(if (clients.isEmpty()) "Pair / Connect" else "Choose")
+                Text(
+                    if (coordinator.motherConnectionMode) {
+                        "Connection"
+                    } else if (clients.isEmpty()) {
+                        "Pair / Connect"
+                    } else {
+                        "Choose"
+                    },
+                )
             }
         }
     }

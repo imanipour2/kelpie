@@ -11,30 +11,46 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import com.kelpie.browser.network.NetworkServiceState
 import com.kelpie.browser.network.R5AgentControlPlaneRoutes
+import com.kelpie.browser.network.R5RequestAuthorization
 import com.kelpie.browser.network.Router
 import com.kelpie.browser.network.errorResponse
 import com.kelpie.browser.network.successResponse
 import com.kelpie.browser.network.verifiedClientId
+import com.kelpie.browser.network.verifiedComputerKey
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 
 /**
- * Opt-in isolated QA boundary for one native consent per active app process.
- * It registers NO browser action/screenshot/DOM route; operations remain OFF
- * until a separate security-reviewed NativePort and egress adapter exists.
+ * Native connection UI for legacy process consent and mother computer approval.
+ * Browser operations remain in the separate runtime and its execution gates.
  */
 class AgentSessionCoordinator(
     private val activity: ComponentActivity,
     private val fullAgentQa: Boolean = false,
+    internal val motherConnectionMode: Boolean = false,
 ) {
     var runtimeReady: () -> Boolean = { false }
     internal val pending = AndroidAgentProcessSession.pending
     internal val active = AndroidAgentProcessSession.active
     internal val observedAgents = R5ObservedAgentClients.registry.observed
+    private val trustedAgents = MutableStateFlow<List<String>>(emptyList())
+    internal val connectionAgents: StateFlow<List<String>>
+        get() = if (motherConnectionMode) trustedAgents else observedAgents
+    internal val paused = AndroidAgentProcessSession.paused
 
     /** Keep the visible connection label aligned with the expiry admission gate. */
     fun refreshObservedAgents() {
         R5ObservedAgentClients.registry.refreshExpired()
+        if (motherConnectionMode) {
+            trustedAgents.value =
+                NetworkServiceState
+                    .snapshot()
+                    ?.httpServer
+                    ?.trustedComputerIds()
+                    .orEmpty()
+        }
     }
 
     private var closed = false
@@ -56,6 +72,7 @@ class AgentSessionCoordinator(
         }
 
     init {
+        if (motherConnectionMode) AndroidAgentProcessSession.configureMother(activity)
         ContextCompat.registerReceiver(
             activity,
             screenOffReceiver,
@@ -72,6 +89,12 @@ class AgentSessionCoordinator(
             withContext(Dispatchers.Main.immediate) {
                 R5AgentControlPlaneRoutes.rejectionIfRevoked()?.let { return@withContext it }
                 syncLock()
+                R5AgentControlPlaneRoutes
+                    .motherComputerRequestResponse(
+                        motherConnectionMode,
+                        ::durableComputerCurrent,
+                        AndroidAgentProcessSession.paused.value || R5BackgroundOptInStore.isControlPaused(activity),
+                    )?.let { return@withContext it }
                 if (closed ||
                     deviceLocked() ||
                     !activity.hasWindowFocus() ||
@@ -106,7 +129,7 @@ class AgentSessionCoordinator(
                             mapOf("status" to if (state.principalId == principal) "PENDING_NATIVE_APPROVAL" else "NOT_FOUND"),
                         )
                     is SessionConsentCore.State.Active -> {
-                        if (state.principalId != principal) {
+                        if (!R5RequestAuthorization.owns(principal, verifiedComputerKey(), state)) {
                             successResponse(mapOf("status" to "NOT_FOUND"))
                         } else if (state.locked) {
                             successResponse(mapOf("status" to "SUSPENDED_LOCKED"))
@@ -134,7 +157,7 @@ class AgentSessionCoordinator(
                 val current = AndroidAgentProcessSession.snapshot()
                 val owned =
                     when (current) {
-                        is SessionConsentCore.State.Active -> current.principalId == principal
+                        is SessionConsentCore.State.Active -> R5RequestAuthorization.owns(principal, verifiedComputerKey(), current)
                         is SessionConsentCore.State.Pending -> current.principalId == principal
                         SessionConsentCore.State.Off -> false
                     }
@@ -184,10 +207,11 @@ class AgentSessionCoordinator(
     fun beginOneTapFromNativeUi(expectedPrincipal: String): Boolean = beginOneTapFromNativeUiWithReason(expectedPrincipal) == NativeOneTapResult.GRANTED
 
     /**
-     * A native owner tap is the only approval entrypoint. Categorical failures
-     * are safe to show without exposing the paired principal or any bearer.
+     * Native approval for legacy sessions, or Resume after the mother owner's STOP.
+     * Categorical failures are safe to show without exposing any bearer.
      */
     internal fun beginOneTapFromNativeUiWithReason(expectedPrincipal: String): NativeOneTapResult {
+        if (motherConnectionMode && durableComputerCurrent(expectedPrincipal)) return resumeTrustedComputerFromNativeUi(expectedPrincipal)
         syncLock()
         val observed = R5ObservedAgentClients.registry.soleRecentPrincipal()
         val reason =
@@ -259,6 +283,43 @@ class AgentSessionCoordinator(
 
     private fun pairedPrincipalCurrent(principal: String): Boolean = NetworkServiceState.snapshot()?.httpServer?.hasPairedPrincipal(principal) == true
 
+    private fun durableComputerCurrent(principal: String): Boolean =
+        principal in
+            NetworkServiceState
+                .snapshot()
+                ?.httpServer
+                ?.trustedComputerIds()
+                .orEmpty()
+
+    /** Resume an already approved key after STOP; recent-client TTL is not authority. */
+    private fun resumeTrustedComputerFromNativeUi(principal: String): NativeOneTapResult {
+        syncLock()
+        if (closed) return NativeOneTapResult.COORDINATOR_CLOSED
+        val rejected =
+            nativeOneTapRejection(
+                principal,
+                principal,
+                activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED),
+                activity.window.decorView.isShown,
+                !deviceLocked(),
+                AgentSessionNotification.canNotify(activity),
+            )
+        if (rejected != null) return rejected
+        if (!durableComputerCurrent(principal)) return NativeOneTapResult.PAIRING_REVOKED
+        when (val state = AndroidAgentProcessSession.snapshot()) {
+            is SessionConsentCore.State.Pending -> return NativeOneTapResult.SESSION_BUSY
+            is SessionConsentCore.State.Active -> if (state.principalId != principal) return NativeOneTapResult.SESSION_BUSY
+            SessionConsentCore.State.Off -> Unit
+        }
+        if (!AndroidAgentProcessSession.resumeByOwner()) return NativeOneTapResult.APPROVAL_FAILED
+        val active = AndroidAgentProcessSession.restoreTrustedComputer(principal) ?: return NativeOneTapResult.SESSION_BUSY
+        if (!durableComputerCurrent(active.principalId)) {
+            AndroidAgentProcessSession.revokePrincipal(active.principalId)
+            return NativeOneTapResult.PAIRING_REVOKED
+        }
+        return NativeOneTapResult.GRANTED
+    }
+
     /** Only the UI timer calls this; an old prompt ID cannot revoke a new request. */
     fun expireNativePromptIfDue(promptId: String): Boolean = AndroidAgentProcessSession.expirePendingIfDue(promptId)
 
@@ -269,13 +330,24 @@ class AgentSessionCoordinator(
     }
 
     fun stopFromNativeUi() {
-        AndroidAgentProcessSession.stop()
+        if (motherConnectionMode) {
+            if (!AndroidAgentProcessSession.pauseByOwner(activity)) {
+                android.util.Log.e("R5Connection", "OWNER_STOP_PERSISTENCE_FAILED")
+                android.widget.Toast
+                    .makeText(activity, "Control is paused now. The pause could not be saved. Retry STOP before restarting Kelpie.", android.widget.Toast.LENGTH_LONG)
+                    .show()
+            }
+        } else {
+            AndroidAgentProcessSession.stop()
+        }
         R5ObservedAgentClients.registry.clear()
+        refreshObservedAgents()
         AgentSessionNotification.hide(activity)
     }
 
     fun onResume() {
         syncLock()
+        refreshObservedAgents()
         // Process death and external revocation can leave a previous OS
         // notification visible even though there is no valid in-memory grant.
         if (AndroidAgentProcessSession.active.value == null) {
@@ -287,7 +359,12 @@ class AgentSessionCoordinator(
         if (closed) return
         closed = true
         activity.unregisterReceiver(screenOffReceiver)
-        if (revokeSession) stopFromNativeUi()
+        if (revokeSession) {
+            // Destroying an Activity is not an owner STOP. A trusted computer
+            // restores a fresh runtime after the replacement listener starts.
+            AndroidAgentProcessSession.stop()
+            AgentSessionNotification.hide(activity)
+        }
     }
 
     private fun syncLock() {
@@ -296,7 +373,8 @@ class AgentSessionCoordinator(
         // always-visible remote-control indicator. Revoke instead of keeping a
         // hidden grant alive until another browser operation attempts delivery.
         if (AndroidAgentProcessSession.active.value != null && !AgentSessionNotification.canNotify(activity)) {
-            stopFromNativeUi()
+            AndroidAgentProcessSession.stop()
+            AgentSessionNotification.hide(activity)
         }
     }
 

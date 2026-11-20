@@ -77,7 +77,10 @@ class HTTPServer(
             .eligible(principal) &&
             pairingStore.hasPairedPrincipal(principal)
 
+    internal fun trustedComputerIds(): List<String> = pairingStore.trustedComputers.list().map { it.publicKey }
+
     fun start() {
+        if (router.motherR5BackgroundQa) AndroidAgentProcessSession.configureMother(appContext)
         val middleware =
             AccountPairingAuthorization(
                 pairingStore,
@@ -346,6 +349,17 @@ class HTTPServer(
                             .noteVerified(verified)
                     }
                 },
+                prepareTrustedSession = { verified ->
+                    if (router.motherR5BackgroundQa &&
+                        verified.computerKey == verified.clientId &&
+                        pairingStore.trustedComputers.list().any { it.publicKey == verified.computerKey }
+                    ) {
+                        val restored = AndroidAgentProcessSession.restoreTrustedComputer(verified.clientId)
+                        if (restored != null && pairingStore.trustedComputers.list().none { it.publicKey == verified.computerKey }) {
+                            AndroidAgentProcessSession.revokePrincipal(verified.clientId, restored)
+                        }
+                    }
+                },
             )
         val outcome =
             dispatcher.dispatch(
@@ -367,7 +381,7 @@ class HTTPServer(
                     Log.e("HTTPServer", "request=$id type=${error.javaClass.simpleName}\n$trace")
                 },
             )
-        if (!dispatcher.mayDeliver(principal.clientId, outcome)) {
+        if (!dispatcher.mayDeliver(principal, outcome)) {
             call.respondText(
                 mapToJsonString(AuthenticatedRequestDispatcher.correlatedError("SESSION_REVOKED", "Native owner approval changed before delivery", correlationId)),
                 ContentType.Application.Json,

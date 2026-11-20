@@ -110,10 +110,14 @@ class BrowserGatewayBinding(
         mutates: Boolean,
         allowActions: Boolean,
         pinned: String?,
-    ): Boolean =
-        (!router.motherR5BackgroundQa || R5RemoteOperationPolicy.permitsGatewayRequest(request["method"] as? String ?: "")) &&
+    ): Boolean {
+        // The native gateway completes these methods from compiled metadata;
+        // no WebView dispatch, tab selection or capture can occur.
+        if (router.motherR5BackgroundQa && R5McpBootstrapGate.isStaticBrowserMetadata(request)) {
+            return verifiedRequestAuthorityCurrent()
+        }
+        return (!router.motherR5BackgroundQa || R5RemoteOperationPolicy.permitsGatewayRequest(request["method"] as? String ?: "")) &&
             ownerRequestCurrent() &&
-            (ctx.motherPrivateAgentActive?.invoke() != true || ctx.motherGatewayAuthorization?.invoke() == true) &&
             PrivateCaptureOperationPolicy.permits(
                 request["method"] as? String ?: "",
                 ctx.privateCaptureRestricted?.invoke() == true,
@@ -131,6 +135,7 @@ class BrowserGatewayBinding(
                     ?.map { it.id }
                     ?.toSet() ?: setOf("0"),
             )
+    }
 
     /** Model inference owns its own lifecycle; only its nested renderer calls acquire the browser lease. */
     private suspend fun reentrant(request: Map<String, Any?>): Map<String, Any?> {
@@ -161,9 +166,7 @@ class BrowserGatewayBinding(
     ): T =
         withBrowserGatewayLease(lock, ctx.browserRetirement) {
             if (!ownerRequestCurrent()) throw R5AuthorizationChangedException()
-            check(ctx.motherPrivateAgentActive?.invoke() != true || ctx.motherGatewayAuthorization?.invoke() == true) {
-                "Native owner authorization required for private WebView"
-            }
+            if (ctx.motherPrivateAgentActive?.invoke() == true && ctx.motherGatewayAuthorization?.invoke() != true) throw R5RendererUnavailableException()
             check(PrivateCaptureOperationPolicy.permits(method, ctx.privateCaptureRestricted?.invoke() == true)) {
                 "Private WebView capture owns the browser"
             }
@@ -193,7 +196,7 @@ class BrowserGatewayBinding(
                 return@withContext errorResponse("SESSION_REVOKED", "Native owner-authorized request changed")
             }
             if (ctx.motherPrivateAgentActive?.invoke() == true && ctx.motherGatewayAuthorization?.invoke() != true) {
-                return@withContext errorResponse("PERMISSION_REQUIRED", "Private WebView needs live owner-authorized agent")
+                return@withContext errorResponse("RENDERER_NOT_READY", "Computer remains approved; the private browser renderer is temporarily unavailable")
             }
             if (!PrivateCaptureOperationPolicy.permits(method, ctx.privateCaptureRestricted?.invoke() == true)) {
                 return@withContext errorResponse("PERMISSION_REQUIRED", "Private WebView capture owns the browser")
@@ -221,7 +224,7 @@ class BrowserGatewayBinding(
             return errorResponse("SESSION_REVOKED", "Native owner-authorized request changed")
         }
         if (ctx.motherPrivateAgentActive?.invoke() == true && ctx.motherGatewayAuthorization?.invoke() != true) {
-            return errorResponse("PERMISSION_REQUIRED", "Private WebView needs live owner-authorized agent")
+            return errorResponse("RENDERER_NOT_READY", "Computer remains approved; the private browser renderer is temporarily unavailable")
         }
         if (!PrivateCaptureOperationPolicy.permits(method, ctx.privateCaptureRestricted?.invoke() == true)) {
             return errorResponse("PERMISSION_REQUIRED", "Private WebView capture owns the browser")
@@ -319,12 +322,13 @@ class BrowserGatewayBinding(
         val guard =
             if (router.motherR5BackgroundQa) {
                 val principal = verifiedClientId()
+                val computerKey = verifiedComputerKey()
                 val admitted = verifiedOwnerGrant()
                 val store = ctx.tabStore
                 val tab = store?.activeTab
                 val document = tab?.documentVersion
                 BrowserOperationGuard(
-                    authorityCurrent = { R5RequestAuthorization.permits(principal, admitted, router.nativeConsentSnapshot()) },
+                    authorityCurrent = { R5RequestAuthorization.permits(principal, admitted, router.nativeConsentSnapshot(), computerKey) },
                     targetCurrent = {
                         tab != null && store != null && store === ctx.tabStore && store.activeTab === tab && tab.webView === view
                     },

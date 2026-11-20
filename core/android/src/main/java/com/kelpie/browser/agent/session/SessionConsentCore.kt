@@ -22,6 +22,8 @@ class SessionConsentCore(
             val locked: Boolean = false,
             /** Monotonic safety epoch: lock/unlock races invalidate in-flight work. */
             val safetyEpoch: Long = 0L,
+            /** Native computer proof bound to a restored epoch; null for explicit legacy consent. */
+            val trustedComputerKey: String? = null,
         ) : State
     }
 
@@ -29,6 +31,49 @@ class SessionConsentCore(
 
     @Synchronized
     fun snapshot(): State = current
+
+    /**
+     * Mother profile: the durable computer approval is already the owner's grant.
+     * The caller must verify its bearer against ComputerTrust before using this
+     * adapter. It reconstructs execution state, never creates persistent trust.
+     */
+    @Synchronized
+    fun restoreTrustedComputer(
+        computerKey: String,
+        paused: Boolean,
+        deviceUnlocked: Boolean,
+    ): State.Active? {
+        if (paused || computerKey.length != 64 || computerKey.any { it !in "0123456789abcdef" }) return null
+        when (val state = current) {
+            is State.Pending -> return null
+            is State.Active -> {
+                if (state.principalId != computerKey) return null
+                if (state.trustedComputerKey != computerKey) {
+                    current =
+                        state.copy(
+                            generation = nonce(),
+                            safetyEpoch = state.safetyEpoch + 1L,
+                            trustedComputerKey = computerKey,
+                        )
+                }
+                setDeviceLocked(!deviceUnlocked)
+                return current as State.Active
+            }
+            State.Off -> {
+                if (!deviceUnlocked) return null
+                return State.Active(computerKey, nonce(), trustedComputerKey = computerKey).also { current = it }
+            }
+        }
+    }
+
+    /** Retire in-flight work after a renderer failure without erasing approval. */
+    @Synchronized
+    fun invalidateRuntime(expected: State.Active? = snapshot() as? State.Active): Boolean {
+        val active = current as? State.Active ?: return false
+        if (active != expected) return false
+        current = active.copy(generation = nonce(), safetyEpoch = active.safetyEpoch + 1L)
+        return true
+    }
 
     /** A verified gateway can request a prompt but cannot grant consent. */
     @Synchronized
@@ -86,7 +131,11 @@ class SessionConsentCore(
 
     /** Unpairing revokes only the pending/active grant bound to that identity. */
     @Synchronized
-    fun revokePrincipal(principalId: String): Boolean {
+    fun revokePrincipal(
+        principalId: String,
+        expected: State.Active? = null,
+    ): Boolean {
+        if (expected != null && current != expected) return false
         val owner =
             when (val state = current) {
                 is State.Active -> state.principalId
