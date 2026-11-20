@@ -56,6 +56,9 @@ class PrivateWebViewDisplay(
     private var previousCssScroll = 0.0 to 0.0
     private var qaFrameSequence = 0
     private var visualRequestId = 0L
+    // This belongs to the single temporarily transferred WebView only.
+    // Restore the user's original setting on STOP, failure or foreground return.
+    private var previousOffscreenPreRaster: Boolean? = null
 
     @Volatile private var active = false
 
@@ -142,6 +145,11 @@ class PrivateWebViewDisplay(
 
             fun current(): Boolean = ownershipGeneration.get() == generation && view === original && !isLocked()
             try {
+                if (useNativeFrameProof) {
+                    previousOffscreenPreRaster = original.settings.offscreenPreRaster
+                    original.settings.offscreenPreRaster = true
+                    trace("OFFSCREEN_PRERASTER_ENABLED")
+                }
                 composeRelease()
                 val detached =
                     withTimeoutOrNull(RELEASE_TIMEOUT_MS) {
@@ -179,6 +187,11 @@ class PrivateWebViewDisplay(
                 host.setContentView(proof?.host(original) ?: original)
                 host.show()
                 trace("PRIVATE_HOST_SHOWN")
+                // A newly reparented offscreen WebView must be scheduled for a
+                // real draw; never confuse requestLayout with frame proof.
+                original.requestLayout()
+                original.postInvalidateOnAnimation()
+                host.window?.decorView?.postInvalidateOnAnimation()
                 if (!viewportReadiness.awaitCommittedViewport(original, ++visualRequestId, ::current) || !current()) {
                     trace("PRIVATE_VIEWPORT_COMMIT_FAILED")
                     if (ownershipGeneration.get() == generation) releaseAndRestore(State.FAILED)
@@ -434,6 +447,11 @@ class PrivateWebViewDisplay(
         val oldProof = nativeFrameProof
         nativeFrameProof = null
         cleanup.release { oldProof?.dispose() }
+        val oldPreRaster = previousOffscreenPreRaster
+        previousOffscreenPreRaster = null
+        if (oldPreRaster != null && original !== deadView) {
+            cleanup.release { original?.settings?.offscreenPreRaster = oldPreRaster }
+        }
         val oldPresentation = presentation
         presentation = null
         cleanup.release { oldPresentation?.dismiss() }
