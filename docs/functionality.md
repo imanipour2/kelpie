@@ -43,8 +43,9 @@ removes computer trust. A transient renderer failure preserves approval and repo
 renderer unavailability; it does not tell the owner to pair again. Exact static
 capabilities, documentation and tool-schema discovery remain accessible to an
 authenticated eligible principal even while control is paused or locked. The private
-runtime remains limited to one active controller. This source candidate changes no
-WebView rendering implementation and is not installed or device-accepted. See
+runtime remains limited to one active controller. Authorized device information
+does not depend on renderer readiness; STOP, lock and revocation still gate it. This
+policy description alone does not establish installed-device acceptance. See
 [connection policy and acceptance](qa/KELPIE-CONNECT-MOTHER-PARITY-20261120.md).
 
 ## Android R5 legacy explicit owner-session entry — draft QA, 2026-11-18
@@ -999,8 +1000,10 @@ Sensitive export and unbound action aliases fail closed even after broad approva
 
 WebView transfer, document identity and real pixels require independent evidence.
 Native ownership and frame freshness do not establish privacy. Real-page images
-currently return `NEEDS_HUMAN` until a verified pixel-redaction path exists;
-synthetic fixture proof cannot enable those images. No cached, gray, unredacted
+return `UNSUPPORTED` until a verified pixel-redaction path exists. Use a sanitized
+page snapshot; additional computer approval cannot enable this capability.
+Missing native fixture provenance returns `FRAME_PRIVACY_UNVERIFIED`.
+Synthetic fixture proof cannot enable real-page images. No cached, gray, unredacted
 or wrong-tab image is a successful screenshot. This is a remaining beta gate.
 
 The native connection page first uses a recently verified paired client and

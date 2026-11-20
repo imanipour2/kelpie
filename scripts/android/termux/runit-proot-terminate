@@ -1,0 +1,13 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# Install as an existing PRoot service's control/t, mode 0700.
+# runsv invokes this hook from the service directory. PRoot ignores bare TERM;
+# proot-distro terminates only the tracked session named by supervise/pid.
+set -eu
+
+supervised_pid=$(cat ./supervise/pid) || exit 1
+case "$supervised_pid" in
+  ''|*[!0-9]*|0|1) exit 1 ;;
+esac
+[ "${#supervised_pid}" -le 10 ] || exit 1
+
+exec /data/data/com.termux/files/usr/bin/proot-distro kill "$supervised_pid"

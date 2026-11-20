@@ -53,11 +53,13 @@ internal class R5PrivateViewportReadiness(
         webView: WebView,
         requestId: Long,
         stillOwned: () -> Boolean = { true },
+        hostFailure: () -> String? = { null },
     ): Boolean {
         val laidOut =
             withTimeoutOrNull(3_000L) {
                 while (!locked() && stillOwned()) {
-                    if (R5ViewportAdmission.permits(
+                    if (hostFailure() == null &&
+                        R5ViewportAdmission.permits(
                             attached = webView.isAttachedToWindow,
                             nativeWidth = webView.width,
                             nativeHeight = webView.height,
@@ -72,31 +74,67 @@ internal class R5PrivateViewportReadiness(
                 false
             } ?: false
         if (!laidOut || locked() || !stillOwned()) {
-            Log.i("KelpieR5Viewport", "VIEWPORT_LAYOUT_NOT_COMMITTED")
+            Log.i(
+                "KelpieR5Viewport",
+                when {
+                    locked() -> "VIEWPORT_DEVICE_LOCKED"
+                    !stillOwned() -> "VIEWPORT_OWNERSHIP_LOST"
+                    else -> hostFailure() ?: "VIEWPORT_LAYOUT_TIMEOUT"
+                },
+            )
             return false
         }
-        val visual = CompletableDeferred<Boolean>()
-        val expectedRequestId = requestId
+        val visual = CompletableDeferred<Long>()
         webView.postVisualStateCallback(
             requestId,
             object : WebView.VisualStateCallback() {
                 override fun onComplete(requestId: Long) {
-                    if (!visual.isCompleted) visual.complete(requestId == expectedRequestId && stillOwned())
+                    if (!visual.isCompleted) visual.complete(requestId)
                 }
             },
         )
-        val committed = withTimeoutOrNull(2_000L) { visual.await() } == true
-        if (!committed) Log.i("KelpieR5Viewport", "VISUAL_STATE_NOT_COMMITTED")
-        return committed &&
-            stillOwned() &&
+        val completedRequestId = withTimeoutOrNull(2_000L) { visual.await() }
+        val failure =
+            R5VisualCommitResult.failure(
+                expectedRequestId = requestId,
+                completedRequestId = completedRequestId,
+                owned = stillOwned(),
+                locked = locked(),
+                hostFailure = hostFailure(),
+            )
+        if (failure != null) {
+            Log.i("KelpieR5Viewport", failure)
+            return false
+        }
+        val css = cssReady(webView)
+        return stillOwned() &&
+            hostFailure() == null &&
             R5ViewportAdmission.permits(
                 attached = webView.isAttachedToWindow,
                 nativeWidth = webView.width,
                 nativeHeight = webView.height,
-                cssReady = cssReady(webView),
+                cssReady = css,
                 locked = locked(),
             )
     }
+}
+
+internal object R5VisualCommitResult {
+    fun failure(
+        expectedRequestId: Long,
+        completedRequestId: Long?,
+        owned: Boolean,
+        locked: Boolean,
+        hostFailure: String?,
+    ): String? =
+        when {
+            locked -> "VISUAL_STATE_DEVICE_LOCKED"
+            !owned -> "VISUAL_STATE_OWNERSHIP_LOST"
+            hostFailure != null -> hostFailure
+            completedRequestId == null -> "VISUAL_STATE_CALLBACK_TIMEOUT"
+            completedRequestId != expectedRequestId -> "VISUAL_STATE_REQUEST_MISMATCH"
+            else -> null
+        }
 }
 
 internal object R5ViewportAdmission {

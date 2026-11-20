@@ -49,8 +49,10 @@ class R5AgentCoordinator(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val transferMutex = Mutex()
 
-    // Monotonic main-thread epoch invalidates old background handoffs on resume.
-    private var lifecycleVisibilityEpoch = 0L
+    private val lifecycle =
+        R5LifecycleReconciler(transferMutex) {
+            activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        }
     private val released = MutableStateFlow(false)
     val relinquished = released.asStateFlow()
     private val renderer =
@@ -93,8 +95,8 @@ class R5AgentCoordinator(
             activity,
             onFocusRegained = {
                 val active = consent.snapshot() as? SessionConsentCore.State.Active
-                if (!closed && ownership.status() == WebViewOwnershipState.Host.SUSPENDED && active != null && !active.locked) {
-                    scope.launch { rebindAfterRealOwnerUnlock(active) }
+                if (!closed && !ready && active != null && !active.locked) {
+                    scheduleForegroundReconciliation()
                 }
             },
             onScreenOff = {
@@ -159,11 +161,16 @@ class R5AgentCoordinator(
                     // START_PRECONDITION_DENIED_ACTIVITY_VISIBILITY_CHANGED.
                     if (R5MotherActivationGate.canEagerlyActivate(deferPrivateUntilBackground)) {
                         scope.launch { activateRenderer(state) }
+                    } else if (renderer.state.value == PrivateWebViewDisplay.State.IDLE) {
+                        // First pairing may finish while already resumed. A
+                        // failed physical restore must not retry on every new
+                        // execution generation and create a recovery loop.
+                        scheduleForegroundReconciliation()
                     }
                 } else if (ownership.status() == WebViewOwnershipState.Host.SUSPENDED) {
                     // Unlock updates safetyEpoch but does NOT create a new generation.
                     // Activity may already be RESUMED, so onResume will not re-fire.
-                    scope.launch { rebindAfterRealOwnerUnlock(state) }
+                    scheduleForegroundReconciliation()
                 }
             }
         }
@@ -337,183 +344,190 @@ class R5AgentCoordinator(
 
     /** Called from Activity lifecycle, not from a remote JSON argument. */
     fun onPause() {
-        val pauseEpoch = ++lifecycleVisibilityEpoch
-        Log.i("KelpieR5Lifecycle", "pause epoch=" + pauseEpoch)
+        val request = lifecycle.signal(foreground = false)
+        Log.i("KelpieR5Lifecycle", "pause epoch=" + request.epoch)
+        ready = false
         scope.launch {
-            val stillBackground = {
-                R5PausedVisibilityGate.mayCommit(
-                    pauseEpoch = pauseEpoch,
-                    currentEpoch = lifecycleVisibilityEpoch,
-                    activityResumed = activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED),
-                )
-            }
-            val active = consent.snapshot() as? SessionConsentCore.State.Active
-            Log.i(
-                "KelpieR5Lifecycle",
-                "pause_check epoch=" + pauseEpoch +
-                    " current=" + lifecycleVisibilityEpoch +
-                    " stillBackground=" + stillBackground() +
-                    " grantActive=" + (active != null) +
-                    " rendererIdle=" + (renderer.state.value == PrivateWebViewDisplay.State.IDLE),
-            )
-            if (stillBackground() &&
-                active != null &&
-                !active.locked &&
-                renderer.state.value == PrivateWebViewDisplay.State.IDLE
-            ) {
-                activateRenderer(active)
-            }
-            if (stillBackground()) {
-                Log.i("KelpieR5Lifecycle", "pause_commit_background epoch=" + pauseEpoch)
-                renderer.setActivityVisible(false)
-            } else if (activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
-                renderer.state.value == PrivateWebViewDisplay.State.PRIVATE_DISPLAY
-            ) {
-                // onResume may have run while the asynchronous handoff was still
-                // in progress. Never leave an old background transfer active
-                // in the foreground, even though frame capture is already fenced.
-                restoreForeground()
+            lifecycle.reconcile(request) { stillCurrent ->
+                // A newer pause may follow a resume while the old transfer is
+                // pending. Drain that transfer's physical result before retrying.
+                if (renderer.state.value != PrivateWebViewDisplay.State.PRIVATE_DISPLAY ||
+                    ownership.status() != WebViewOwnershipState.Host.PRIVATE
+                ) {
+                    if (!finishRestoreLocked(stillCurrent)) return@reconcile
+                }
+                val active = consent.snapshot() as? SessionConsentCore.State.Active
+                if (!stillCurrent() || active == null || active.locked || closed) return@reconcile
+                val entered = activateRendererLocked(active, stillCurrent)
+                if (stillCurrent()) {
+                    renderer.setActivityVisible(false)
+                    ready = entered && consent.snapshot() == active && renderer.isOwnedBy(ctx.tabStore?.activeTab?.webView)
+                    Log.i("KelpieR5Lifecycle", "pause_commit_background epoch=" + request.epoch + " ready=" + ready)
+                }
             }
         }
     }
 
     fun onResume() {
-        ++lifecycleVisibilityEpoch
-        Log.i("KelpieR5Lifecycle", "resume epoch=" + lifecycleVisibilityEpoch)
+        val request = lifecycle.signal(foreground = true)
+        Log.i("KelpieR5Lifecycle", "resume epoch=" + request.epoch)
+        ready = false
         renderer.setActivityVisible(true)
+        scheduleForegroundReconciliation()
+    }
+
+    private fun scheduleForegroundReconciliation() {
+        val request = lifecycle.current()
+        if (!request.foreground) return
         scope.launch {
-            when (renderer.state.value) {
-                PrivateWebViewDisplay.State.PRIVATE_DISPLAY -> restoreForeground()
-                PrivateWebViewDisplay.State.RESTORE_PENDING,
-                PrivateWebViewDisplay.State.FAILED,
-                -> {
-                    transferMutex.withLock {
-                        ready = false
-                        val active = consent.snapshot() as? SessionConsentCore.State.Active
-                        val restored = renderer.verifyRestored()
-                        if (!restored) {
-                            if (active != null) suspendOnRendererFailure("RESTORE_VERIFY_FAILED", active)
-                            return@withLock
-                        }
-                        if (closed || consent.snapshot() != active) return@withLock
-                        if (active != null && !active.locked) {
-                            if (ownership.status() == WebViewOwnershipState.Host.SUSPENDED) {
-                                ownership.unlockNeedsReattach(active.generation)
-                            }
-                            val tab = ctx.tabStore?.activeTab
-                            val target = tab?.let { nativePort.nativeTargetForBinding(it.id) }
-                            if (target != null && ownership.status() == WebViewOwnershipState.Host.ABSENT) {
-                                ownership.bindForeground(active.generation, target.rendererIdentity)
-                            }
-                            ready = ownership.status() == WebViewOwnershipState.Host.FOREGROUND
-                        }
-                    }
+            lifecycle.reconcile(request) { stillCurrent ->
+                if (!finishRestoreLocked(stillCurrent)) return@reconcile
+                val active = consent.snapshot() as? SessionConsentCore.State.Active ?: return@reconcile
+                if (!stillCurrent() || active.locked || closed) return@reconcile
+                if (ownership.status() == WebViewOwnershipState.Host.SUSPENDED) {
+                    rebindAfterRealOwnerUnlockLocked(active, stillCurrent)
+                    return@reconcile
                 }
-                PrivateWebViewDisplay.State.IDLE -> {
-                    val active = consent.snapshot() as? SessionConsentCore.State.Active
-                    if (active != null && !active.locked && ownership.status() == WebViewOwnershipState.Host.SUSPENDED) {
-                        rebindAfterRealOwnerUnlock(active)
-                    }
+                val tab = ctx.tabStore?.activeTab ?: return@reconcile
+                val target = nativePort.nativeTargetForBinding(tab.id) ?: return@reconcile
+                if (!stillCurrent() ||
+                    consent.snapshot() != active ||
+                    !tab.webView.isShown ||
+                    !activity.window.decorView.isShown
+                ) {
+                    return@reconcile
                 }
-                else -> Unit
+                if (ownership.status() == WebViewOwnershipState.Host.ABSENT) {
+                    ownership.bindForeground(active.generation, target.rendererIdentity)
+                }
+                ready = ownership.mayExecuteWebOperation(active.generation, target.rendererIdentity)
             }
         }
     }
 
-    /** Unlock is a native signal, not a renewed remote authorization. */
-    private suspend fun rebindAfterRealOwnerUnlock(active: SessionConsentCore.State.Active) =
-        transferMutex.withLock {
-            if (closed || ready || consent.snapshot() != active) return@withLock
-            val tab = ctx.tabStore?.activeTab ?: return@withLock
-            val keyguard = activity.getSystemService(KeyguardManager::class.java)
-            val power = activity.getSystemService(PowerManager::class.java)
-            val eligible =
-                R5UnlockedForegroundGate.canRebind(
-                    consentActive = !active.locked && currentGeneration == active.generation,
-                    sameGeneration = consent.snapshot() == active,
-                    owner = ownership.status(),
-                    privateDisplayIdle = renderer.state.value == PrivateWebViewDisplay.State.IDLE,
-                    resumed = activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED),
-                    windowVisible = activity.window.decorView.isShown,
-                    windowFocused = activity.hasWindowFocus(),
-                    attached = tab.webView.isAttachedToWindow,
-                    shown = tab.webView.isShown,
-                    interactive = power?.isInteractive == true,
-                    keyguardGone = keyguard?.isDeviceLocked == false,
-                    stopNotificationPresent = AgentSessionNotification.canNotify(activity),
-                )
-            if (!eligible) return@withLock
-            val target = nativePort.nativeTargetForBinding(tab.id) ?: return@withLock
-            if (!ownership.unlockNeedsReattach(active.generation)) return@withLock
-            if (!ownership.bindForeground(active.generation, target.rendererIdentity)) {
-                ownership.failRenderer()
-                suspendOnRendererFailure("UNLOCK_REBIND_FAILED", active)
-                return@withLock
-            }
-            val unchanged =
-                consent.snapshot() == active &&
-                    ctx.tabStore?.activeTab?.webView === tab.webView &&
-                    ctx.tabStore?.activeTab?.id == tab.id &&
-                    !closed &&
-                    power?.isInteractive == true &&
-                    keyguard?.isDeviceLocked == false &&
-                    renderer.state.value == PrivateWebViewDisplay.State.IDLE
-            if (!unchanged) {
-                ready = false
-                ownership.failRenderer()
-                suspendOnRendererFailure("UNLOCK_GENERATION_CHANGED", active)
-                return@withLock
-            }
-            ready = true
-            Log.i("KelpieR5Unlock", "OWNER_UNLOCK_REBIND_VERIFIED")
+    /** Called only with transferMutex held; no lifecycle decision is made before acquiring it. */
+    private suspend fun finishRestoreLocked(stillCurrent: () -> Boolean): Boolean {
+        if (closed || !stillCurrent()) return false
+        if (renderer.state.value == PrivateWebViewDisplay.State.IDLE) {
+            ownership.resetAfterVerifiedRestore()
+            return true
         }
+        ready = false
+        val active = consent.snapshot() as? SessionConsentCore.State.Active
+        val owner = ownership
+        val ticket = active?.let { owner.restoreForeground(it.generation) }
+        renderer.stop()
+        if (closed || !stillCurrent()) return false
+        val restored = renderer.verifyRestored()
+        if (closed || !stillCurrent()) return false
+        if (!restored) {
+            suspendOnRendererFailure("RESTORE_VERIFY_FAILED", active)
+            return false
+        }
+        if (ownership === owner) {
+            if (ticket != null) owner.completeRestore(ticket)
+            owner.resetAfterVerifiedRestore()
+        }
+        return true
+    }
+
+    /** Unlock is a native signal, not a renewed remote authorization. */
+    private suspend fun rebindAfterRealOwnerUnlockLocked(
+        active: SessionConsentCore.State.Active,
+        stillCurrent: () -> Boolean,
+    ) {
+        if (closed || ready || consent.snapshot() != active || !stillCurrent()) return
+        val tab = ctx.tabStore?.activeTab ?: return
+        val keyguard = activity.getSystemService(KeyguardManager::class.java)
+        val power = activity.getSystemService(PowerManager::class.java)
+        val eligible =
+            R5UnlockedForegroundGate.canRebind(
+                consentActive = !active.locked && currentGeneration == active.generation,
+                sameGeneration = consent.snapshot() == active,
+                owner = ownership.status(),
+                privateDisplayIdle = renderer.state.value == PrivateWebViewDisplay.State.IDLE,
+                resumed = activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED),
+                windowVisible = activity.window.decorView.isShown,
+                windowFocused = activity.hasWindowFocus(),
+                attached = tab.webView.isAttachedToWindow,
+                shown = tab.webView.isShown,
+                interactive = power?.isInteractive == true,
+                keyguardGone = keyguard?.isDeviceLocked == false,
+                stopNotificationPresent = AgentSessionNotification.canNotify(activity),
+            )
+        if (!eligible) return
+        val target = nativePort.nativeTargetForBinding(tab.id) ?: return
+        if (!stillCurrent() || consent.snapshot() != active) return
+        if (!ownership.unlockNeedsReattach(active.generation)) return
+        if (!ownership.bindForeground(active.generation, target.rendererIdentity)) {
+            ownership.failRenderer()
+            suspendOnRendererFailure("UNLOCK_REBIND_FAILED", active)
+            return
+        }
+        val unchanged =
+            stillCurrent() &&
+                consent.snapshot() == active &&
+                ctx.tabStore?.activeTab?.webView === tab.webView &&
+                ctx.tabStore?.activeTab?.id == tab.id &&
+                !closed &&
+                power?.isInteractive == true &&
+                keyguard?.isDeviceLocked == false &&
+                activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+                renderer.state.value == PrivateWebViewDisplay.State.IDLE
+        if (!unchanged) {
+            ready = false
+            ownership.failRenderer()
+            suspendOnRendererFailure("UNLOCK_GENERATION_CHANGED", active)
+            return
+        }
+        ready = true
+        Log.i("KelpieR5Unlock", "OWNER_UNLOCK_REBIND_VERIFIED")
+    }
 
     private suspend fun activateRenderer(active: SessionConsentCore.State.Active) =
         transferMutex.withLock {
-            if (closed || active.locked || consent.snapshot() != active) return@withLock
-            if (renderer.state.value == PrivateWebViewDisplay.State.PRIVATE_DISPLAY) return@withLock
-            val tab = ctx.tabStore?.activeTab ?: return@withLock
-            val target = nativePort.nativeTargetForBinding(tab.id) ?: return@withLock
-            if (ownership.status() == WebViewOwnershipState.Host.ABSENT &&
-                !ownership.bindForeground(active.generation, target.rendererIdentity)
-            ) {
-                return@withLock
-            }
-            val ticket = ownership.moveToPrivate(active.generation) ?: return@withLock
-            ready = false
-            Log.i(
-                "KelpieR5Lifecycle",
-                "private_start lifecycleResumed=" +
-                    activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) +
-                    " viewAttached=" + tab.webView.isAttachedToWindow +
-                    " nativeGeometryValid=" + (tab.webView.width > 0 && tab.webView.height > 0),
-            )
-            val entered = renderer.start(tab.webView)
-            if (!entered || consent.snapshot() != active || !ownership.completePrivate(ticket)) {
-                ownership.failRenderer()
-                nativePort.clearPendingEvidence()
-                renderer.stop()
-                suspendOnRendererFailure("PRIVATE_RENDERER_TRANSFER_FAILED", active)
-                return@withLock
-            }
-            currentTabId = tab.id
-            ready = true
+            val request = lifecycle.current()
+            activateRendererLocked(active) { !closed && lifecycle.isCurrent(request) }
         }
 
-    private suspend fun restoreForeground() =
-        transferMutex.withLock {
-            val active = consent.snapshot() as? SessionConsentCore.State.Active
-            val ticket = active?.let { ownership.restoreForeground(it.generation) }
-            ready = false
-            renderer.stop()
-            val restored = renderer.verifyRestored()
-            if (ticket != null && restored && ownership.completeRestore(ticket)) {
-                ready = true
-            } else if (ticket != null) {
-                ownership.failRenderer()
-                suspendOnRendererFailure("FOREGROUND_RESTORE_FAILED", active)
-            }
+    private suspend fun activateRendererLocked(
+        active: SessionConsentCore.State.Active,
+        stillCurrent: () -> Boolean,
+    ): Boolean {
+        if (closed || active.locked || consent.snapshot() != active || !stillCurrent()) return false
+        val tab = ctx.tabStore?.activeTab ?: return false
+        val target = nativePort.nativeTargetForBinding(tab.id) ?: return false
+        if (!stillCurrent() || consent.snapshot() != active || ctx.tabStore?.activeTab?.webView !== tab.webView) return false
+        if (renderer.state.value == PrivateWebViewDisplay.State.PRIVATE_DISPLAY) {
+            return currentTabId == tab.id && ownership.mayExecuteWebOperation(active.generation, target.rendererIdentity)
         }
+        if (ownership.status() == WebViewOwnershipState.Host.ABSENT &&
+            !ownership.bindForeground(active.generation, target.rendererIdentity)
+        ) {
+            return false
+        }
+        val owner = ownership
+        val ticket = owner.moveToPrivate(active.generation) ?: return false
+        ready = false
+        Log.i(
+            "KelpieR5Lifecycle",
+            "private_start lifecycleResumed=" +
+                activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) +
+                " viewAttached=" + tab.webView.isAttachedToWindow +
+                " nativeGeometryValid=" + (tab.webView.width > 0 && tab.webView.height > 0),
+        )
+        val entered = renderer.start(tab.webView)
+        if (!entered || consent.snapshot() != active || ownership !== owner || !owner.completePrivate(ticket)) {
+            owner.failRenderer()
+            nativePort.clearPendingEvidence()
+            renderer.stop()
+            if (stillCurrent()) suspendOnRendererFailure("PRIVATE_RENDERER_TRANSFER_FAILED", active)
+            return false
+        }
+        currentTabId = tab.id
+        ready = stillCurrent()
+        return true
+    }
 
     /**
      * A renderer failure retires work, not the owner's durable computer approval.
@@ -563,18 +577,6 @@ class R5AgentCoordinator(
         renderer.dispose()
         scope.cancel()
     }
-}
-
-/**
- * A suspended onPause coroutine must not overwrite a later onResume.
- * No remote operation or renderer ownership is granted by this predicate.
- */
-internal object R5PausedVisibilityGate {
-    fun mayCommit(
-        pauseEpoch: Long,
-        currentEpoch: Long,
-        activityResumed: Boolean,
-    ): Boolean = pauseEpoch == currentEpoch && !activityResumed
 }
 
 /**

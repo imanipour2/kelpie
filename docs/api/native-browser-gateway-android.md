@@ -188,13 +188,24 @@ before execution and result delivery. Foreground does not bypass this policy.
 STOP/reapprove and lock/resume change the original authority and suppress stale
 results. Unpair also cancels that principal's pending or active native session.
 
+The exact `get-device-info` handler, including `kelpie_get_device_info` through
+the native MCP extension route, reads native device/app metadata without resolving
+a WebView or waiting for private-renderer readiness. It retains the same admitted
+native grant, computer-proof provenance, STOP, lock, revocation and result-delivery
+checks. It is not part of the compiled-static discovery exemption. Viewport, tab
+and page operations still require their real renderer readiness and target proofs.
+
 The R5 allowlist excludes arbitrary evaluation, cookies, storage, raw network
 exports, clipboard/script helpers and unbound selector/index actions. Extension
 discovery and native authorization enforce the same boundary; an extension
 cannot acquire canonical observation-bound click/type authority by using an
 internal gateway flag. Sanitized observations and verified canonical actions
 remain available. Real-page image export remains fail-closed pending verified
-pixel redaction. Correlated safe errors never expose thrown messages or claim
+pixel redaction and returns `UNSUPPORTED`, with a sanitized page snapshot as the
+available alternative. Additional computer approval cannot enable this capability.
+Missing native fixture provenance returns `FRAME_PRIVACY_UNVERIFIED`. The native
+gateway preserves both fixed codes without exporting renderer diagnostics or images.
+Correlated safe errors never expose thrown messages or claim
 that a consent request was accepted when its result is uncertain.
 
 See [the Wave 1 gate record](../qa/r5-wave1-admission-and-install-gates-20261119.md)

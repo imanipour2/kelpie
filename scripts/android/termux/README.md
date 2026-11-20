@@ -1,6 +1,16 @@
-# Kelpie owner-triggered Termux reconnect — private S24 QA only
+# Kelpie Termux operational helpers — private S24 QA only
 
-This directory contains one fixed command, not a second Android app or tunnel.
+The current mother-compatible connection retains the approved computer's trust;
+normal reconnects do not require the legacy per-session workflow below.
+[The runit PRoot termination hook](runit-proot-terminate.md) fixes ordinary
+restart of an existing PRoot-hosted tunnel without another tunnel, credential
+or Android execution permission. It is a separate supervisor helper.
+
+## Historical optional reconnect prototype
+
+The original `ef-kelpie-request-consent` prototype is one fixed command, not a
+second Android app or tunnel. The provisioning and installation restrictions
+below describe that uninstalled optional prototype, not current device status.
 NOT installed/enabled by the PR. Existing owner package:
 com.kelpie.browser.r5mothernextverify, port 18463, Termux 8080.
 

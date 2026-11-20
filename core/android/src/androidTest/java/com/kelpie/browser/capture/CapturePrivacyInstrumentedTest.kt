@@ -40,7 +40,7 @@ class CapturePrivacyInstrumentedTest {
                 }
                 awaitDocument(view, FIXTURE_URL)
                 val failure = refuse { WebViewCapturePrivacy.inspect(view) }
-                assertEquals("NEEDS_HUMAN", failure.code)
+                assertEquals("FRAME_PRIVACY_UNVERIFIED", failure.code)
                 assertEquals("No native provenance for a reviewed pixel fixture", failure.message)
             }
         }
@@ -110,7 +110,7 @@ class CapturePrivacyInstrumentedTest {
                     }
                     withContext(Dispatchers.Main.immediate) { view.loadUrl("about:blank") }
                     awaitDocument(view, "about:blank")
-                    assertEquals("NEEDS_HUMAN", refuse { WebViewCapturePrivacy.inspect(view) }.code)
+                    assertEquals("UNSUPPORTED", refuse { WebViewCapturePrivacy.inspect(view) }.code)
                     logForegroundState(activity, view, iteration, "COMPLETE")
                 }
             }

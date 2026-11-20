@@ -57,8 +57,8 @@ android {
             versionCode = 39
             versionName = "0.2.19-r5-mother-background-qa"
         } else if (r5MotherNextQa) {
-            versionCode = 41
-            versionName = "0.2.21-r5-wave1-qa"
+            versionCode = 45
+            versionName = "0.2.25-r5-connection"
         }
         buildConfigField("int", "LOCAL_HTTP_PORT", "8420")
         buildConfigField("boolean", "PRIVATE_CAPTURE_QA_ENABLED", "false")

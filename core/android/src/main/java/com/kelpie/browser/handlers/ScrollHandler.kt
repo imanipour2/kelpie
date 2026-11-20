@@ -88,9 +88,9 @@ class ScrollHandler(
     private suspend fun scrollTo(top: Boolean): Map<String, Any?> {
         val js =
             if (top) {
-                "window.scrollTo(0, 0); ({scrollY: 0})"
+                "(()=>{window.scrollTo(0,0);return{scrollY:window.scrollY};})()"
             } else {
-                "window.scrollTo(0, document.documentElement.scrollHeight); ({scrollY: window.scrollY})"
+                "(()=>{window.scrollTo(0,document.documentElement.scrollHeight);return{scrollY:window.scrollY};})()"
             }
         return try {
             successResponse(ctx.evaluateJSReturningJSON(js))

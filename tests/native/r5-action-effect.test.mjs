@@ -8,7 +8,7 @@ const require = createRequire(new URL("../../packages/shared/package.json", impo
 const { chromium } = require("playwright-core");
 const scrollSource = await readFile(new URL("../../core/android/src/main/java/com/kelpie/browser/handlers/ScrollEffectEvidence.kt", import.meta.url), "utf8");
 const scrollSnapshot = scrollSource.match(/val SNAPSHOT\s*=\s*"""([\s\S]*?)"""/)[1];
-const scrollTemplate = JSON.parse(scrollSource.match(/return ("window\.scrollBy[^\n]+")/)[1]);
+const scrollTemplate = JSON.parse(scrollSource.match(/return ("[^"\n]*window\.scrollBy[^\n]+")/)[1]);
 const scrollDispatch = (x, y) => scrollTemplate.replaceAll("$dx", String(x)).replaceAll("$dy", String(y));
 let browser;
 before(async () => { browser = await chromium.launch({ headless: true, executablePath: process.env.KELPIE_TEST_CHROMIUM }); });
@@ -30,6 +30,28 @@ async function remember(page, selector) {
 async function action(page, method, text = "", strict = true) {
   return page.evaluate(`(${actOnNativeReference.toString()})("target","__effectFixture",${JSON.stringify(method)},${JSON.stringify(text)},${strict})`);
 }
+
+// Match HandlerContext.evaluateJSReturningJSON's expression boundary. A raw
+// page.evaluate(program) would accept statements that Android cannot wrap.
+async function androidJsonExpression(page, expression) {
+  return JSON.parse(await page.evaluate(`JSON.stringify((${expression}))`));
+}
+
+async function mobileScrollFixture(direction, run) {
+  const context = await browser.newContext({ viewport: { width: 384, height: 720 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 });
+  try {
+    const page = await context.newPage();
+    await page.setContent(`<!doctype html><html dir="${direction}"><head>
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <style>html,body{margin:0;padding:0}main{width:calc(100vw + 1800px);height:calc(100vh + 6400px)}</style>
+      </head><body><main>Mobile scroll fixture</main></body></html>`);
+    await run(page);
+  } finally { await context.close(); }
+}
+
+const near = (actual, expected) => assert.ok(Math.abs(actual - expected) <= 0.5, `${actual} differs from ${expected}`);
+const probeScrollEdge = (page, x, y) => androidJsonExpression(page,
+  `(()=>{window.scrollTo({left:${x},top:${y},behavior:'instant'});return{x:scrollX,y:scrollY}})()`);
 
 test("R5 click verifies a real visible DOM change", async () => {
   await fixture('<button onclick="document.querySelector(\'p\').textContent=\'Updated\'">Expand</button><p>Initial</p>', async page => {
@@ -127,11 +149,11 @@ test("empty R5 typing is refused before focus and legacy dispatch stays compatib
 
 test("production scroll script reaches a separately observed CSS offset even with smooth page CSS", async () => {
   await fixture('<style>html{scroll-behavior:smooth}body{height:4000px;margin:0}</style><p>Scroll fixture</p>', async page => {
-    const before = await page.evaluate(scrollSnapshot);
+    const before = await androidJsonExpression(page, scrollSnapshot);
     assert.equal(before.scrollY, 0);
     assert.ok(before.maxY > 200);
-    await page.evaluate(scrollDispatch(0, 200));
-    const after = await page.evaluate(scrollSnapshot);
+    assert.deepEqual(await androidJsonExpression(page, scrollDispatch(0, 200)), { dispatched: true });
+    const after = await androidJsonExpression(page, scrollSnapshot);
     assert.equal(after.scrollY, 200);
     assert.equal(after.height, before.height);
     assert.equal(after.maxY, before.maxY);
@@ -140,22 +162,81 @@ test("production scroll script reaches a separately observed CSS offset even wit
 
 test("production scroll snapshot reports the actual clamped boundary", async () => {
   await fixture('<style>body{height:4000px;margin:0}</style><p>Scroll fixture</p>', async page => {
-    await page.evaluate(scrollDispatch(0, 100000));
-    const after = await page.evaluate(scrollSnapshot);
+    assert.deepEqual(await androidJsonExpression(page, scrollDispatch(0, 100000)), { dispatched: true });
+    const after = await androidJsonExpression(page, scrollSnapshot);
     assert.equal(after.scrollY, after.maxY);
-    await page.evaluate(scrollDispatch(0, 200));
-    assert.deepEqual(await page.evaluate(scrollSnapshot), after);
+    assert.deepEqual(await androidJsonExpression(page, scrollDispatch(0, 200)), { dispatched: true });
+    assert.deepEqual(await androidJsonExpression(page, scrollSnapshot), after);
   });
 });
 
 test("production scroll handles the negative horizontal CSS domain in RTL", async () => {
   await fixture('<style>html{direction:rtl}body{width:4000px;margin:0}</style><p>RTL fixture</p>', async page => {
-    const before = await page.evaluate(scrollSnapshot);
+    const before = await androidJsonExpression(page, scrollSnapshot);
     assert.equal(before.rtl, true);
+    assert.equal(before.originX, 0);
     assert.ok(before.maxX > 100);
-    await page.evaluate(scrollDispatch(-100, 0));
-    const after = await page.evaluate(scrollSnapshot);
+    assert.deepEqual(await androidJsonExpression(page, scrollDispatch(-100, 0)), { dispatched: true });
+    const after = await androidJsonExpression(page, scrollSnapshot);
     assert.equal(after.scrollX, -100);
     assert.equal(after.maxX, before.maxX);
+  });
+});
+
+for (const direction of ["ltr", "rtl"]) {
+  test(`mobile wide ${direction.toUpperCase()} scroll matches independently probed native endpoints`, async () => {
+    await mobileScrollFixture(direction, async page => {
+      const leftBottom = await probeScrollEdge(page, -100000, 100000);
+      const rightTop = await probeScrollEdge(page, 100000, 0);
+      assert.ok(rightTop.x - leftBottom.x > 600);
+      assert.ok(leftBottom.y > 1200);
+      const before = await androidJsonExpression(page, scrollSnapshot);
+      assert.equal(before.rtl, direction === "rtl");
+      assert.ok(before.width > await page.evaluate("document.scrollingElement.clientWidth"));
+      near(before.rtl ? before.originX - before.maxX : 0, leftBottom.x);
+      near(before.rtl ? before.originX : before.maxX, rightTop.x);
+      near(before.maxY, leftBottom.y);
+      if (before.rtl) assert.ok(before.originX < -100);
+      else assert.equal(before.originX, 0);
+
+      assert.deepEqual(await androidJsonExpression(page, scrollDispatch(-180, 260)), { dispatched: true });
+      const moved = await androidJsonExpression(page, scrollSnapshot);
+      const actual = await page.evaluate("({x:window.scrollX,y:window.scrollY})");
+      near(actual.x, before.scrollX - 180);
+      near(actual.y, before.scrollY + 260);
+      near(moved.scrollX, actual.x);
+      near(moved.scrollY, actual.y);
+      assert.equal(moved.originX, before.originX);
+
+      await androidJsonExpression(page, scrollDispatch(-100000, 100000));
+      const edge = await androidJsonExpression(page, scrollSnapshot);
+      near(edge.scrollX, leftBottom.x);
+      near(edge.scrollY, leftBottom.y);
+      await androidJsonExpression(page, scrollDispatch(-100000, 100000));
+      assert.deepEqual(await androidJsonExpression(page, scrollSnapshot), edge);
+      await androidJsonExpression(page, scrollDispatch(100000, -100000));
+      const restored = await androidJsonExpression(page, scrollSnapshot);
+      near(restored.scrollX, rightTop.x);
+      near(restored.scrollY, 0);
+    });
+  });
+}
+
+test("mobile pinch scale does not substitute visual viewport size for window scroll bounds", async () => {
+  await mobileScrollFixture("rtl", async page => {
+    await probeScrollEdge(page, 100000, 0);
+    const before = await androidJsonExpression(page, scrollSnapshot);
+    const visualWidth = await page.evaluate("visualViewport.width");
+    const session = await page.context().newCDPSession(page);
+    try {
+      await session.send("Emulation.setPageScaleFactor", { pageScaleFactor: 2 });
+      const zoomed = await androidJsonExpression(page, scrollSnapshot);
+      assert.ok(await page.evaluate("visualViewport.width") < visualWidth);
+      for (const key of ["width", "height", "maxX", "maxY", "originX"]) assert.equal(zoomed[key], before[key]);
+      await androidJsonExpression(page, scrollDispatch(-80, 120));
+      const moved = await androidJsonExpression(page, scrollSnapshot);
+      near(moved.scrollX, zoomed.scrollX - 80);
+      near(moved.scrollY, zoomed.scrollY + 120);
+    } finally { await session.detach(); }
   });
 });

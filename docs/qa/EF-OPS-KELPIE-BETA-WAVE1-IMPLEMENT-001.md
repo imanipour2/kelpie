@@ -118,8 +118,11 @@ resources have explicit disposal ownership on timeout, cancellation and STOP.
 
 **Privacy remains a functional limitation:** only a natively registered reviewed
 synthetic fixture is admitted to pixel export. A matching URL or page-created
-attribute cannot enable that path. Real-page screenshots return `NEEDS_HUMAN`;
-unsupported full-page stitching returns a typed refusal. This prevents sensitive
+attribute cannot enable that path. Real-page screenshots return `UNSUPPORTED`;
+connection build 44 corrects the earlier `NEEDS_HUMAN` classification because
+additional approval cannot enable an unimplemented capture capability. Missing
+native fixture provenance returns `FRAME_PRIVACY_UNVERIFIED`. A sanitized page
+snapshot remains available; unsupported full-page stitching returns a typed refusal. This prevents sensitive
 pixel export but does not complete usable real-site redaction or the installation
 acceptance gate. DOM observations apply the shared policy, including origin-only
 URLs and structural selectors; raw browser title/path/query/form exports are

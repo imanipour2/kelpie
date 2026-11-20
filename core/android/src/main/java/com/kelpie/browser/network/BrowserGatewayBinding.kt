@@ -166,7 +166,7 @@ class BrowserGatewayBinding(
     ): T =
         withBrowserGatewayLease(lock, ctx.browserRetirement) {
             if (!ownerRequestCurrent()) throw R5AuthorizationChangedException()
-            if (ctx.motherPrivateAgentActive?.invoke() == true && ctx.motherGatewayAuthorization?.invoke() != true) throw R5RendererUnavailableException()
+            if (!rendererReadyFor(method)) throw R5RendererUnavailableException()
             check(PrivateCaptureOperationPolicy.permits(method, ctx.privateCaptureRestricted?.invoke() == true)) {
                 "Private WebView capture owns the browser"
             }
@@ -175,6 +175,7 @@ class BrowserGatewayBinding(
             // Legacy HTTP calls arrive on a server thread, unlike canonical
             // dispatch. WebView creation and profile access require the UI thread.
             withContext(Dispatchers.Main.immediate) {
+                if (!BrowserGatewayDispatch.requiresRenderer(method)) return@withContext action()
                 // Compose may not have attached the newly selected view yet.
                 // Resolve its identity from TabStore, as canonical dispatch does.
                 val view = ctx.tabStore?.activeTab?.webView
@@ -195,7 +196,7 @@ class BrowserGatewayBinding(
             if (!ownerRequestCurrent()) {
                 return@withContext errorResponse("SESSION_REVOKED", "Native owner-authorized request changed")
             }
-            if (ctx.motherPrivateAgentActive?.invoke() == true && ctx.motherGatewayAuthorization?.invoke() != true) {
+            if (!rendererReadyFor(method)) {
                 return@withContext errorResponse("RENDERER_NOT_READY", "Computer remains approved; the private browser renderer is temporarily unavailable")
             }
             if (!PrivateCaptureOperationPolicy.permits(method, ctx.privateCaptureRestricted?.invoke() == true)) {
@@ -223,7 +224,7 @@ class BrowserGatewayBinding(
         if (!ownerRequestCurrent()) {
             return errorResponse("SESSION_REVOKED", "Native owner-authorized request changed")
         }
-        if (ctx.motherPrivateAgentActive?.invoke() == true && ctx.motherGatewayAuthorization?.invoke() != true) {
+        if (!rendererReadyFor(method)) {
             return errorResponse("RENDERER_NOT_READY", "Computer remains approved; the private browser renderer is temporarily unavailable")
         }
         if (!PrivateCaptureOperationPolicy.permits(method, ctx.privateCaptureRestricted?.invoke() == true)) {
@@ -341,6 +342,11 @@ class BrowserGatewayBinding(
     }
 
     private suspend fun ownerRequestCurrent(): Boolean = !router.motherR5BackgroundQa || R5RequestAuthorization.current(router.nativeConsentSnapshot)
+
+    private suspend fun rendererReadyFor(method: String): Boolean =
+        !BrowserGatewayDispatch.requiresRenderer(method) ||
+            ctx.motherPrivateAgentActive?.invoke() != true ||
+            ctx.motherGatewayAuthorization?.invoke() == true
 
     companion object {
         private val REENTRANT_METHODS = setOf("ai-infer", "ai-record", "ai-cancel", "abort-script", "get-script-status")
