@@ -160,6 +160,35 @@ JavaScript program would miss the production expression-versus-statements bug.
 These corrections do not relax native owner approval, STOP, lock handling,
 document identity, privacy admission or acquired-frame freshness.
 
+## Physical feedback: mobile RTL window-scroll origin
+
+A wide RTL fixture on the actual Android WebView exposed a second geometry defect.
+Its root client width was 384 CSS pixels and content width was 2184, while
+`window.innerWidth` was 1536. Independent requests for the native horizontal
+extremes measured approximately -1799.82 and -1151.64; scrolling left by 180
+changed the measured position correctly, but the old zero-origin range rejected
+that effect. This was a production measurement error, not a failed computer
+approval or merely a fixture timeout.
+
+Pinned Chromium source reads and changes window scroll through `LayoutViewport`.
+Its minimum offset is negative scroll origin; maximum adds content size minus
+visible size. The root `clientWidth` and window `innerWidth` are obtained from
+different native sizes. [12] For the Android WebView host with overlay scrollbars,
+the measured example therefore has horizontal origin `384 - 1536 = -1152` and
+travel `2184 - 1536 = 648`, giving the RTL range `[-1800, -1152]` within the
+existing subpixel tolerance. A visual-viewport width is not a substitute for the
+window-scroll range. This Android-specific model must not silently classify a
+classic desktop scrollbar gutter as a mobile origin shift.
+
+The correction records the horizontal origin explicitly and requires it to
+remain stable with the other geometry during effect verification. Android
+instrumentation establishes its expected endpoints through independent standard
+scroll requests before exercising the real handler; it does not copy the
+production formula or require a false zero origin. Relative movement, actual
+clamping, boundary refusal and metadata-envelope assertions remain required.
+The fixture uses production viewport settings and enough vertical content for
+the expanded layout viewport; its complete setup stays bounded to five seconds.
+
 ## Primary sources
 
 1. [WebView visual-state API](https://developer.android.com/reference/android/webkit/WebView.html#postVisualStateCallback(long,%20android.webkit.WebView.VisualStateCallback)).
@@ -173,3 +202,4 @@ document identity, privacy admission or acquired-frame freshness.
 9. [Activity lifecycle](https://developer.android.com/guide/components/activities/activity-lifecycle).
 10. [Manage WebView objects](https://developer.android.com/develop/ui/views/layout/webapps/managing-webview).
 11. [Process lifecycle](https://developer.android.com/guide/components/activities/process-lifecycle), [Android 17 all-app changes](https://developer.android.com/about/versions/17/behavior-changes-all), and [Android 17 target-specific changes](https://developer.android.com/about/versions/17/behavior-changes-17).
+12. Chromium at commit `fcc56177d69e3b0ac50f90c85a38f8a0cab99f92`: [LocalDOMWindow](https://github.com/chromium/chromium/blob/fcc56177d69e3b0ac50f90c85a38f8a0cab99f92/third_party/blink/renderer/core/frame/local_dom_window.cc), [Element client geometry](https://github.com/chromium/chromium/blob/fcc56177d69e3b0ac50f90c85a38f8a0cab99f92/third_party/blink/renderer/core/dom/element.cc), and [PaintLayerScrollableArea bounds](https://github.com/chromium/chromium/blob/fcc56177d69e3b0ac50f90c85a38f8a0cab99f92/third_party/blink/renderer/core/paint/paint_layer_scrollable_area.cc).

@@ -25,7 +25,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.net.InetAddress
 import java.util.concurrent.atomic.AtomicReference
-import kotlin.math.abs
 
 /** Real HandlerContext expression wrapping and native gateway responses; synthetic loopback page only. */
 @RunWith(AndroidJUnit4::class)
@@ -33,37 +32,36 @@ class ScrollAndDeviceHandlerInstrumentedTest {
     @Test
     fun rtlScrollThroughNativeMcpProducesMeasuredHorizontalAndVerticalEffects() =
         runBlocking {
-            withFixture { ctx, router ->
+            withFixture { ctx, router, _ ->
                 val before = observe(ctx)
                 val moved = extensionValue(router, "kelpie_scroll", mapOf("deltaX" to -180, "deltaY" to 260))
                 val after = observe(ctx)
                 assertEquals("VERIFIED_SCROLL_OFFSET", moved["postconditionStatus"])
                 assertEquals(before.x, number(moved, "preScrollX"), 0.5)
                 assertEquals(before.y, number(moved, "preScrollY"), 0.5)
-                assertEquals(-180.0, after.x, 0.5)
-                assertEquals(260.0, after.y, 0.5)
+                assertEquals(before.x - 180.0, after.x, 0.5)
+                assertEquals(before.y + 260.0, after.y, 0.5)
                 assertEquals(after.x, number(moved, "scrollX"), 0.5)
                 assertEquals(after.y, number(moved, "scrollY"), 0.5)
 
                 extensionValue(router, "kelpie_scroll", mapOf("deltaX" to 75, "deltaY" to -80))
                 val returned = observe(ctx)
-                assertEquals(-105.0, returned.x, 0.5)
-                assertEquals(180.0, returned.y, 0.5)
+                assertEquals(before.x - 105.0, returned.x, 0.5)
+                assertEquals(before.y + 180.0, returned.y, 0.5)
             }
         }
 
     @Test
     fun largeRtlOffsetsClampToMeasuredBoundsAndRepeatedBoundaryCannotClaimAnEffect() =
         runBlocking {
-            withFixture { ctx, router ->
-                val initial = observe(ctx)
+            withFixture { ctx, router, bounds ->
                 val delta = mapOf("deltaX" to -100_000, "deltaY" to 100_000)
                 val clamped = router.handle("scroll", delta).second
                 assertEquals(true, clamped["success"])
                 assertEquals("VERIFIED_SCROLL_OFFSET", clamped["postconditionStatus"])
                 val edge = observe(ctx)
-                assertEquals(-initial.maxX, edge.x, 0.5)
-                assertEquals(initial.maxY, edge.y, 0.5)
+                assertEquals(bounds.minX, edge.x, 0.5)
+                assertEquals(bounds.maxY, edge.y, 0.5)
                 assertEquals(edge.x, number(clamped, "scrollX"), 0.5)
                 assertEquals(edge.y, number(clamped, "scrollY"), 0.5)
 
@@ -75,7 +73,7 @@ class ScrollAndDeviceHandlerInstrumentedTest {
                 val origin = router.handle("scroll", mapOf("deltaX" to 100_000, "deltaY" to -100_000)).second
                 assertEquals(true, origin["success"])
                 val restored = observe(ctx)
-                assertEquals(0.0, restored.x, 0.5)
+                assertEquals(bounds.maxX, restored.x, 0.5)
                 assertEquals(0.0, restored.y, 0.5)
             }
         }
@@ -83,7 +81,7 @@ class ScrollAndDeviceHandlerInstrumentedTest {
     @Test
     fun topAndBottomExpressionsReturnTheActualScrollOffsetThroughHandlerContext() =
         runBlocking {
-            withFixture { ctx, router ->
+            withFixture { ctx, router, _ ->
                 val bottom = extensionValue(router, "kelpie_scroll_to_bottom")
                 val atBottom = observe(ctx)
                 assertEquals(atBottom.maxY, atBottom.y, 0.5)
@@ -99,7 +97,7 @@ class ScrollAndDeviceHandlerInstrumentedTest {
     @Test
     fun viewportAndDeviceInfoHaveSuccessfulNativeEnvelopesWhileMissingViewRemainsAnError() =
         runBlocking {
-            withFixture { ctx, router ->
+            withFixture { ctx, router, _ ->
                 val expected = withContext(Dispatchers.Main.immediate) { ctx.webView!!.width to ctx.webView!!.height }
                 for (viewport in listOf(router.handle("get-viewport", emptyMap()).second, extensionValue(router, "kelpie_get_viewport"))) {
                     assertEquals(true, viewport["success"])
@@ -147,28 +145,54 @@ class ScrollAndDeviceHandlerInstrumentedTest {
         return Position(number(value, "x"), number(value, "y"), number(value, "maxX"), number(value, "maxY"), value["direction"] as String)
     }
 
-    /** Choose the fixture origin explicitly; readiness is measured with the production viewport settings. */
-    private suspend fun establishScrollOrigin(ctx: HandlerContext): Position {
+    private data class ScrollBounds(
+        val minX: Double,
+        val maxX: Double,
+        val maxY: Double,
+    )
+
+    /**
+     * Measure the fixture's actual native limits independently of ScrollEffectEvidence.
+     * Mobile RTL overflow can give the layout viewport a negative rightmost offset.
+     */
+    private suspend fun establishScrollBounds(ctx: HandlerContext): ScrollBounds {
         var lastObserved: Position? = null
         val ready =
             withTimeoutOrNull(5_000L) {
-                val dispatched =
-                    ctx.evaluateJSReturningJSON(
-                        "(()=>{window.scrollTo({left:0,top:0,behavior:'instant'});return{dispatched:true}})()",
-                    )
-                assertEquals(true, dispatched["dispatched"])
-                var previous = observe(ctx).also { lastObserved = it }
-                var stable = 0
-                while (stable < 3) {
-                    delay(50L)
-                    val current = observe(ctx)
-                    stable = if (abs(current.x) <= 0.5 && abs(current.y) <= 0.5 && current == previous) stable + 1 else 0
-                    previous = current
-                    lastObserved = current
+                suspend fun observeEdge(
+                    x: Int,
+                    y: Int,
+                ): Position {
+                    val dispatched =
+                        ctx.evaluateJSReturningJSON(
+                            "(()=>{window.scrollTo({left:$x,top:$y,behavior:'instant'});return{dispatched:true}})()",
+                        )
+                    assertEquals(true, dispatched["dispatched"])
+                    var previous = observe(ctx).also { lastObserved = it }
+                    var stable = 0
+                    while (stable < 3) {
+                        delay(50L)
+                        val current = observe(ctx)
+                        stable = if (current == previous) stable + 1 else 0
+                        previous = current
+                        lastObserved = current
+                    }
+                    return previous
                 }
-                previous
+
+                val leftBottom = observeEdge(-100_000, 100_000)
+                val rightTop = observeEdge(100_000, 0)
+                assertEquals("rtl", rightTop.direction)
+                assertEquals(leftBottom.direction, rightTop.direction)
+                assertEquals(leftBottom.maxX, rightTop.maxX, 0.5)
+                assertEquals(leftBottom.maxY, rightTop.maxY, 0.5)
+                assertTrue("Fixture needs horizontal travel: $leftBottom -> $rightTop", rightTop.x - leftBottom.x > 600.0)
+                assertTrue("Fixture needs vertical travel: $leftBottom", leftBottom.y > 1200.0)
+                assertEquals(leftBottom.maxY, leftBottom.y, 0.5)
+                assertEquals(0.0, rightTop.y, 0.5)
+                ScrollBounds(leftBottom.x, rightTop.x, leftBottom.y)
             }
-        return ready ?: throw AssertionError("Synthetic RTL fixture did not settle at its origin: $lastObserved")
+        return ready ?: throw AssertionError("Synthetic RTL fixture did not settle at its measured bounds: $lastObserved")
     }
 
     private suspend fun extensionValue(
@@ -205,7 +229,7 @@ class ScrollAndDeviceHandlerInstrumentedTest {
         return response
     }
 
-    private suspend fun withFixture(block: suspend (HandlerContext, Router) -> Unit) {
+    private suspend fun withFixture(block: suspend (HandlerContext, Router, ScrollBounds) -> Unit) {
         val server =
             MockWebServer().apply {
                 dispatcher =
@@ -244,13 +268,8 @@ class ScrollAndDeviceHandlerInstrumentedTest {
                             delay(50L)
                         }
                     }
-                    val initial = establishScrollOrigin(ctx)
-                    assertEquals("rtl", initial.direction)
-                    assertTrue("Fixture needs measurable horizontal overflow: $initial", initial.maxX > 600.0)
-                    assertTrue("Fixture needs measurable vertical overflow: $initial", initial.maxY > 1200.0)
-                    assertEquals(0.0, initial.x, 0.5)
-                    assertEquals(0.0, initial.y, 0.5)
-                    withTimeout(15_000L) { block(ctx, router) }
+                    val bounds = establishScrollBounds(ctx)
+                    withTimeout(15_000L) { block(ctx, router, bounds) }
                 } finally {
                     withContext(NonCancellable) {
                         withContext(Dispatchers.Main.immediate) { ctx.browserRetirement.retireTarget(view) }
@@ -276,7 +295,7 @@ class ScrollAndDeviceHandlerInstrumentedTest {
             <!doctype html><html dir="rtl"><head><meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <title>Synthetic RTL scroll</title>
-            <style>html,body{margin:0;padding:0;scroll-behavior:auto}main{width:calc(100vw + 1800px);height:calc(100vh + 3200px);background:#edf4ff}</style>
+            <style>html,body{margin:0;padding:0;scroll-behavior:auto}main{width:calc(100vw + 1800px);height:calc(100vh + 6400px);background:#edf4ff}</style>
             </head><body><main>محتوای آزمون</main></body></html>
             """.trimIndent()
     }
