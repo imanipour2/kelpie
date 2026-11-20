@@ -13,6 +13,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -30,6 +31,9 @@ import com.kelpie.browser.network.PairApprovalCoordinator
  */
 @Composable
 fun PairingDialog(coordinator: PairApprovalCoordinator) {
+    // Read native pending approval when this UI is first composed. The request
+    // may have arrived while the Activity was not yet observing HTTP events.
+    LaunchedEffect(coordinator) { coordinator.refresh() }
     val prompt by coordinator.currentPrompt.collectAsState()
     val current = prompt ?: return
     val approvalError by coordinator.approvalError.collectAsState()

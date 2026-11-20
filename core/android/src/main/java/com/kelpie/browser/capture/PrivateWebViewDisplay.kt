@@ -57,6 +57,10 @@ class PrivateWebViewDisplay(
     private var qaFrameSequence = 0
     private var visualRequestId = 0L
 
+    // This belongs to the single temporarily transferred WebView only.
+    // Restore the user's original setting on STOP, failure or foreground return.
+    private var previousOffscreenPreRaster: Boolean? = null
+
     @Volatile private var active = false
 
     @Volatile private var activityVisible = true
@@ -97,13 +101,42 @@ class PrivateWebViewDisplay(
 
     suspend fun start(original: WebView): Boolean =
         withContext(Dispatchers.Main.immediate) {
-            if (stateFlow.value != State.IDLE || isLocked() || !activityVisible || !viewportReadiness.cssReady(original)) {
+            val traceStartMs = android.os.SystemClock.elapsedRealtime()
+
+            fun trace(stage: String) {
+                val elapsed = android.os.SystemClock.elapsedRealtime() - traceStartMs
+                Log.i("KelpieR5Transfer", "stage=" + stage + " elapsedMs=" + elapsed)
+            }
+            trace("START_ENTERED")
+            // Diagnose the exact failed gate, not a combined status. These are
+            // fixed labels: never log URLs, JavaScript results, pixels or principals.
+            val preconditionFailure =
+                when {
+                    stateFlow.value != State.IDLE -> "RENDERER_NOT_IDLE"
+                    isLocked() -> "DEVICE_OR_ACTIVITY_LOCKED"
+                    !activityVisible -> "ACTIVITY_VISIBILITY_CHANGED"
+                    !original.isAttachedToWindow -> "WEBVIEW_NOT_ATTACHED"
+                    original.width <= 0 || original.height <= 0 -> "WEBVIEW_ZERO_NATIVE_SIZE"
+                    !viewportReadiness.cssReady(original) -> "WEBVIEW_CSS_NOT_READY"
+                    else -> null
+                }
+            if (preconditionFailure != null) {
+                Log.w(
+                    "KelpieR5Transfer",
+                    "stage=START_PRECONDITION_DENIED_" + preconditionFailure +
+                        " elapsedMs=" + (android.os.SystemClock.elapsedRealtime() - traceStartMs),
+                )
                 return@withContext false
             }
-            val cssScroll = R5WebViewScrollRestoration.read(original) ?: return@withContext false
+            val cssScroll =
+                R5WebViewScrollRestoration.read(original) ?: run {
+                    trace("CSS_SCROLL_WITNESS_MISSING")
+                    return@withContext false
+                }
             if (stateFlow.value != State.IDLE || isLocked() || !activityVisible) return@withContext false
             val generation = ownershipGeneration.incrementAndGet()
             previousCssScroll = cssScroll
+            trace("COMPOSE_RELEASE_BEGIN")
             stateFlow.value = State.RELEASING_COMPOSE
             view = original
             qaFrameSequence = 0
@@ -113,6 +146,11 @@ class PrivateWebViewDisplay(
 
             fun current(): Boolean = ownershipGeneration.get() == generation && view === original && !isLocked()
             try {
+                if (useNativeFrameProof) {
+                    previousOffscreenPreRaster = original.settings.offscreenPreRaster
+                    original.settings.offscreenPreRaster = true
+                    trace("OFFSCREEN_PRERASTER_ENABLED")
+                }
                 composeRelease()
                 val detached =
                     withTimeoutOrNull(RELEASE_TIMEOUT_MS) {
@@ -120,9 +158,11 @@ class PrivateWebViewDisplay(
                         !original.isAttachedToWindow && current()
                     } == true
                 if (!detached) {
+                    trace("COMPOSE_RELEASE_TIMEOUT")
                     if (ownershipGeneration.get() == generation) releaseAndRestore(State.FAILED)
                     return@withContext false
                 }
+                trace("COMPOSE_DETACHED")
                 val backgroundThread = HandlerThread("Kelpie-Private-ImageReader")
                 backgroundThread.start()
                 worker = backgroundThread
@@ -147,17 +187,26 @@ class PrivateWebViewDisplay(
                 val proof = if (useNativeFrameProof) R5NativeFrameProof(host.context).also { nativeFrameProof = it } else null
                 host.setContentView(proof?.host(original) ?: original)
                 host.show()
+                trace("PRIVATE_HOST_SHOWN")
+                // A newly reparented offscreen WebView must be scheduled for a
+                // real draw; never confuse requestLayout with frame proof.
+                original.requestLayout()
+                original.postInvalidateOnAnimation()
+                host.window?.decorView?.postInvalidateOnAnimation()
                 if (!viewportReadiness.awaitCommittedViewport(original, ++visualRequestId, ::current) || !current()) {
+                    trace("PRIVATE_VIEWPORT_COMMIT_FAILED")
                     if (ownershipGeneration.get() == generation) releaseAndRestore(State.FAILED)
                     return@withContext false
                 }
                 active = true
                 stateFlow.value = State.PRIVATE_DISPLAY
+                trace("PRIVATE_DISPLAY_COMMITTED")
                 true
             } catch (error: CancellationException) {
                 if (ownershipGeneration.get() == generation) releaseAndRestore(State.FAILED)
                 throw error
             } catch (_: RuntimeException) {
+                trace("PRIVATE_DISPLAY_RUNTIME_FAILURE")
                 if (ownershipGeneration.get() == generation) releaseAndRestore(State.FAILED)
                 false
             }
@@ -399,6 +448,11 @@ class PrivateWebViewDisplay(
         val oldProof = nativeFrameProof
         nativeFrameProof = null
         cleanup.release { oldProof?.dispose() }
+        val oldPreRaster = previousOffscreenPreRaster
+        previousOffscreenPreRaster = null
+        if (oldPreRaster != null && original !== deadView) {
+            cleanup.release { original?.settings?.offscreenPreRaster = oldPreRaster }
+        }
         val oldPresentation = presentation
         presentation = null
         cleanup.release { oldPresentation?.dismiss() }

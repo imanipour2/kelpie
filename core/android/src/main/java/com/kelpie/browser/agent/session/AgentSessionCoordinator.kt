@@ -181,11 +181,17 @@ class AgentSessionCoordinator(
      * must recheck the EXACT principal the user saw before the tap. Never
      * silently switch to a newly observed principal during an OS prompt.
      */
-    fun beginOneTapFromNativeUi(expectedPrincipal: String): Boolean {
+    fun beginOneTapFromNativeUi(expectedPrincipal: String): Boolean = beginOneTapFromNativeUiWithReason(expectedPrincipal) == NativeOneTapResult.GRANTED
+
+    /**
+     * A native owner tap is the only approval entrypoint. Categorical failures
+     * are safe to show without exposing the paired principal or any bearer.
+     */
+    internal fun beginOneTapFromNativeUiWithReason(expectedPrincipal: String): NativeOneTapResult {
         syncLock()
         val observed = R5ObservedAgentClients.registry.soleRecentPrincipal()
-        val permitted =
-            nativeOneTapConsentAllowed(
+        val reason =
+            nativeOneTapRejection(
                 intendedPrincipal = expectedPrincipal,
                 freshUniquePrincipal = observed,
                 lifecycleResumed = activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED),
@@ -193,17 +199,31 @@ class AgentSessionCoordinator(
                 deviceUnlocked = !deviceLocked(),
                 stopNotificationEnabled = AgentSessionNotification.canNotify(activity),
             )
-        if (closed || !permitted || !pairedPrincipalCurrent(expectedPrincipal)) return false
-
-        val pending = AndroidAgentProcessSession.request(expectedPrincipal) ?: return false
-        // No second confirmation dialog: the affirmative tap that invoked
-        // this method IS the native owner-consent gesture.
+        val denied =
+            when {
+                closed -> NativeOneTapResult.COORDINATOR_CLOSED
+                reason != null -> reason
+                !pairedPrincipalCurrent(expectedPrincipal) -> NativeOneTapResult.PAIRING_REVOKED
+                else -> null
+            }
+        if (denied != null) {
+            android.util.Log.i("R5NativeConsent", "tap rejected: ${denied.name}")
+            return denied
+        }
+        val pending = AndroidAgentProcessSession.request(expectedPrincipal)
+        if (pending == null) {
+            android.util.Log.i("R5NativeConsent", "tap rejected: SESSION_BUSY")
+            return NativeOneTapResult.SESSION_BUSY
+        }
         val approved = approveFromNativeUi(pending.promptId)
         if (!approved) {
             AndroidAgentProcessSession.stop()
             AgentSessionNotification.hide(activity)
+            android.util.Log.i("R5NativeConsent", "tap rejected: APPROVAL_FAILED")
+            return NativeOneTapResult.APPROVAL_FAILED
         }
-        return approved
+        android.util.Log.i("R5NativeConsent", "native owner grant activated")
+        return NativeOneTapResult.GRANTED
     }
 
     /** Called only from an affirmative native UI gesture, never HTTP. */
@@ -256,6 +276,11 @@ class AgentSessionCoordinator(
 
     fun onResume() {
         syncLock()
+        // Process death and external revocation can leave a previous OS
+        // notification visible even though there is no valid in-memory grant.
+        if (AndroidAgentProcessSession.active.value == null) {
+            AgentSessionNotification.hide(activity)
+        }
     }
 
     fun close(revokeSession: Boolean) {
@@ -312,3 +337,42 @@ internal fun nativeConsentTapAllowed(
     deviceUnlocked: Boolean,
     stopNotificationEnabled: Boolean,
 ): Boolean = lifecycleResumed && activityVisible && deviceUnlocked && stopNotificationEnabled
+
+/**
+ * These are fixed, non-identifying diagnostics. Never include principal IDs,
+ * endpoint addresses, tokens, screenshots or page content in UI/log output.
+ */
+internal enum class NativeOneTapResult {
+    GRANTED,
+    INVALID_CLIENT,
+    CLIENT_EXPIRED,
+    CLIENT_CHANGED,
+    ACTIVITY_NOT_RESUMED,
+    ACTIVITY_NOT_VISIBLE,
+    DEVICE_LOCKED,
+    STOP_NOTIFICATION_UNAVAILABLE,
+    COORDINATOR_CLOSED,
+    PAIRING_REVOKED,
+    SESSION_BUSY,
+    APPROVAL_FAILED,
+}
+
+/** Returns the first exact failing admission gate; no permissions are changed. */
+internal fun nativeOneTapRejection(
+    intendedPrincipal: String?,
+    freshUniquePrincipal: String?,
+    lifecycleResumed: Boolean,
+    activityVisible: Boolean,
+    deviceUnlocked: Boolean,
+    stopNotificationEnabled: Boolean,
+): NativeOneTapResult? =
+    when {
+        !R5AgentPrincipalPolicy.eligible(intendedPrincipal) -> NativeOneTapResult.INVALID_CLIENT
+        freshUniquePrincipal == null -> NativeOneTapResult.CLIENT_EXPIRED
+        intendedPrincipal != freshUniquePrincipal -> NativeOneTapResult.CLIENT_CHANGED
+        !lifecycleResumed -> NativeOneTapResult.ACTIVITY_NOT_RESUMED
+        !activityVisible -> NativeOneTapResult.ACTIVITY_NOT_VISIBLE
+        !deviceUnlocked -> NativeOneTapResult.DEVICE_LOCKED
+        !stopNotificationEnabled -> NativeOneTapResult.STOP_NOTIFICATION_UNAVAILABLE
+        else -> null
+    }

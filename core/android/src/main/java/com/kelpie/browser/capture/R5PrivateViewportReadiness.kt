@@ -1,5 +1,6 @@
 package com.kelpie.browser.capture
 
+import android.util.Log
 import android.webkit.WebView
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
@@ -10,7 +11,17 @@ internal class R5PrivateViewportReadiness(
     private val locked: () -> Boolean,
 ) {
     suspend fun cssReady(webView: WebView): Boolean {
-        if (locked() || !webView.isAttachedToWindow || webView.width <= 0 || webView.height <= 0) return false
+        if (locked() || !webView.isAttachedToWindow || webView.width <= 0 || webView.height <= 0) {
+            Log.i(
+                "KelpieR5Viewport",
+                when {
+                    locked() -> "CSS_GATE_LOCKED"
+                    !webView.isAttachedToWindow -> "CSS_GATE_NOT_ATTACHED"
+                    else -> "CSS_GATE_ZERO_NATIVE_SIZE"
+                },
+            )
+            return false
+        }
         val answer = CompletableDeferred<String>()
         try {
             webView.evaluateJavascript(
@@ -20,9 +31,17 @@ internal class R5PrivateViewportReadiness(
                 if (!answer.isCompleted) answer.complete(raw)
             }
         } catch (_: RuntimeException) {
+            Log.w("KelpieR5Viewport", "CSS_EVALUATE_EXCEPTION")
             return false
         }
-        return withTimeoutOrNull(500L) { answer.await() } == "true"
+        val answerValue = withTimeoutOrNull(500L) { answer.await() }
+        if (answerValue != "true") {
+            Log.i(
+                "KelpieR5Viewport",
+                if (answerValue == null) "CSS_CALLBACK_TIMEOUT" else "CSS_GEOMETRY_REJECTED",
+            )
+        }
+        return answerValue == "true"
     }
 
     /**
@@ -52,7 +71,10 @@ internal class R5PrivateViewportReadiness(
                 }
                 false
             } ?: false
-        if (!laidOut || locked() || !stillOwned()) return false
+        if (!laidOut || locked() || !stillOwned()) {
+            Log.i("KelpieR5Viewport", "VIEWPORT_LAYOUT_NOT_COMMITTED")
+            return false
+        }
         val visual = CompletableDeferred<Boolean>()
         val expectedRequestId = requestId
         webView.postVisualStateCallback(
@@ -64,6 +86,7 @@ internal class R5PrivateViewportReadiness(
             },
         )
         val committed = withTimeoutOrNull(2_000L) { visual.await() } == true
+        if (!committed) Log.i("KelpieR5Viewport", "VISUAL_STATE_NOT_COMMITTED")
         return committed &&
             stillOwned() &&
             R5ViewportAdmission.permits(

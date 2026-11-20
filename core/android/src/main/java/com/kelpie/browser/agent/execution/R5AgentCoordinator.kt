@@ -48,6 +48,9 @@ class R5AgentCoordinator(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val transferMutex = Mutex()
+
+    // Monotonic main-thread epoch invalidates old background handoffs on resume.
+    private var lifecycleVisibilityEpoch = 0L
     private val released = MutableStateFlow(false)
     val relinquished = released.asStateFlow()
     private val renderer =
@@ -140,7 +143,12 @@ class R5AgentCoordinator(
                     currentGeneration = state.generation
                     ownership = WebViewOwnershipState()
                     runtime = newRuntime()
-                    if (!deferPrivateUntilBackground || !activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                    // Mother mode must transfer only from the matching onPause
+                    // lifecycle epoch. Treating !RESUMED as a transfer trigger
+                    // races with an earlier onPause that already set
+                    // activityVisible=false, causing immediate fail-closed
+                    // START_PRECONDITION_DENIED_ACTIVITY_VISIBILITY_CHANGED.
+                    if (R5MotherActivationGate.canEagerlyActivate(deferPrivateUntilBackground)) {
                         scope.launch { activateRenderer(state) }
                     }
                 } else if (ownership.status() == WebViewOwnershipState.Host.SUSPENDED) {
@@ -320,16 +328,49 @@ class R5AgentCoordinator(
 
     /** Called from Activity lifecycle, not from a remote JSON argument. */
     fun onPause() {
+        val pauseEpoch = ++lifecycleVisibilityEpoch
+        Log.i("KelpieR5Lifecycle", "pause epoch=" + pauseEpoch)
         scope.launch {
+            val stillBackground = {
+                R5PausedVisibilityGate.mayCommit(
+                    pauseEpoch = pauseEpoch,
+                    currentEpoch = lifecycleVisibilityEpoch,
+                    activityResumed = activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED),
+                )
+            }
             val active = consent.snapshot() as? SessionConsentCore.State.Active
-            if (active != null && !active.locked && renderer.state.value == PrivateWebViewDisplay.State.IDLE) {
+            Log.i(
+                "KelpieR5Lifecycle",
+                "pause_check epoch=" + pauseEpoch +
+                    " current=" + lifecycleVisibilityEpoch +
+                    " stillBackground=" + stillBackground() +
+                    " grantActive=" + (active != null) +
+                    " rendererIdle=" + (renderer.state.value == PrivateWebViewDisplay.State.IDLE),
+            )
+            if (stillBackground() &&
+                active != null &&
+                !active.locked &&
+                renderer.state.value == PrivateWebViewDisplay.State.IDLE
+            ) {
                 activateRenderer(active)
             }
-            renderer.setActivityVisible(false)
+            if (stillBackground()) {
+                Log.i("KelpieR5Lifecycle", "pause_commit_background epoch=" + pauseEpoch)
+                renderer.setActivityVisible(false)
+            } else if (activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+                renderer.state.value == PrivateWebViewDisplay.State.PRIVATE_DISPLAY
+            ) {
+                // onResume may have run while the asynchronous handoff was still
+                // in progress. Never leave an old background transfer active
+                // in the foreground, even though frame capture is already fenced.
+                restoreForeground()
+            }
         }
     }
 
     fun onResume() {
+        ++lifecycleVisibilityEpoch
+        Log.i("KelpieR5Lifecycle", "resume epoch=" + lifecycleVisibilityEpoch)
         renderer.setActivityVisible(true)
         scope.launch {
             when (renderer.state.value) {
@@ -342,7 +383,7 @@ class R5AgentCoordinator(
                         val restored = renderer.verifyRestored()
                         val active = consent.snapshot() as? SessionConsentCore.State.Active
                         if (!restored) {
-                            if (active != null) AndroidAgentProcessSession.stop()
+                            if (active != null) revokeOnRendererFailure("RESTORE_VERIFY_FAILED")
                             return@withLock
                         }
                         if (active != null && !active.locked) {
@@ -396,7 +437,7 @@ class R5AgentCoordinator(
             if (!ownership.unlockNeedsReattach(active.generation)) return@withLock
             if (!ownership.bindForeground(active.generation, target.rendererIdentity)) {
                 ownership.failRenderer()
-                AndroidAgentProcessSession.stop()
+                revokeOnRendererFailure("UNLOCK_REBIND_FAILED")
                 return@withLock
             }
             val unchanged =
@@ -410,7 +451,7 @@ class R5AgentCoordinator(
             if (!unchanged) {
                 ready = false
                 ownership.failRenderer()
-                AndroidAgentProcessSession.stop()
+                revokeOnRendererFailure("UNLOCK_GENERATION_CHANGED")
                 return@withLock
             }
             ready = true
@@ -430,12 +471,19 @@ class R5AgentCoordinator(
             }
             val ticket = ownership.moveToPrivate(active.generation) ?: return@withLock
             ready = false
+            Log.i(
+                "KelpieR5Lifecycle",
+                "private_start lifecycleResumed=" +
+                    activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) +
+                    " viewAttached=" + tab.webView.isAttachedToWindow +
+                    " nativeGeometryValid=" + (tab.webView.width > 0 && tab.webView.height > 0),
+            )
             val entered = renderer.start(tab.webView)
             if (!entered || consent.snapshot() != active || !ownership.completePrivate(ticket)) {
                 ownership.failRenderer()
                 nativePort.clearPendingEvidence()
                 renderer.stop()
-                AndroidAgentProcessSession.stop()
+                revokeOnRendererFailure("PRIVATE_RENDERER_TRANSFER_FAILED")
                 return@withLock
             }
             currentTabId = tab.id
@@ -453,9 +501,20 @@ class R5AgentCoordinator(
                 ready = true
             } else if (ticket != null) {
                 ownership.failRenderer()
-                AndroidAgentProcessSession.stop()
+                revokeOnRendererFailure("FOREGROUND_RESTORE_FAILED")
             }
         }
+
+    /**
+     * An invalid renderer/ownership transition revokes the session fail-closed.
+     * Never leave a misleading STOP notification for a now-OFF authority.
+     * Reasons are fixed categories; no tab, principal, bearer or URL is logged.
+     */
+    private fun revokeOnRendererFailure(reason: String) {
+        Log.w("KelpieR5Recovery", "consent revoked after " + reason)
+        AndroidAgentProcessSession.stop()
+        AgentSessionNotification.hide(activity)
+    }
 
     private suspend fun releaseRenderer() =
         transferMutex.withLock {
@@ -484,4 +543,25 @@ class R5AgentCoordinator(
         renderer.dispose()
         scope.cancel()
     }
+}
+
+/**
+ * A suspended onPause coroutine must not overwrite a later onResume.
+ * No remote operation or renderer ownership is granted by this predicate.
+ */
+internal object R5PausedVisibilityGate {
+    fun mayCommit(
+        pauseEpoch: Long,
+        currentEpoch: Long,
+        activityResumed: Boolean,
+    ): Boolean = pauseEpoch == currentEpoch && !activityResumed
+}
+
+/**
+ * Mother profile requires an actual, epoch-verified onPause transfer. A
+ * temporarily non-RESUMED lifecycle while collecting native consent does not
+ * authorize a separate renderer ownership change.
+ */
+internal object R5MotherActivationGate {
+    fun canEagerlyActivate(deferPrivateUntilBackground: Boolean): Boolean = !deferPrivateUntilBackground
 }

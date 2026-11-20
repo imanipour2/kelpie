@@ -41,7 +41,16 @@ fun TabWebViewContent(
             val tab = tabs.firstOrNull { it.id == activeTabId } ?: return@AndroidView
             val wv = tab.webView
 
-            if (wv === installedWebViewRef.value) return@AndroidView
+            // The same WebView can be detached during the private-renderer
+            // handoff and later restored. Identity alone does not prove it is
+            // still attached to this Compose host.
+            if (R5TabWebViewAttachPolicy.isCurrent(
+                    sameWebView = wv === installedWebViewRef.value,
+                    attachedToHost = wv.parent === container,
+                )
+            ) {
+                return@AndroidView
+            }
 
             container.removeAllViews()
             (wv.parent as? ViewGroup)?.removeView(wv)
@@ -100,4 +109,15 @@ private fun syncBrowserStateFromWebView(
     browserState.updateCanGoBack(webView.canGoBack())
     browserState.updateCanGoForward(webView.canGoForward())
     browserState.webView = webView
+}
+
+/**
+ * Comparing only the cached WebView identity loses the restored view when
+ * Compose recreates or detaches its host across a private-display transfer.
+ */
+internal object R5TabWebViewAttachPolicy {
+    fun isCurrent(
+        sameWebView: Boolean,
+        attachedToHost: Boolean,
+    ): Boolean = sameWebView && attachedToHost
 }

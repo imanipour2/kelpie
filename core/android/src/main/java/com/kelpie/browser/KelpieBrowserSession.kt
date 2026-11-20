@@ -200,6 +200,10 @@ class KelpieBrowserSession(
     }
 
     private fun onResume() {
+        // The signed challenge can become pending while Compose/Activity is
+        // paused. Re-read the native queue when the owner returns to Kelpie,
+        // rather than relying exclusively on a background HTTP callback.
+        pairingCoordinator.refresh()
         captureCoordinator?.onResume()
         agentSessionCoordinator?.onResume()
         r5AgentCoordinator?.onResume()

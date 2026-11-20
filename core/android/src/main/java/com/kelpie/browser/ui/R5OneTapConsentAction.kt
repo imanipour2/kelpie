@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.kelpie.browser.agent.session.AgentSessionCoordinator
+import com.kelpie.browser.agent.session.NativeOneTapResult
 
 /**
  * The button itself is the owner's affirmative native consent gesture.
@@ -37,32 +38,38 @@ internal fun R5OneTapConsentAction(
     val context = LocalContext.current
     var pendingPrincipal by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+
+    fun report(result: NativeOneTapResult) {
+        if (result == NativeOneTapResult.GRANTED) {
+            error = null
+            onGranted()
+        } else {
+            error = nativeConsentErrorLabel(result)
+        }
+    }
     val notificationPermission =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
             val selected = pendingPrincipal
             pendingPrincipal = null
-            if (allowed && selected != null && coordinator.beginOneTapFromNativeUi(selected)) {
-                error = null
-                onGranted()
+            if (allowed && selected != null) {
+                report(coordinator.beginOneTapFromNativeUiWithReason(selected))
             } else {
-                error = "Agent control not started. Check the verified agent, unlock, and STOP notification."
+                error = "Notification permission is required for the visible STOP control. No access was granted."
             }
         }
     val start = {
         // Capture the displayed principal at the moment of the actual tap.
         val selected = principal
         if (pendingPrincipal == null) {
+            error = null
             if (Build.VERSION.SDK_INT >= 33 &&
                 ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
                 PackageManager.PERMISSION_GRANTED
             ) {
                 pendingPrincipal = selected
                 notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-            } else if (coordinator.beginOneTapFromNativeUi(selected)) {
-                error = null
-                onGranted()
             } else {
-                error = "Agent control not started. Check the verified agent, unlock, and STOP notification."
+                report(coordinator.beginOneTapFromNativeUiWithReason(selected))
             }
         }
     }
@@ -81,3 +88,27 @@ internal fun R5OneTapConsentAction(
         }
     }
 }
+
+/** A denial is actionable without leaking who the authenticated caller is. */
+internal fun nativeConsentErrorLabel(result: NativeOneTapResult): String =
+    when (result) {
+        NativeOneTapResult.GRANTED -> "Approved for this app session."
+        NativeOneTapResult.CLIENT_EXPIRED ->
+            "Verified client expired. Send a fresh MCP request in ChatGPT, then tap Refresh verified clients."
+        NativeOneTapResult.CLIENT_CHANGED, NativeOneTapResult.INVALID_CLIENT ->
+            "The verified client changed or is ambiguous. Reconnect the intended MCP client and refresh."
+        NativeOneTapResult.ACTIVITY_NOT_RESUMED, NativeOneTapResult.ACTIVITY_NOT_VISIBLE ->
+            "Kelpie is not fully foregrounded. Close overlays, return to Kelpie, then try again."
+        NativeOneTapResult.DEVICE_LOCKED ->
+            "Unlock the phone and try again; no remote control was granted."
+        NativeOneTapResult.STOP_NOTIFICATION_UNAVAILABLE ->
+            "Enable Kelpie notifications and the agent-session STOP channel before approving."
+        NativeOneTapResult.COORDINATOR_CLOSED ->
+            "Kelpie's previous screen has closed. Reopen Connect to an AI agent."
+        NativeOneTapResult.PAIRING_REVOKED ->
+            "This computer is no longer trusted. Reconnect and approve the computer in Paired Clients."
+        NativeOneTapResult.SESSION_BUSY ->
+            "A consent request is already pending or active. Check session status or use STOP before retrying."
+        NativeOneTapResult.APPROVAL_FAILED ->
+            "Approval failed after the tap. Reopen the connection screen and inspect notification availability."
+    }

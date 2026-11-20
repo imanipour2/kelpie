@@ -157,8 +157,23 @@ def pair(base, state, duration):
     else:
         print('EXISTING_COMPUTER_KEY_TRUST_REUSED')
     deadline = time.monotonic() + duration
+    first_unreachable_at = None
     while time.monotonic() < deadline:
-        code, info = http_json(base, '/v1/pair/status?requestId=' + request_id)
+        try:
+            code, info = http_json(base, '/v1/pair/status?requestId=' + request_id)
+            first_unreachable_at = None
+        except PairError as error:
+            if str(error) != 'LOOPBACK_SERVER_UNREACHABLE':
+                raise
+            if first_unreachable_at is None:
+                first_unreachable_at = time.monotonic()
+                print('PAIR_STATUS_TEMPORARILY_UNREACHABLE: retrying existing request')
+            # Do not start another signed challenge or reissue identity during
+            # Activity transitions. Fail only when the local outage persists.
+            if time.monotonic() - first_unreachable_at >= 30:
+                raise PairError('PAIR_STATUS_UNREACHABLE_30S') from None
+            time.sleep(2)
+            continue
         if code != 200:
             raise PairError('PAIRING_STATUS_HTTP_NOT_200')
         status = info.get('status')
