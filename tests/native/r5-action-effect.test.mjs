@@ -8,7 +8,7 @@ const require = createRequire(new URL("../../packages/shared/package.json", impo
 const { chromium } = require("playwright-core");
 const scrollSource = await readFile(new URL("../../core/android/src/main/java/com/kelpie/browser/handlers/ScrollEffectEvidence.kt", import.meta.url), "utf8");
 const scrollSnapshot = scrollSource.match(/val SNAPSHOT\s*=\s*"""([\s\S]*?)"""/)[1];
-const scrollTemplate = JSON.parse(scrollSource.match(/return ("window\.scrollBy[^\n]+")/)[1]);
+const scrollTemplate = JSON.parse(scrollSource.match(/return ("[^"\n]*window\.scrollBy[^\n]+")/)[1]);
 const scrollDispatch = (x, y) => scrollTemplate.replaceAll("$dx", String(x)).replaceAll("$dy", String(y));
 let browser;
 before(async () => { browser = await chromium.launch({ headless: true, executablePath: process.env.KELPIE_TEST_CHROMIUM }); });
@@ -29,6 +29,12 @@ async function remember(page, selector) {
 
 async function action(page, method, text = "", strict = true) {
   return page.evaluate(`(${actOnNativeReference.toString()})("target","__effectFixture",${JSON.stringify(method)},${JSON.stringify(text)},${strict})`);
+}
+
+// Match HandlerContext.evaluateJSReturningJSON's expression boundary. A raw
+// page.evaluate(program) would accept statements that Android cannot wrap.
+async function androidJsonExpression(page, expression) {
+  return JSON.parse(await page.evaluate(`JSON.stringify((${expression}))`));
 }
 
 test("R5 click verifies a real visible DOM change", async () => {
@@ -127,11 +133,11 @@ test("empty R5 typing is refused before focus and legacy dispatch stays compatib
 
 test("production scroll script reaches a separately observed CSS offset even with smooth page CSS", async () => {
   await fixture('<style>html{scroll-behavior:smooth}body{height:4000px;margin:0}</style><p>Scroll fixture</p>', async page => {
-    const before = await page.evaluate(scrollSnapshot);
+    const before = await androidJsonExpression(page, scrollSnapshot);
     assert.equal(before.scrollY, 0);
     assert.ok(before.maxY > 200);
-    await page.evaluate(scrollDispatch(0, 200));
-    const after = await page.evaluate(scrollSnapshot);
+    assert.deepEqual(await androidJsonExpression(page, scrollDispatch(0, 200)), { dispatched: true });
+    const after = await androidJsonExpression(page, scrollSnapshot);
     assert.equal(after.scrollY, 200);
     assert.equal(after.height, before.height);
     assert.equal(after.maxY, before.maxY);
@@ -140,21 +146,21 @@ test("production scroll script reaches a separately observed CSS offset even wit
 
 test("production scroll snapshot reports the actual clamped boundary", async () => {
   await fixture('<style>body{height:4000px;margin:0}</style><p>Scroll fixture</p>', async page => {
-    await page.evaluate(scrollDispatch(0, 100000));
-    const after = await page.evaluate(scrollSnapshot);
+    assert.deepEqual(await androidJsonExpression(page, scrollDispatch(0, 100000)), { dispatched: true });
+    const after = await androidJsonExpression(page, scrollSnapshot);
     assert.equal(after.scrollY, after.maxY);
-    await page.evaluate(scrollDispatch(0, 200));
-    assert.deepEqual(await page.evaluate(scrollSnapshot), after);
+    assert.deepEqual(await androidJsonExpression(page, scrollDispatch(0, 200)), { dispatched: true });
+    assert.deepEqual(await androidJsonExpression(page, scrollSnapshot), after);
   });
 });
 
 test("production scroll handles the negative horizontal CSS domain in RTL", async () => {
   await fixture('<style>html{direction:rtl}body{width:4000px;margin:0}</style><p>RTL fixture</p>', async page => {
-    const before = await page.evaluate(scrollSnapshot);
+    const before = await androidJsonExpression(page, scrollSnapshot);
     assert.equal(before.rtl, true);
     assert.ok(before.maxX > 100);
-    await page.evaluate(scrollDispatch(-100, 0));
-    const after = await page.evaluate(scrollSnapshot);
+    assert.deepEqual(await androidJsonExpression(page, scrollDispatch(-100, 0)), { dispatched: true });
+    const after = await androidJsonExpression(page, scrollSnapshot);
     assert.equal(after.scrollX, -100);
     assert.equal(after.maxX, before.maxX);
   });

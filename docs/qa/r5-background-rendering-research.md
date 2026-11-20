@@ -132,6 +132,34 @@ resource use; the reviewed documentation does not establish a blanket prohibitio
 on private VirtualDisplay rendering. Target-SDK-specific changes must be evaluated
 against the application's actual target. [11]
 
+## Physical feedback: Android handler contracts
+
+The first installed candidate restored authenticated MCP discovery, tab access,
+DOM reads and observed actions. A loopback-only RTL fixture also accepted a
+background reload and button action; an independent snapshot confirmed its
+counter changed from zero to one. Returning to the Activity preserved that
+document and produced the verified CSS-restoration result.
+
+The same physical acceptance run exposed two separate handler defects. Neither
+was a computer-approval failure:
+
+- `HandlerContext.evaluateJSReturningJSON` embeds its input in
+  `JSON.stringify((expression))`. The scroll dispatcher supplied two statements
+  separated by a semicolon, making the resulting JavaScript invalid before
+  `scrollBy` could run. The dispatcher and top/bottom variants now return one
+  immediately invoked function expression. The existing independent measured
+  effect check and conservative uncertain-action result remain intact.
+- The viewport and device-info handlers returned metadata without the native
+  gateway's required `success: true` envelope. Both now use the existing
+  `successResponse` helper. Existing fields and units are unchanged; CSS geometry
+  still comes from the page snapshot, not native WebView pixel dimensions.
+
+Regression coverage must execute the real handlers through the Android WebView
+JSON wrapper and the native MCP gateway. Evaluating the scroll text as a whole
+JavaScript program would miss the production expression-versus-statements bug.
+These corrections do not relax native owner approval, STOP, lock handling,
+document identity, privacy admission or acquired-frame freshness.
+
 ## Primary sources
 
 1. [WebView visual-state API](https://developer.android.com/reference/android/webkit/WebView.html#postVisualStateCallback(long,%20android.webkit.WebView.VisualStateCallback)).

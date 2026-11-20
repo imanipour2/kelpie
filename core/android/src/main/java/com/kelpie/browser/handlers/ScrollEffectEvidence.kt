@@ -66,7 +66,7 @@ internal data class ScrollEffectEvidence(
             dy: Double,
         ): String {
             require(dx.isFinite() && dy.isFinite())
-            return "window.scrollBy({left:$dx,top:$dy,behavior:'instant'});({dispatched:true})"
+            return "(()=>{window.scrollBy({left:$dx,top:$dy,behavior:'instant'});return{dispatched:true};})()"
         }
     }
 }
