@@ -1,12 +1,9 @@
 package com.kelpie.browser.agent.execution
 
-import android.app.Activity
 import com.kelpie.browser.agent.contract.AgentCommand
 import com.kelpie.browser.agent.contract.ObservedTarget
 import com.kelpie.browser.agent.contract.Operation
 import com.kelpie.browser.agent.render.WebViewOwnershipState
-import com.kelpie.browser.agent.session.AgentSessionNotification
-import com.kelpie.browser.agent.session.AndroidAgentProcessSession
 import com.kelpie.browser.agent.session.SessionConsentCore
 import com.kelpie.browser.capture.PrivateWebViewDisplay
 import com.kelpie.browser.handlers.HandlerContext
@@ -22,7 +19,6 @@ import kotlinx.coroutines.withContext
  * All entrypoints are called inside AgentOperationRuntime's shared replay lock.
  */
 internal class R5AgentTabCommands(
-    private val activity: Activity,
     private val context: HandlerContext,
     private val renderer: PrivateWebViewDisplay,
     private val nativePort: R5NativeBrowserPort,
@@ -32,6 +28,7 @@ internal class R5AgentTabCommands(
     private val isReady: () -> Boolean,
     private val setReady: (Boolean) -> Unit,
     private val onSelected: (String) -> Unit,
+    private val onRendererFailure: (SessionConsentCore.State.Active) -> Unit,
 ) {
     private data class Proof(
         val commandId: String,
@@ -119,9 +116,7 @@ internal class R5AgentTabCommands(
                         fun ownerUnchanged(): Boolean = consent.snapshot() == session && !session.locked
 
                         fun revoke() {
-                            setReady(false)
-                            AndroidAgentProcessSession.stop()
-                            AgentSessionNotification.hide(activity)
+                            onRendererFailure(session)
                         }
                         val transferred =
                             R5PrivateTabTransaction.run(

@@ -11,6 +11,7 @@ internal class AuthenticatedRequestDispatcher(
     private val router: Router,
     private val consentSnapshot: () -> SessionConsentCore.State = router.nativeConsentSnapshot,
     private val noteMetadata: (String) -> Unit = {},
+    private val prepareTrustedSession: suspend (AuthDecision.Authenticated) -> Unit = {},
 ) {
     data class Outcome(
         val status: Int,
@@ -30,7 +31,6 @@ internal class AuthenticatedRequestDispatcher(
         val required =
             router.motherR5BackgroundQa &&
                 R5McpBootstrapGate.requiresNativeGrant(method, body, principal.clientId)
-        val admitted = if (required) consentSnapshot() as? SessionConsentCore.State.Active else null
 
         fun denied(
             code: String,
@@ -42,14 +42,29 @@ internal class AuthenticatedRequestDispatcher(
         ) {
             return denied("PERMISSION_REQUIRED", "Unique authenticated paired client required")
         }
-        if (required && !R5RequestAuthorization.permits(principal.clientId, admitted, consentSnapshot())) {
-            return denied("PERMISSION_REQUIRED", "Native owner approval required")
-        }
         return try {
             // HTTP authentication preceded body parsing; revocation during that gap
             // must not create a pending prompt or execute any control-plane handler.
             if (authenticateAgain() != principal) {
                 return denied("AUTHORIZATION_REVOKED", "Paired client authorization changed before admission")
+            }
+            // Only the native computer-key bearer path may reconstruct execution
+            // state. Legacy client IDs and temporary account grants are not trust.
+            if (router.motherR5BackgroundQa &&
+                principal.computerKey != null &&
+                principal.computerKey == principal.clientId
+            ) {
+                prepareTrustedSession(principal)
+            }
+            if (authenticateAgain() != principal) {
+                return denied("AUTHORIZATION_REVOKED", "Paired client authorization changed during execution-session restoration")
+            }
+            val admitted = if (required) consentSnapshot() as? SessionConsentCore.State.Active else null
+            if (required && !R5RequestAuthorization.permits(principal.clientId, admitted, consentSnapshot())) {
+                if (principal.computerKey == principal.clientId && admitted != null && admitted.principalId != principal.clientId) {
+                    return Outcome(409, correlatedError("CONTROLLER_BUSY", "Another trusted computer currently owns the browser runtime", correlationId, "REJECTED"), false, null)
+                }
+                return denied("PERMISSION_REQUIRED", "Browser control is paused or its execution session is unavailable")
             }
             withContext(
                 AuthenticatedClientContext.fromVerifiedDecision(
@@ -77,6 +92,8 @@ internal class AuthenticatedRequestDispatcher(
             }
         } catch (_: R5AuthorizationChangedException) {
             denied("SESSION_REVOKED", "Native owner authorization changed before execution")
+        } catch (_: R5RendererUnavailableException) {
+            Outcome(503, correlatedError("RENDERER_NOT_READY", "Computer remains approved; the browser renderer is temporarily unavailable", correlationId, "REJECTED"), false, null)
         } catch (error: TimeoutCancellationException) {
             Outcome(408, correlatedError("TIMEOUT", "Request did not complete before its deadline", correlationId), false, null)
         } catch (error: CancellationException) {

@@ -56,7 +56,8 @@ open class KelpieBrowserActivity : ComponentActivity() {
             .setMessage(
                 "Kelpie can keep its own browser connection available while you use ChatGPT, " +
                     "subject to Android background restrictions. This does not give an unknown AI " +
-                    "agent control. Pair a verified client and explicitly approve its session; " +
+                    "agent control. " +
+                    (if (useMotherMcpWithR5Renderer()) "Approve a trusted computer once; " else "Pair a verified client and approve its session; ") +
                     "STOP is always available. Sensitive actions need separate approval.",
             ).setPositiveButton("Allow & continue") { _, _ ->
                 if (R5BackgroundOptInStore.rememberApproval(this)) {

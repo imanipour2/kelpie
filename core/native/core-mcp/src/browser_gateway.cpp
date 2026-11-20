@@ -286,7 +286,12 @@ json BrowserGateway::Advance(json result) {
           "KAI_FEATURE_DISABLED", "INVALID_CAPTURE_GEOMETRY", "STALE_OBSERVATION"};
         const std::string code = result.is_object() && result.contains("error") && result["error"].is_object()
           ? result["error"].value("code", std::string()) : std::string();
-        if ((impl_->request["method"] == "tab.screenshot" || impl_->request["method"] == "screenshot" ||
+        if (code == "RENDERER_NOT_READY") {
+          auto unavailable = Failure("UNAVAILABLE", impl_->uncertain);
+          unavailable["error"]["message"] = "Browser renderer is temporarily unavailable (RENDERER_NOT_READY); computer approval is unchanged.";
+          impl_->Finish(std::move(unavailable));
+        }
+        else if ((impl_->request["method"] == "tab.screenshot" || impl_->request["method"] == "screenshot" ||
              impl_->request["method"] == "screenshot-annotated") && screenshot_refusals.count(code)) impl_->Finish(Failure(code));
         else fail();
       }

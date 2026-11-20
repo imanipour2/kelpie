@@ -77,7 +77,10 @@ class HTTPServer(
             .eligible(principal) &&
             pairingStore.hasPairedPrincipal(principal)
 
+    internal fun trustedComputerIds(): List<String> = pairingStore.trustedComputers.list().map { it.publicKey }
+
     fun start() {
+        if (router.motherR5BackgroundQa) AndroidAgentProcessSession.configureMother(appContext)
         val middleware =
             AccountPairingAuthorization(
                 pairingStore,
@@ -344,6 +347,17 @@ class HTTPServer(
                     if (router.motherR5BackgroundQa && hasPairedPrincipal(verified)) {
                         com.kelpie.browser.agent.session.R5ObservedAgentClients.registry
                             .noteVerified(verified)
+                    }
+                },
+                prepareTrustedSession = { verified ->
+                    if (router.motherR5BackgroundQa &&
+                        verified.computerKey == verified.clientId &&
+                        pairingStore.trustedComputers.list().any { it.publicKey == verified.computerKey }
+                    ) {
+                        val restored = AndroidAgentProcessSession.restoreTrustedComputer(verified.clientId)
+                        if (restored != null && pairingStore.trustedComputers.list().none { it.publicKey == verified.computerKey }) {
+                            AndroidAgentProcessSession.revokePrincipal(verified.clientId, restored)
+                        }
                     }
                 },
             )

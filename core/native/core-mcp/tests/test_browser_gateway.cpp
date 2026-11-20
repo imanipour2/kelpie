@@ -384,4 +384,29 @@ void R5RequiresObservedActionEffect() {
     assert(step["response"]["error"]["mayHaveCompleted"] == true);
   }
 }
-int main() { R5RequiresObservedActionEffect(); McpControlWithoutOwnerGrant(); ObservationMetadata(); NativeReferenceLifetime(); RefusalAndAtomicPublication(); NativeAuthorizationRecheck(); ReadOnlySnapshotLifetime(); Notifications(); Contracts(); Sequencing(); References(); Mcp(); ExtensionReachability(); SelectedAndMapping(); CAbi(); std::cout << "Browser gateway contracts passed\n"; }
+void RendererReadinessIsNotAuthentication() {
+  kelpie::BrowserGateway gateway({{"nativeMethods", {"get-tabs", "navigate"}}, {"requireAuthorization", true}});
+  for (const auto& method : {"capabilities", "documentation"}) {
+    auto step = gateway.Begin({{"version", 1}, {"method", method}, {"params", json::object()}});
+    assert(step["kind"] == "authorize");
+    step = gateway.Advance({{"success", true}});
+    assert(step["kind"] == "complete" && step["response"]["ok"] == true);
+  }
+  for (const auto& method : {"tabs.list", "tab.goto"}) {
+    const bool mutation = std::string(method) == "tab.goto";
+    auto step = gateway.Begin(Request(method, mutation ? json{{"url", "https://example.org"}} : json::object()));
+    assert(step["kind"] == "authorize");
+    step = gateway.Advance({{"success", true}});
+    assert(step["kind"] == "dispatch");
+    step = gateway.Advance({{"success", false}, {"error", {{"code", "RENDERER_NOT_READY"}, {"message", "SECRET page text"}}}});
+    assert(step["response"]["error"]["code"] == "UNAVAILABLE");
+    assert(step["response"]["error"]["mayHaveCompleted"] == mutation);
+    assert(step.dump().find("SECRET") == std::string::npos);
+    assert(step["response"]["error"]["message"].get<std::string>().find("approval is unchanged") != std::string::npos);
+  }
+  gateway.Begin(Request("tabs.list")); gateway.Advance({{"success", true}});
+  auto step = gateway.Advance({{"success", false}, {"error", {{"code", "SECRET unknown error"}, {"message", "SECRET diagnostic"}}}});
+  assert(step["response"]["error"]["code"] == "COMMAND_FAILED");
+  assert(step.dump().find("SECRET") == std::string::npos);
+}
+int main() { RendererReadinessIsNotAuthentication(); R5RequiresObservedActionEffect(); McpControlWithoutOwnerGrant(); ObservationMetadata(); NativeReferenceLifetime(); RefusalAndAtomicPublication(); NativeAuthorizationRecheck(); ReadOnlySnapshotLifetime(); Notifications(); Contracts(); Sequencing(); References(); Mcp(); ExtensionReachability(); SelectedAndMapping(); CAbi(); std::cout << "Browser gateway contracts passed\n"; }

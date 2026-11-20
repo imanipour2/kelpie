@@ -125,7 +125,7 @@ class KelpieBrowserSession(
     private val captureCoordinator =
         if (privateCaptureQaEnabled) PrivateCaptureCoordinator(activity, handlerContext, true) else null
     private val agentSessionCoordinator =
-        if (agentConsentQaEnabled) AgentSessionCoordinator(activity, agentBackgroundQaEnabled) else null
+        if (agentConsentQaEnabled) AgentSessionCoordinator(activity, agentBackgroundQaEnabled, motherMcpR5RendererQaEnabled) else null
     private val r5AgentCoordinator =
         if (agentBackgroundQaEnabled) R5AgentCoordinator(activity, handlerContext, motherMcpR5RendererQaEnabled) else null
     private val scriptPlaybackState = ScriptPlaybackState()

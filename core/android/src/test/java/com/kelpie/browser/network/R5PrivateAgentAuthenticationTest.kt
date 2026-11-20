@@ -12,13 +12,18 @@ import java.nio.file.Files
 class R5PrivateAgentAuthenticationTest {
     private val temp = Files.createTempDirectory("r5-agent-auth-test").toFile()
 
-    private class LoopbackComputerTrust : ComputerTrust {
+    private class LoopbackComputerTrust(
+        private val trustedKey: String? = null,
+    ) : ComputerTrust {
         override fun request(
             operation: String,
             body: JsonObject,
         ): JsonObject =
             when (operation) {
-                "authorize" -> JsonObject(mapOf("clientId" to JsonPrimitive("localhost")))
+                "authorize" -> {
+                    val client = if (trustedKey != null && body["token"] == JsonPrimitive("fixture-computer-token")) trustedKey else "localhost"
+                    JsonObject(mapOf("clientId" to JsonPrimitive(client)))
+                }
                 "safe-host" -> JsonObject(mapOf("safe" to JsonPrimitive(true)))
                 else -> JsonObject(emptyMap())
             }
@@ -49,6 +54,19 @@ class R5PrivateAgentAuthenticationTest {
     }
 
     @Test
+    fun loopbackComputerBearerRetainsItsNativeTrustDiscriminator() {
+        val key = "a".repeat(64)
+        val store = PairingStore(File(temp, "pairings.json"), LoopbackComputerTrust(key))
+        val auth = AuthMiddleware(store, r5PrivateMcpQa = true, r5PrivateMcpWire = false)
+        for (path in listOf("/mcp", "/v1/browser-control", "/v1/agent-session-request")) {
+            assertEquals(AuthDecision.Authenticated(key, key), auth.evaluate(request(path, "fixture-computer-token")))
+        }
+        val legacy = store.startPairing(key, "legacy fixture", "127.0.0.1").request!!
+        val token = store.approve(legacy.requestId, persist = true)!!.first
+        assertEquals(AuthDecision.Authenticated(key), auth.evaluate(request("/mcp", token)))
+    }
+
+    @Test
     fun r5PrivateRoutesUseUniquePairedBearerNotBroadLocalhostPrincipal() {
         val store = PairingStore(File(temp, "pairings.json"), LoopbackComputerTrust())
         val started = store.startPairing("paired-chatgpt", "ChatGPT", "127.0.0.1")
@@ -61,6 +79,7 @@ class R5PrivateAgentAuthenticationTest {
             val verified = r5.evaluate(request(path, token))
             assertTrue(verified is AuthDecision.Authenticated)
             assertEquals("paired-chatgpt", (verified as AuthDecision.Authenticated).clientId)
+            assertEquals(null, verified.computerKey)
 
             // Public discovery remains separate; protected metadata must not
             // turn an anonymous or invalid bearer into a localhost identity.

@@ -14,6 +14,7 @@ import kotlin.coroutines.coroutineContext
  */
 class AuthenticatedClientContext private constructor(
     val clientId: String,
+    internal val computerKey: String?,
     internal val ownerGrant: SessionConsentCore.State.Active?,
     internal val authorityCurrent: suspend () -> Boolean,
 ) : AbstractCoroutineContextElement(Key) {
@@ -22,12 +23,15 @@ class AuthenticatedClientContext private constructor(
             decision: AuthDecision.Authenticated,
             ownerGrant: SessionConsentCore.State.Active? = null,
             authorityCurrent: suspend () -> Boolean = { true },
-        ) = AuthenticatedClientContext(decision.clientId, ownerGrant, authorityCurrent)
+        ) = AuthenticatedClientContext(decision.clientId, decision.computerKey, ownerGrant, authorityCurrent)
     }
 }
 
 /** Null outside a native HTTP request that passed actual bearer verification. */
 suspend fun verifiedClientId(): String? = coroutineContext[AuthenticatedClientContext]?.clientId
+
+/** Present only for the native signed-computer bearer path, never inferred from an ID. */
+internal suspend fun verifiedComputerKey(): String? = coroutineContext[AuthenticatedClientContext]?.computerKey
 
 /** The original native grant travels with the verified principal across every await. */
 internal suspend fun verifiedOwnerGrant(): SessionConsentCore.State.Active? = coroutineContext[AuthenticatedClientContext]?.ownerGrant

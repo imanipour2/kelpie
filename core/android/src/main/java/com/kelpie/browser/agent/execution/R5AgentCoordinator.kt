@@ -74,7 +74,6 @@ class R5AgentCoordinator(
 
     private val tabCommands by lazy(LazyThreadSafetyMode.NONE) {
         R5AgentTabCommands(
-            activity = activity,
             context = ctx,
             renderer = renderer,
             nativePort = nativePort,
@@ -84,6 +83,7 @@ class R5AgentCoordinator(
             isReady = { ready },
             setReady = { ready = it },
             onSelected = { currentTabId = it },
+            onRendererFailure = { suspendOnRendererFailure("PRIVATE_TAB_TRANSFER_FAILED", it) },
         )
     }
 
@@ -111,7 +111,17 @@ class R5AgentCoordinator(
     private fun newRuntime(): AgentOperationRuntime = AgentOperationRuntime(consent, VerifiedNativeBrowserAdapter(consent, ownership, nativePort))
 
     init {
-        ctx.motherPrivateTabSwitch = R5MotherTabSwitch(activity, consent, tabCommands, { ready }, { currentTabId }, { closed }, { runtime.cancelInFlight() })::select
+        ctx.motherPrivateTabSwitch =
+            R5MotherTabSwitch(
+                activity,
+                consent,
+                tabCommands,
+                { ready },
+                { currentTabId },
+                { closed },
+                { runtime.cancelInFlight() },
+                { suspendOnRendererFailure("PRIVATE_TAB_VERIFY_FAILED", it) },
+            )::select
         ctx.nativeRendererGone = { dead ->
             if (!closed) {
                 ready = false
@@ -121,8 +131,7 @@ class R5AgentCoordinator(
                 ForegroundWebViewCapture.onRendererGone(dead)
                 renderer.onRendererGone(dead)
                 runtime.cancelInFlight()
-                AndroidAgentProcessSession.stop()
-                AgentSessionNotification.hide(activity)
+                suspendOnRendererFailure("RENDERER_GONE", consent.snapshot() as? SessionConsentCore.State.Active)
             }
         }
         scope.launch {
@@ -380,12 +389,13 @@ class R5AgentCoordinator(
                 -> {
                     transferMutex.withLock {
                         ready = false
-                        val restored = renderer.verifyRestored()
                         val active = consent.snapshot() as? SessionConsentCore.State.Active
+                        val restored = renderer.verifyRestored()
                         if (!restored) {
-                            if (active != null) revokeOnRendererFailure("RESTORE_VERIFY_FAILED")
+                            if (active != null) suspendOnRendererFailure("RESTORE_VERIFY_FAILED", active)
                             return@withLock
                         }
+                        if (closed || consent.snapshot() != active) return@withLock
                         if (active != null && !active.locked) {
                             if (ownership.status() == WebViewOwnershipState.Host.SUSPENDED) {
                                 ownership.unlockNeedsReattach(active.generation)
@@ -437,7 +447,7 @@ class R5AgentCoordinator(
             if (!ownership.unlockNeedsReattach(active.generation)) return@withLock
             if (!ownership.bindForeground(active.generation, target.rendererIdentity)) {
                 ownership.failRenderer()
-                revokeOnRendererFailure("UNLOCK_REBIND_FAILED")
+                suspendOnRendererFailure("UNLOCK_REBIND_FAILED", active)
                 return@withLock
             }
             val unchanged =
@@ -451,7 +461,7 @@ class R5AgentCoordinator(
             if (!unchanged) {
                 ready = false
                 ownership.failRenderer()
-                revokeOnRendererFailure("UNLOCK_GENERATION_CHANGED")
+                suspendOnRendererFailure("UNLOCK_GENERATION_CHANGED", active)
                 return@withLock
             }
             ready = true
@@ -483,7 +493,7 @@ class R5AgentCoordinator(
                 ownership.failRenderer()
                 nativePort.clearPendingEvidence()
                 renderer.stop()
-                revokeOnRendererFailure("PRIVATE_RENDERER_TRANSFER_FAILED")
+                suspendOnRendererFailure("PRIVATE_RENDERER_TRANSFER_FAILED", active)
                 return@withLock
             }
             currentTabId = tab.id
@@ -501,19 +511,26 @@ class R5AgentCoordinator(
                 ready = true
             } else if (ticket != null) {
                 ownership.failRenderer()
-                revokeOnRendererFailure("FOREGROUND_RESTORE_FAILED")
+                suspendOnRendererFailure("FOREGROUND_RESTORE_FAILED", active)
             }
         }
 
     /**
-     * An invalid renderer/ownership transition revokes the session fail-closed.
-     * Never leave a misleading STOP notification for a now-OFF authority.
-     * Reasons are fixed categories; no tab, principal, bearer or URL is logged.
+     * A renderer failure retires work, not the owner's durable computer approval.
+     * Mother mode does not eagerly transfer on a new execution epoch; recovery
+     * still waits for the existing native lifecycle path. No retry loop is added.
      */
-    private fun revokeOnRendererFailure(reason: String) {
-        Log.w("KelpieR5Recovery", "consent revoked after " + reason)
-        AndroidAgentProcessSession.stop()
-        AgentSessionNotification.hide(activity)
+    private fun suspendOnRendererFailure(reason: String, admitted: SessionConsentCore.State.Active?) {
+        if (admitted == null || consent.snapshot() != admitted) return
+        Log.w("KelpieR5Recovery", "runtime suspended after " + reason)
+        ready = false
+        runtime.cancelInFlight()
+        if (deferPrivateUntilBackground) {
+            AndroidAgentProcessSession.rendererUnavailable(admitted)
+        } else {
+            AndroidAgentProcessSession.stop()
+            AgentSessionNotification.hide(activity)
+        }
     }
 
     private suspend fun releaseRenderer() =

@@ -1,5 +1,8 @@
 package com.kelpie.browser.agent.session
 
+import android.app.KeyguardManager
+import android.content.Context
+import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -10,13 +13,75 @@ import kotlinx.coroutines.flow.asStateFlow
  * Process-memory-only grant authority. Never save the generation in preferences,
  * SessionStore, Android bundles, notification extras, or logs.
  *
- * The Activity owns only the prompt UI; ordinary HOME and rotation do not grant
- * or revoke authority. Process death reconstructs this singleton as OFF.
+ * Legacy R5 grants still require the native prompt. The mother profile restores
+ * execution state only from an existing, revalidated durable computer approval.
+ * Explicit STOP is persisted separately; no secret or generation is persisted.
  */
 internal object AndroidAgentProcessSession {
     private val core = SessionConsentCore(SystemClock::elapsedRealtime)
     private val pendingState = MutableStateFlow<SessionConsentCore.State.Pending?>(null)
     private val activeState = MutableStateFlow<SessionConsentCore.State.Active?>(null)
+    private var motherContext: Context? = null
+    private val pausedState = MutableStateFlow(false)
+    val paused: StateFlow<Boolean> = pausedState.asStateFlow()
+
+    /** Called before the mother HTTP listener starts; no permission is granted here. */
+    @Synchronized
+    fun configureMother(context: Context) {
+        motherContext = context.applicationContext
+        pausedState.value = pausedState.value || R5BackgroundOptInStore.isControlPaused(context)
+        if (pausedState.value) {
+            core.stop()
+            publish()
+        }
+    }
+
+    /** Called only after the HTTP middleware revalidates this durable computer key. */
+    @Synchronized
+    fun restoreTrustedComputer(computerKey: String): SessionConsentCore.State.Active? {
+        val context = motherContext ?: return null
+        if (pausedState.value || R5BackgroundOptInStore.isControlPaused(context)) return null
+        val unlocked =
+            context.getSystemService(PowerManager::class.java)?.isInteractive == true &&
+                context.getSystemService(KeyguardManager::class.java)?.isDeviceLocked == false
+        core.setDeviceLocked(!unlocked)
+        val current = core.snapshot()
+        if (!unlocked || current is SessionConsentCore.State.Pending ||
+            (current is SessionConsentCore.State.Active && current.principalId != computerKey) ||
+            !AgentSessionNotification.show(context, fullAgentQa = true)
+        ) {
+            publish()
+            return null
+        }
+        val restored = core.restoreTrustedComputer(computerKey, paused = false, deviceUnlocked = true)
+        publish()
+        return restored
+    }
+
+    /** Owner STOP survives process recreation; it never deletes the computer key. */
+    @Synchronized
+    fun pauseByOwner(context: Context): Boolean {
+        pausedState.value = true
+        core.stop()
+        publish()
+        return R5BackgroundOptInStore.setControlPaused(context, true)
+    }
+
+    /** Only a native Resume gesture may clear a saved owner STOP. */
+    @Synchronized
+    fun resumeByOwner(): Boolean {
+        val context = motherContext ?: return false
+        if (!R5BackgroundOptInStore.setControlPaused(context, false)) return false
+        pausedState.value = false
+        return true
+    }
+
+    @Synchronized
+    fun rendererUnavailable(expected: SessionConsentCore.State.Active?) {
+        if (expected == null || core.snapshot() != expected) return
+        if (motherContext == null) core.stop() else core.invalidateRuntime(expected)
+        publish()
+    }
 
     /** Same process-only authority used by the native UI and authenticated R5 runtime. */
     fun runtimeConsent(): SessionConsentCore = core
@@ -52,7 +117,7 @@ internal object AndroidAgentProcessSession {
         return expired
     }
 
-    /** Local STOP and verified owner-stop converge here, including notification STOP. */
+    /** Retire transient execution state; explicit owner STOP uses pauseByOwner. */
     @Synchronized
     fun stop() {
         val prior = core.snapshot()
@@ -67,8 +132,12 @@ internal object AndroidAgentProcessSession {
 
     /** Pairing revocation cannot leave a cached one-tap principal or native grant. */
     @Synchronized
-    fun revokePrincipal(principalId: String) {
-        val wasRevoked = core.revokePrincipal(principalId)
+    fun revokePrincipal(
+        principalId: String,
+        expected: SessionConsentCore.State.Active? = null,
+    ) {
+        val wasRevoked = core.revokePrincipal(principalId, expected)
+        if (expected != null && !wasRevoked) return
         R5ObservedAgentClients.registry.forget(principalId)
         if (wasRevoked) Log.i("R5ConsentState", "paired principal revoked; consent off")
         publish()

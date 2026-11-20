@@ -77,6 +77,12 @@ can reconnect trusted keys; unknown keys receive `APPROVAL_UNAVAILABLE` until
 the native UI is available.
 
 
-## R5 private MCP tunnel note (2026-11-18)
+## R5 private MCP tunnel note (source candidate, 2026-11-20)
 
-For the isolated R5 Android QA MCP agent, an unauthenticated loopback socket is **not** an agent identity. A computer-key bearer obtained through this signed pairing protocol must take precedence over the legacy generic `localhost` label; invalid or revoked bearers remain only `localhost` and are ineligible for R5 agent-session consent. The owner must separately approve the native agent session even after the computer key is paired. Never paste bearer tokens or key material into ChatGPT or issue comments. The on-device OpenSSL/Python owner helper under `scripts/qa/r5-owner-pair-ubuntu.py` signs challenges and privately stores the header value; tunnel-client supports `mcp.extra_headers` and `mcp.discovery_extra_headers` with `file:` values (the YAML keys use underscores).
+For the isolated R5 Android QA MCP agent, an unauthenticated loopback socket is **not** an agent identity. A computer-key bearer obtained through this signed pairing protocol takes precedence over the generic `localhost` label. Invalid or revoked bearers do not acquire R5 execution authority. This private-background identity boundary is separate from upstream's implicit localhost permission.
+
+The mother MCP profile now derives its process-local execution epoch from the existing, currently verified durable computer approval. Normal reconnects and process recreation require no second session approval. Temporary account grants and legacy client IDs are not converted into durable computer trust. Legacy R5 profiles retain their native session-consent path.
+
+Explicit native **STOP** saves a pause until the owner uses native **Resume**, without deleting the computer key. Lock suspends execution and invalidates in-flight work. Renderer unavailability retires affected work while preserving computer approval; static authenticated capabilities, documentation and tool-schema discovery remain available. The current private runtime has one controller; a different approved computer can receive `CONTROLLER_BUSY` while that runtime is owned. Browser execution still needs the existing readiness and request-authority checks. These are source-candidate semantics, not a claim of installed or verified background rendering; see [scope and acceptance](../qa/KELPIE-CONNECT-MOTHER-PARITY-20261120.md).
+
+Never paste bearer tokens or key material into ChatGPT or issue comments. The on-device OpenSSL/Python owner helper under `scripts/qa/r5-owner-pair-ubuntu.py` signs challenges and privately stores the header value; tunnel-client supports `mcp.extra_headers` and `mcp.discovery_extra_headers` with `file:` values (the YAML keys use underscores).

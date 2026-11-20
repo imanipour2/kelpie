@@ -18,8 +18,8 @@ import androidx.compose.ui.unit.dp
 import com.kelpie.browser.agent.session.AgentSessionCoordinator
 
 /**
- * Mother-first: one existing MCP connection, one verified client, one native
- * owner tap. Do not launch Termux or invent an OTP / second pairing channel.
+ * Mother-first: existing computer approval is durable. Native Resume only
+ * clears an explicit STOP; no Termux OTP or duplicate pairing channel exists.
  *
  * The tunnel is configured in the user's MCP client. The sole proof of agent
  * control remains real authenticated browser actions, never local /readyz.
@@ -31,8 +31,9 @@ internal fun AgentConnectionCenterSheet(
 ) {
     val session by coordinator.active.collectAsState()
     val pending by coordinator.pending.collectAsState()
-    val observedClients by coordinator.observedAgents.collectAsState()
-    R5ObservedAgentExpiryEffect(coordinator, observedClients.isNotEmpty())
+    val observedClients by coordinator.connectionAgents.collectAsState()
+    val paused by coordinator.paused.collectAsState()
+    if (!coordinator.motherConnectionMode) R5ObservedAgentExpiryEffect(coordinator, observedClients.isNotEmpty())
 
     Column(
         modifier =
@@ -45,6 +46,14 @@ internal fun AgentConnectionCenterSheet(
         Text("Connect to an AI agent")
         Text("Use the existing MCP connection in ChatGPT. Kelpie does not need a second code from Termux.")
         when {
+            coordinator.motherConnectionMode && paused -> {
+                Text("Browser control is stopped. Your trusted computer remains paired; choose Resume to allow it again.")
+                for (principal in observedClients) {
+                    if (observedClients.size > 1) Text("Trusted computer " + principal.take(8) + "…")
+                    R5OneTapConsentAction(coordinator, principal, onGranted = onDismiss)
+                }
+                if (observedClients.isEmpty()) Text("No trusted computer is available. Review Paired Clients in Settings.")
+            }
             session?.locked == true -> {
                 Text("Paused while the device is locked.")
                 Button(
@@ -63,15 +72,15 @@ internal fun AgentConnectionCenterSheet(
                 Text("Approval requested. Review the native on-device confirmation dialog.")
             }
             observedClients.size == 1 -> {
-                Text("One verified MCP client is available. Approve only if you recognize it.")
-                R5OneTapConsentAction(
-                    coordinator = coordinator,
-                    principal = observedClients.single(),
-                    onGranted = onDismiss,
-                )
+                if (coordinator.motherConnectionMode) {
+                    Text("This computer is already approved and reconnects automatically. Send a browser request in ChatGPT.")
+                } else {
+                    Text("One verified MCP client is available. Approve only if you recognize it.")
+                    R5OneTapConsentAction(coordinator, observedClients.single(), onGranted = onDismiss)
+                }
             }
             observedClients.size > 1 -> {
-                Text("Several verified clients are present. Choose the intended client in the MCP app first.")
+                Text("Several computers are trusted. Use the intended computer's existing MCP connection.")
             }
             else -> {
                 Text(
@@ -83,10 +92,15 @@ internal fun AgentConnectionCenterSheet(
         TextButton(
             onClick = coordinator::refreshObservedAgents,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-        ) { Text("Refresh verified clients") }
+        ) { Text(if (coordinator.motherConnectionMode) "Refresh trusted computers" else "Refresh verified clients") }
         Text(
-            "Your approval controls this app session only. STOP revokes control; " +
-                "a running local tunnel does not prove that the remote agent is connected.",
+            if (coordinator.motherConnectionMode) {
+                "Computer approval survives reconnects and app restarts. STOP remains paused until you resume; " +
+                    "the phone lock suspends browser operations. Remove a trusted computer in Settings to revoke its access."
+            } else {
+                "Your approval controls this app session only. STOP revokes control; " +
+                    "a running local tunnel does not prove that the remote agent is connected."
+            },
         )
         TextButton(
             onClick = onDismiss,
