@@ -46,7 +46,8 @@ internal object AndroidAgentProcessSession {
                 context.getSystemService(KeyguardManager::class.java)?.isDeviceLocked == false
         core.setDeviceLocked(!unlocked)
         val current = core.snapshot()
-        if (!unlocked || current is SessionConsentCore.State.Pending ||
+        if (!unlocked ||
+            current is SessionConsentCore.State.Pending ||
             (current is SessionConsentCore.State.Active && current.principalId != computerKey) ||
             !AgentSessionNotification.show(context, fullAgentQa = true)
         ) {

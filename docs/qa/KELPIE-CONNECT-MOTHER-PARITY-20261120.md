@@ -106,5 +106,5 @@ actual observation. Source tests do not establish successful private rendering
 or fresh screenshot delivery. The underlying rendering defect remains open.
 
 The coordinator already exceeded the repository's 500-line guideline at the
-baseline (567 lines); it is now 584 lines. A broader renderer refactor is outside
+baseline (567 lines); it is now 587 lines. A broader renderer refactor is outside
 this connection-policy candidate. This existing size debt remains explicit.

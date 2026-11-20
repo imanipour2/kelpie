@@ -41,7 +41,14 @@ class AgentSessionCoordinator(
     /** Keep the visible connection label aligned with the expiry admission gate. */
     fun refreshObservedAgents() {
         R5ObservedAgentClients.registry.refreshExpired()
-        if (motherConnectionMode) trustedAgents.value = NetworkServiceState.snapshot()?.httpServer?.trustedComputerIds().orEmpty()
+        if (motherConnectionMode) {
+            trustedAgents.value =
+                NetworkServiceState
+                    .snapshot()
+                    ?.httpServer
+                    ?.trustedComputerIds()
+                    .orEmpty()
+        }
     }
 
     private var closed = false
@@ -80,11 +87,12 @@ class AgentSessionCoordinator(
             withContext(Dispatchers.Main.immediate) {
                 R5AgentControlPlaneRoutes.rejectionIfRevoked()?.let { return@withContext it }
                 syncLock()
-                R5AgentControlPlaneRoutes.motherComputerRequestResponse(
-                    motherConnectionMode,
-                    ::durableComputerCurrent,
-                    AndroidAgentProcessSession.paused.value || R5BackgroundOptInStore.isControlPaused(activity),
-                )?.let { return@withContext it }
+                R5AgentControlPlaneRoutes
+                    .motherComputerRequestResponse(
+                        motherConnectionMode,
+                        ::durableComputerCurrent,
+                        AndroidAgentProcessSession.paused.value || R5BackgroundOptInStore.isControlPaused(activity),
+                    )?.let { return@withContext it }
                 if (closed ||
                     deviceLocked() ||
                     !activity.hasWindowFocus() ||
@@ -273,7 +281,13 @@ class AgentSessionCoordinator(
 
     private fun pairedPrincipalCurrent(principal: String): Boolean = NetworkServiceState.snapshot()?.httpServer?.hasPairedPrincipal(principal) == true
 
-    private fun durableComputerCurrent(principal: String): Boolean = principal in NetworkServiceState.snapshot()?.httpServer?.trustedComputerIds().orEmpty()
+    private fun durableComputerCurrent(principal: String): Boolean =
+        principal in
+            NetworkServiceState
+                .snapshot()
+                ?.httpServer
+                ?.trustedComputerIds()
+                .orEmpty()
 
     /** Resume an already approved key after STOP; recent-client TTL is not authority. */
     private fun resumeTrustedComputerFromNativeUi(principal: String): NativeOneTapResult {
@@ -317,7 +331,9 @@ class AgentSessionCoordinator(
         if (motherConnectionMode) {
             if (!AndroidAgentProcessSession.pauseByOwner(activity)) {
                 android.util.Log.e("R5Connection", "OWNER_STOP_PERSISTENCE_FAILED")
-                android.widget.Toast.makeText(activity, "Control is paused now. The pause could not be saved. Retry STOP before restarting Kelpie.", android.widget.Toast.LENGTH_LONG).show()
+                android.widget.Toast
+                    .makeText(activity, "Control is paused now. The pause could not be saved. Retry STOP before restarting Kelpie.", android.widget.Toast.LENGTH_LONG)
+                    .show()
             }
         } else {
             AndroidAgentProcessSession.stop()

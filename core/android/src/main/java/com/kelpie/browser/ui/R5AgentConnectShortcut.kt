@@ -37,10 +37,12 @@ internal fun R5AgentConnectShortcut(
                         clients.isNotEmpty() -> "Trusted computer reconnects automatically"
                         else -> "Connect a trusted computer"
                     }
-                } else when (clients.size) {
-                    0 -> "AI agent not yet paired"
-                    1 -> "Verified agent " + clients.single().take(8) + "... ready"
-                    else -> "Choose a verified agent"
+                } else {
+                    when (clients.size) {
+                        0 -> "AI agent not yet paired"
+                        1 -> "Verified agent " + clients.single().take(8) + "... ready"
+                        else -> "Choose a verified agent"
+                    }
                 },
             style = MaterialTheme.typography.labelMedium,
         )
@@ -53,7 +55,15 @@ internal fun R5AgentConnectShortcut(
                 onClick = onOpenCenter,
                 modifier = Modifier.heightIn(min = 48.dp),
             ) {
-                Text(if (coordinator.motherConnectionMode) "Connection" else if (clients.isEmpty()) "Pair / Connect" else "Choose")
+                Text(
+                    if (coordinator.motherConnectionMode) {
+                        "Connection"
+                    } else if (clients.isEmpty()) {
+                        "Pair / Connect"
+                    } else {
+                        "Choose"
+                    },
+                )
             }
         }
     }

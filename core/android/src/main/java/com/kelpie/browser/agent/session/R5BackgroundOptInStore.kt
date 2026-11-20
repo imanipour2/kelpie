@@ -25,7 +25,11 @@ internal object R5BackgroundOptInStore {
         paused: Boolean,
     ): Boolean =
         runCatching {
-            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(CONTROL_PAUSED_KEY, paused).commit()
+            context
+                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(CONTROL_PAUSED_KEY, paused)
+                .commit()
         }.getOrDefault(false)
 
     fun isApproved(context: Context): Boolean =

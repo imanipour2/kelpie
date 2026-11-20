@@ -32,7 +32,10 @@ class MotherTrustedRequestDispatcherTest {
     fun durableComputerRunsWithoutAnotherPromptAndKeepsItsExecutionEpoch() =
         runBlocking {
             var calls = 0
-            router.register("get-tabs") { calls++; successResponse(mapOf("tabs" to emptyList<Any>())) }
+            router.register("get-tabs") {
+                calls++
+                successResponse(mapOf("tabs" to emptyList<Any>()))
+            }
             assertEquals(200, request().status)
             val first = consent.snapshot() as SessionConsentCore.State.Active
             repeat(4) { assertEquals(200, request().status) }
@@ -69,10 +72,14 @@ class MotherTrustedRequestDispatcherTest {
                     consent.restoreTrustedComputer(key, paused = false, deviceUnlocked = true)
                     valid = false
                 })
-            router.register("get-tabs") { calls++; successResponse() }
-            val result = checked.dispatch(computer, "get-tabs", emptyMap(), "fixture", {
-                if (valid) computer else AuthDecision.Reject(401, "UNAUTHORIZED", "revoked")
-            }) { _, _ -> }
+            router.register("get-tabs") {
+                calls++
+                successResponse()
+            }
+            val result =
+                checked.dispatch(computer, "get-tabs", emptyMap(), "fixture", {
+                    if (valid) computer else AuthDecision.Reject(401, "UNAUTHORIZED", "revoked")
+                }) { _, _ -> }
             assertEquals(403, result.status)
             assertEquals(0, calls)
         }
@@ -119,8 +126,8 @@ class MotherTrustedRequestDispatcherTest {
                         successResponse(mapOf("status" to "PENDING_NATIVE_APPROVAL"))
                     }
             }
-            suspend fun sessionRequest(principal: AuthDecision.Authenticated) =
-                dispatcher.dispatch(principal, "agent-session-request", emptyMap(), "fixture", { principal }) { _, _ -> }
+
+            suspend fun sessionRequest(principal: AuthDecision.Authenticated) = dispatcher.dispatch(principal, "agent-session-request", emptyMap(), "fixture", { principal }) { _, _ -> }
             paused = true
             val stopped = sessionRequest(computer)
             assertEquals("PAUSED_NATIVE_RESUME_REQUIRED", stopped.body["status"])

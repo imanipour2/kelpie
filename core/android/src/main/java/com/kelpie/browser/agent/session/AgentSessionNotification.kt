@@ -98,7 +98,9 @@ class AgentSessionStopReceiver : BroadcastReceiver() {
         val saved = AndroidAgentProcessSession.pauseByOwner(context)
         if (!saved) {
             android.util.Log.e("R5Connection", "OWNER_STOP_PERSISTENCE_FAILED")
-            android.widget.Toast.makeText(context, "Control is paused now. The pause could not be saved. Retry STOP before restarting Kelpie.", android.widget.Toast.LENGTH_LONG).show()
+            android.widget.Toast
+                .makeText(context, "Control is paused now. The pause could not be saved. Retry STOP before restarting Kelpie.", android.widget.Toast.LENGTH_LONG)
+                .show()
         }
         AgentSessionNotification.hide(context)
     }

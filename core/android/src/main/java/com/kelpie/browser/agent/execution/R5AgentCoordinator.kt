@@ -520,7 +520,10 @@ class R5AgentCoordinator(
      * Mother mode does not eagerly transfer on a new execution epoch; recovery
      * still waits for the existing native lifecycle path. No retry loop is added.
      */
-    private fun suspendOnRendererFailure(reason: String, admitted: SessionConsentCore.State.Active?) {
+    private fun suspendOnRendererFailure(
+        reason: String,
+        admitted: SessionConsentCore.State.Active?,
+    ) {
         if (admitted == null || consent.snapshot() != admitted) return
         Log.w("KelpieR5Recovery", "runtime suspended after " + reason)
         ready = false

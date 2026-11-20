@@ -8,8 +8,7 @@ import org.junit.Test
 class R5StaticMetadataAdmissionTest {
     private val paired = "a".repeat(64)
 
-    private fun browserRequest(method: String = "capabilities"): Map<String, Any?> =
-        mapOf("version" to 1, "method" to method, "params" to emptyMap<String, Any?>())
+    private fun browserRequest(method: String = "capabilities"): Map<String, Any?> = mapOf("version" to 1, "method" to method, "params" to emptyMap<String, Any?>())
 
     private fun tool(
         name: String,

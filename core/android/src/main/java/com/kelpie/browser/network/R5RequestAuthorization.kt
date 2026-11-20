@@ -5,6 +5,7 @@ import com.kelpie.browser.agent.session.R5AgentPrincipalPolicy
 import com.kelpie.browser.agent.session.SessionConsentCore
 
 internal class R5AuthorizationChangedException : Exception()
+
 internal class R5RendererUnavailableException : Exception()
 
 /** Request-local fence over the existing consent authority; never creates a grant. */
