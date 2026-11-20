@@ -13,6 +13,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -146,24 +147,29 @@ class ScrollAndDeviceHandlerInstrumentedTest {
         return Position(number(value, "x"), number(value, "y"), number(value, "maxX"), number(value, "maxY"), value["direction"] as String)
     }
 
-    /** Choose the fixture origin explicitly; Android RTL load completion need not start at scrollX=0. */
-    private suspend fun establishScrollOrigin(ctx: HandlerContext): Position =
-        withTimeout(5_000L) {
-            val dispatched =
-                ctx.evaluateJSReturningJSON(
-                    "(()=>{window.scrollTo({left:0,top:0,behavior:'instant'});return{dispatched:true}})()",
-                )
-            assertEquals(true, dispatched["dispatched"])
-            var previous = observe(ctx)
-            var stable = 0
-            while (stable < 3) {
-                delay(50L)
-                val current = observe(ctx)
-                stable = if (abs(current.x) <= 0.5 && abs(current.y) <= 0.5 && current == previous) stable + 1 else 0
-                previous = current
+    /** Choose the fixture origin explicitly; readiness is measured with the production viewport settings. */
+    private suspend fun establishScrollOrigin(ctx: HandlerContext): Position {
+        var lastObserved: Position? = null
+        val ready =
+            withTimeoutOrNull(5_000L) {
+                val dispatched =
+                    ctx.evaluateJSReturningJSON(
+                        "(()=>{window.scrollTo({left:0,top:0,behavior:'instant'});return{dispatched:true}})()",
+                    )
+                assertEquals(true, dispatched["dispatched"])
+                var previous = observe(ctx).also { lastObserved = it }
+                var stable = 0
+                while (stable < 3) {
+                    delay(50L)
+                    val current = observe(ctx)
+                    stable = if (abs(current.x) <= 0.5 && abs(current.y) <= 0.5 && current == previous) stable + 1 else 0
+                    previous = current
+                    lastObserved = current
+                }
+                previous
             }
-            previous
-        }
+        return ready ?: throw AssertionError("Synthetic RTL fixture did not settle at its origin: $lastObserved")
+    }
 
     private suspend fun extensionValue(
         router: Router,
@@ -224,7 +230,12 @@ class ScrollAndDeviceHandlerInstrumentedTest {
                 DeviceHandler(ctx, DeviceInfo("synthetic-device", "Synthetic fixture", "fixture", 640, 960, "127.0.0.1", 8420, "fixture-version", "fixture-build"), router).register()
                 val gateway = BrowserGatewayBinding(router, ctx).also { it.register() }
                 try {
-                    withContext(Dispatchers.Main.immediate) { view.loadUrl(url) }
+                    withContext(Dispatchers.Main.immediate) {
+                        // Match TabStore.createTab so this fixture exercises the production viewport configuration.
+                        view.settings.loadWithOverviewMode = true
+                        view.settings.useWideViewPort = true
+                        view.loadUrl(url)
+                    }
                     withTimeout(10_000L) {
                         while (true) {
                             val document = ctx.navigationSnapshot()

@@ -283,7 +283,7 @@ json BrowserGateway::Advance(json result) {
         // Preserve only fixed refusal codes, never page/renderer diagnostics.
         static const std::set<std::string> screenshot_refusals = {"SCREENSHOT_TOO_LARGE", "NO_FRESH_FRAME",
           "OBSERVATION_RACE", "NEEDS_HUMAN", "UNSUPPORTED_IN_BACKGROUND", "SENSITIVE_CONTENT",
-          "KAI_FEATURE_DISABLED", "INVALID_CAPTURE_GEOMETRY", "STALE_OBSERVATION"};
+          "KAI_FEATURE_DISABLED", "INVALID_CAPTURE_GEOMETRY", "STALE_OBSERVATION", "UNSUPPORTED", "FRAME_PRIVACY_UNVERIFIED"};
         const std::string code = result.is_object() && result.contains("error") && result["error"].is_object()
           ? result["error"].value("code", std::string()) : std::string();
         if (code == "RENDERER_NOT_READY") {
@@ -292,7 +292,15 @@ json BrowserGateway::Advance(json result) {
           impl_->Finish(std::move(unavailable));
         }
         else if ((impl_->request["method"] == "tab.screenshot" || impl_->request["method"] == "screenshot" ||
-             impl_->request["method"] == "screenshot-annotated") && screenshot_refusals.count(code)) impl_->Finish(Failure(code));
+             impl_->request["method"] == "screenshot-annotated") && screenshot_refusals.count(code)) {
+          auto refusal = Failure(code);
+          if (code == "UNSUPPORTED") {
+            refusal["error"]["message"] = "This screenshot mode is unavailable in this build. Use a sanitized page snapshot; additional approval cannot enable this capability.";
+          } else if (code == "FRAME_PRIVACY_UNVERIFIED") {
+            refusal["error"]["message"] = "Screenshot privacy could not be verified. Use a sanitized page snapshot; no image was exported.";
+          }
+          impl_->Finish(std::move(refusal));
+        }
         else fail();
       }
       return Next();

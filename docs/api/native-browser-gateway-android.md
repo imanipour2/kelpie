@@ -194,7 +194,11 @@ discovery and native authorization enforce the same boundary; an extension
 cannot acquire canonical observation-bound click/type authority by using an
 internal gateway flag. Sanitized observations and verified canonical actions
 remain available. Real-page image export remains fail-closed pending verified
-pixel redaction. Correlated safe errors never expose thrown messages or claim
+pixel redaction and returns `UNSUPPORTED`, with a sanitized page snapshot as the
+available alternative. Additional computer approval cannot enable this capability.
+Missing native fixture provenance returns `FRAME_PRIVACY_UNVERIFIED`. The native
+gateway preserves both fixed codes without exporting renderer diagnostics or images.
+Correlated safe errors never expose thrown messages or claim
 that a consent request was accepted when its result is uncertain.
 
 See [the Wave 1 gate record](../qa/r5-wave1-admission-and-install-gates-20261119.md)

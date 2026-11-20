@@ -999,8 +999,10 @@ Sensitive export and unbound action aliases fail closed even after broad approva
 
 WebView transfer, document identity and real pixels require independent evidence.
 Native ownership and frame freshness do not establish privacy. Real-page images
-currently return `NEEDS_HUMAN` until a verified pixel-redaction path exists;
-synthetic fixture proof cannot enable those images. No cached, gray, unredacted
+return `UNSUPPORTED` until a verified pixel-redaction path exists. Use a sanitized
+page snapshot; additional computer approval cannot enable this capability.
+Missing native fixture provenance returns `FRAME_PRIVACY_UNVERIFIED`.
+Synthetic fixture proof cannot enable real-page images. No cached, gray, unredacted
 or wrong-tab image is a successful screenshot. This is a remaining beta gate.
 
 The native connection page first uses a recently verified paired client and

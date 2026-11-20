@@ -327,11 +327,15 @@ void RefusalAndAtomicPublication() {
   const auto duplicate = snapshot["elements"][0]; snapshot["elements"].push_back(duplicate);
   assert(gateway.Advance({{"success", true}, {"result", snapshot}})["response"]["ok"] == false);
   assert(gateway.Begin(Request("tab.click", {{"ref", duplicate["ref"]}}))["response"]["error"]["code"] == "STALE_REFERENCE");
-  for (const auto code : {"NEEDS_HUMAN", "NO_FRESH_FRAME", "OBSERVATION_RACE", "KAI_FEATURE_DISABLED", "INVALID_CAPTURE_GEOMETRY"}) {
+  for (const auto code : {"NEEDS_HUMAN", "NO_FRESH_FRAME", "OBSERVATION_RACE", "KAI_FEATURE_DISABLED", "INVALID_CAPTURE_GEOMETRY", "UNSUPPORTED", "FRAME_PRIVACY_UNVERIFIED"}) {
     gateway.Begin(Request("tab.screenshot"));
     const auto step = gateway.Advance({{"success", false}, {"error", {{"code", code}, {"message", "SYNTHETIC_SECRET"}}}});
     assert(step["response"]["error"]["code"] == code && step["response"]["error"]["mayHaveCompleted"] == false);
     assert(step.dump().find("SYNTHETIC_SECRET") == std::string::npos);
+    if (std::string(code) == "UNSUPPORTED" || std::string(code) == "FRAME_PRIVACY_UNVERIFIED") {
+      assert(step["response"]["error"]["message"].get<std::string>().find("sanitized page snapshot") != std::string::npos);
+      assert(!step["response"].contains("value"));
+    }
   }
 }
 void NativeAuthorizationRecheck() {

@@ -99,7 +99,10 @@ internal fun requireSyntheticScreenshotFixture(
     nativeUrl: String?,
 ) {
     if (!qaEnabled || nativeUrl != "https://kai-fixture.invalid/") {
-        throw ScreenshotRefusal("NEEDS_HUMAN", "Real-page image export requires a trusted privacy and frame provider")
+        throw ScreenshotRefusal(
+            "UNSUPPORTED",
+            "Real-page screenshots are unavailable in this build. Use a sanitized page snapshot; additional approval cannot enable capture.",
+        )
     }
 }
 

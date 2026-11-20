@@ -53,7 +53,7 @@ jobs:
           grep -Eq 'R5_BACKGROUND_AGENT_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
           grep -Eq 'R5_MOTHER_MCP_BACKGROUND_QA_ENABLED[[:space:]]*=[[:space:]]*true;' "$APP"
           "$AAPT" dump badging "$APK" | grep -F "package: name='com.kelpie.browser.r5mothernextverify'"
-          "$AAPT" dump badging "$APK" | grep -F "versionCode='43' versionName='0.2.23-r5-connection'"
+          "$AAPT" dump badging "$APK" | grep -F "versionCode='44' versionName='0.2.24-r5-connection'"
           "$SIGN" verify --verbose --print-certs "$APK" > /tmp/mother-signing.txt
           cat /tmp/mother-signing.txt
           grep -Eq 'Verified using v2 scheme.*: true' /tmp/mother-signing.txt
@@ -67,8 +67,8 @@ jobs:
           {
             echo "source_commit=$(git rev-parse HEAD)"
             echo "package=com.kelpie.browser.r5mothernextverify"
-            echo "version=0.2.23-r5-connection"
-            echo "versionCode=43"
+            echo "version=0.2.24-r5-connection"
+            echo "versionCode=44"
             echo "port=18463"
             echo "connection=STANDARD_MOTHER_MCP_AND_OWNER_CONSENTED_R5_RENDERER"
             echo "signature=debug-only"
@@ -90,8 +90,8 @@ jobs:
               'repository': 'https://github.com/imanipour2/kelpie',
               'sourceCommit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
               'packageName': 'com.kelpie.browser.r5mothernextverify',
-              'versionCode': 43,
-              'versionName': '0.2.23-r5-connection',
+              'versionCode': 44,
+              'versionName': '0.2.24-r5-connection',
               'localHttpPort': 18463,
               'buildVariant': 'debug',
               'gradleProfile': 'kelpieR5MotherNextQaProfile',

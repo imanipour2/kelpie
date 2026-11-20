@@ -53,7 +53,7 @@ internal object WebViewCapturePrivacy {
             requireSyntheticScreenshotFixture(BuildConfig.DEBUG, webView.url)
             val fixture =
                 reviewed[webView]
-                    ?: throw ScreenshotRefusal("NEEDS_HUMAN", "No native provenance for a reviewed pixel fixture")
+                    ?: throw ScreenshotRefusal("FRAME_PRIVACY_UNVERIFIED", "No native provenance for a reviewed pixel fixture")
             val raw =
                 withTimeout(2000L) {
                     suspendCancellableCoroutine<String> { continuation ->

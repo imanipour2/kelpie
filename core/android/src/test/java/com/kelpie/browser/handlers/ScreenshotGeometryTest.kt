@@ -32,10 +32,12 @@ class ScreenshotGeometryTest {
 
     @Test
     fun everyImageExportRequiresTheNativeSyntheticFixtureGate() {
-        assertThrows(ScreenshotRefusal::class.java) { requireSyntheticScreenshotFixture(false, "https://kai-fixture.invalid/") }
+        val disabled = assertThrows(ScreenshotRefusal::class.java) { requireSyntheticScreenshotFixture(false, "https://kai-fixture.invalid/") }
+        assertEquals("UNSUPPORTED", disabled.code)
         for (url in listOf(null, "https://example.com/", "https://kai-fixture.invalid.evil/", "https://kai-fixture.invalid/?secret=x")) {
             val error = assertThrows(ScreenshotRefusal::class.java) { requireSyntheticScreenshotFixture(true, url) }
-            assertEquals("NEEDS_HUMAN", error.code)
+            assertEquals("UNSUPPORTED", error.code)
+            assertEquals(disabled.message, error.message)
         }
         requireSyntheticScreenshotFixture(true, "https://kai-fixture.invalid/")
     }
