@@ -68,3 +68,44 @@ Record: event order/elapsed timestamps, pause/resume epoch, readiness, owner sta
 - Official Android references: [WebView VisualStateCallback](https://developer.android.com/reference/android/webkit/WebView#postVisualStateCallback(long,%20android.webkit.WebView.VisualStateCallback)), [VirtualDisplay](https://developer.android.com/reference/android/hardware/display/DisplayManager), [renderer process death](https://developer.android.com/develop/ui/views/layout/webapps/managing-webview), [offscreenPreRaster](https://developer.android.com/reference/android/webkit/WebSettings#setOffscreenPreRaster(boolean)).
 
 **Current status:** `AUTH_BASELINE_FROZEN / DEVICE_LOG_PENDING / CODE_REVIEW_BRANCH / NO_INSTALLED_PATCH / SYNC_BLOCKED_MAIN / NO_PUBLIC_RELEASE`.
+
+
+## Owner clarification — COMPLETE background browser control, whole-page vision and agent task execution (2026-11-21)
+
+**Acceptance objective (owner directive, not implemented evidence):** Kelpie must enable an approved AI agent to **see, understand, navigate, operate, verify and report on the entire reachable web-page experience** while the Android browser Activity is in the background, **without bringing Kelpie forward unexpectedly**. Merely reading DOM, listing tabs, obtaining a viewport or showing one non-gray PNG is NOT sufficient. This clarification refines R5 beta acceptance and its boundary with the existing KAI-001 agent-intelligence workstream; it does not modify owner-frozen code45 connection/approval.
+
+### Required behavioral contract
+
+1. Full **tab and navigation control**: enumerate/open/select/close tabs; navigate links/URLs; back/forward, selected-tab identity, history and source-document epoch. Use the actual TabStore and same browser-owned WebView, not a surrogate headless browser.
+2. Full **interaction and verified outcomes**: find UI controls using DOM/accessibility/visual geometry; click, select, focus, type, clear/edit text, scroll in all four directions and wait for async changes. Handle RTL, nested overflow, sticky/fixed UI, accordions and modals. Verify actual postconditions, not merely acceptance of a tool call.
+3. **Fresh real screenshots** for explicitly permitted web pages from the same app-owned VirtualDisplay/ImageReader (not gray/stale, fabricated DOM composites or only synthetic fixture images). Associate every allowed frame with tab/document, lifecycle generation, viewport size, zoom, scroll x/y and source proof; protect password/OTP/payment/secure surfaces. A DOM snapshot alone misses graphics, placement, canvas, occlusion and images.
+4. **Whole-page coverage and visual analysis**: coordinate DOM and accessibility snapshot, element geometry and a sequence of real permitted high-resolution visual tiles. Traverse vertical/horizontal/nested scroll regions, iframes where accessible and allowed, lazy/virtualized and paginated results, changing states, visual overlays and responsive layouts. Track which regions/items/states were *actually observed*, deduplicate overlaps and report evidence plus uncovered regions. A single viewport is not the whole page. For infinite/dynamic/inaccessible/protected content, report PARTIAL or UNKNOWN, not a false all-details/VERIFIED_EMPTY claim.
+5. **Closed-loop agent execution**: OBSERVE → LOCATE → ACT → WAIT → VERIFY → SCAN MORE → REPORT. Bind each action receipt to real selected tab, document state, image/DOM evidence and postcondition, with bounded retries, stale-handle recovery and truthful unresolved/unknown reporting.
+6. **Genuine HOME/background continuation**: after actual native HOME with owner-approved current principal, browser retains private hardware rendering and supports tabs, actions, screenshots and page scans without stealing focus from other apps. Returning foreground preserves original WebView/history/scroll (including RTL); repeated HOME and renderer lifecycle interruptions are handled truthfully.
+7. **Existing owner/privacy boundaries unchanged**: no new pairing, auth strengthening, prompts, key rotations or port/tunnel changes. Preserve native STOP/revoke/lock and refusal of unauthorized cross-app capture and sensitive information; human handoff for OTP, CAPTCHA and payments where required. A protected site may remain partially unobservable—do not bypass guards to satisfy whole-page metrics.
+
+### Engineering ownership split
+
+**R5 runtime** ensures one real app-owned WebView on VirtualDisplay/Presentation/ImageReader, native lifecycle, image delivery, actionable tab/input/scroll operations. Code45 has an observed renderer readiness failure and source-confirmed fixture-only real-page pixel policy, both OPEN.
+
+**Visual coverage coordinator** combines safe freshly captured images with DOM/AX coordinates to cover full reachable page, horizontal/vertical/nested scroll, virtualized/lazy-loaded results, and returns a coverage manifest with confidence/unknown. FullPage UNSUPPORTED cannot be quietly relabeled as complete.
+
+**KAI-001 agent intelligence** plans and verifies autonomous tasks, requests additional region/state coverage and safely hands off sensitive steps. Source integrations in #69-#71 do not imply successful device E2E. Keep KAI code ownership distinct and pass only explicit versioned interface/receipts to R5, never a new owner-auth layer. KAI original: https://docs.google.com/document/d/1AJ8Yfr9tDXg4VRy8aepkpuWdMQEWSAn5ObrImMg-zm0/edit
+
+### Physical S24 acceptance matrix — all currently OPEN
+
+| ID | Actual physical scenario and acceptance |
+| --- | --- |
+| BG-01 | After real HOME, existing paired agent lists/creates/selects/closes tabs while Kelpie stays in background; same TabStore |
+| BG-02 | Permitted real page: navigate/history, read DOM/accessibility and see fresh non-gray **same-tab** pixels after HOME |
+| BG-03 | Click/type/edit/clear/select/submit harmless form; independently verify actual page effect visually and structurally |
+| BG-04 | Vertical, horizontal, RTL, nested scroll, sticky UI, accordion/modal and lazy results; no coordinate drift, each screenshot matches viewport |
+| BG-05 | Analyze full reachable page via successive safe image tiles + DOM/AX evidence; coverage ledger, no unjustified omitted content or false empty claims |
+| BG-06 | **25 real HOME/background action+vision lifecycle cycles**, distinct from 25 screenshot calls; no foreground steal |
+| BG-07 | Foreground return and subsequent HOME retains browser WebView identity, tabs, history and RTL scroll, no stale frames |
+| BG-08 | Existing STOP/revoke/keyguard and sensitive-page negative tests; no disclosure, cross-app capture or added pairing burden |
+| BG-09 | Renderer interruption, network handover and reboot as supported by hardware; bounded truthful recovery, no silent success |
+
+Per-scenario evidence: exact installed build and SHA, source tab/document/viewport/scroll, action before/after, permitted pixel/freshness proof, coverage areas, and blocked/unobservable reasons. The existing physical code40 25/25 after-HOME image calls are **positive component evidence only**, not end-to-end acceptance. Android OS may prevent indefinite execution or visual access to protected content; report these limits rather than asserting full coverage.
+
+**STATUS:** OWNER_GOAL_CLARIFIED / WHOLE_BROWSER_AGENT_ACCEPTANCE_DEFINED / R5_RENDERER_AND_REAL_PAGE_PIXEL_OPEN / KAI_WHOLE_PAGE_DEVICE_E2E_OPEN / AUTH_FROZEN / NO_INSTALL / SYNC_BLOCKED_MAIN.
