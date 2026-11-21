@@ -1,0 +1,144 @@
+# Kelpie R5/KAI — traceable research consolidation and technology adoption matrix
+Date: 2026-11-21
+Status: RESEARCH_SYNTHESIS / REVIEW-GATED / IMPLEMENTATION_INPUT — NOT NEW CDG APPROVAL
+Source provenance: original research remains in the linked Google Docs; this Markdown is a versioned GitHub execution crosswalk in DRAFT PR75, not a replacement authority.
+Scope: S24 Ultra Android 17, Kelpie code45 installed at c7823444953db4e64999d45d4a95e53c17fc6d11; PR75 base; owner-frozen connection, computer approval and existing protective controls.
+
+## Executive finding
+
+Earlier research covers almost every major architectural dilemma: process vs transport vs compositor, same-WebView ownership, page observation + native action, risk and permission boundaries, full-result coverage, and comparable browser agent APIs. DO NOT replace the private VirtualDisplay architecture or re-harden the currently accepted connection to solve rendering. Reuse the old hardware-positive PR66/code40 implementation as a regression benchmark, not as an unrestricted rollback.
+
+A successful agent task in HOME requires ALL FIVE observable layers:
+T0 durable authenticated transport (already OWNER ACCEPTED for code45);
+T1 real private WebView host/Surface/ImageReader produces a FRESH frame (CURRENTLY NOT ACCEPTED);
+T2 real native WebView actions across tabs/forms/scrollers/gestures with verified effects (PARTIALLY IMPLEMENTED);
+T3 page capability inventory + semantic/visual coverage across scroll containers, pagination, lazy and virtualized content (INCOMPLETE);
+T4 agent planning, task-completeness and safe human handoff (KAI DESIGN/INTEGRATION IN DRAFT, DEVICE QA OPEN).
+T0 success must never be represented as T1–T4 success.
+
+## Research source index (original documents, no duplicate authority)
+
+| ID | Date/source and exact URL | Classification / evidentiary limit | What to reuse now |
+| --- | --- | --- | --- |
+| R01 | 2026-11-15, EF-OPS-KELPIE-OSS-RCA-001: https://docs.google.com/document/d/1jyv47ShO1hkMcKAzuJR4467GW3IMoXCvF5xLWmgoiXA/edit | RESEARCH/PROPOSED; code of Termux, KDE Connect, Syncthing-Fork, Home Assistant, RustDesk, droidVNC-NG, scrcpy, So7o studied; locked S24 actual operation NOT proven | Independent service/process/transport/compositor checks, event-driven recovery; NEVER adopt system-wide capture/Accessibility/ADB privileged bypass |
+| R02 | 2026-11-16, EF-OPS-KELPIE-AGENTIC-MOBILE-RESEARCH-001 P5: https://docs.google.com/document/d/1oM-IQArjUKb0biVodw87F0KJGPh74XAwg01cADPgtDM/edit | RESEARCH/PROPOSED; vendor behavior is vendor claim, not verified local S24 renderer; So7o/KMPwright/Agentic WebView source-pinned | Same-owned-WebView typed observe→admit→act→verify; capability negotiation, no second browser or arbitrary CDP relay |
+| R03 | 2026-11-16, EF-OPS-KELPIE-SESSION-ADR-001: https://docs.google.com/document/d/1SSDkaVlcbz7U8Pr0R5wvcKRFBB1EjRSOsyqRi9LCeCg/edit | ENGINEERING_SELECTED/OWNER_PRODUCT_GOAL_APPROVED with later source addenda; technical CDG ratification and platform parity remain gated | Session ownership separate from UI, a single user-approved WebView, generation-bound command receipts, STOP/restore; earlier proposal cannot override code45 connection FREEZE |
+| R04 | 2026-11-17, Browser Use/TinyFish R5 QA gap audit: https://docs.google.com/document/d/1ujdpOgH47eeQb7JhhAVPcsnT-yWbexOcd52pirMo4eo/edit | Exact older PR34 device SHA QA, NOT code45; comparisons are product capability studies | Missing tab/command coverage, persistent execution context, postcondition vs dispatch, real page image/viewport distinction; no hidden cloud cookie move |
+| R05 | 2026-11-17, R5 independent engineering/security audit: https://docs.google.com/document/d/1beZYBF0Odwh9i5gcLF3DeThm5YNhXOLkdIsKiRNx3PE/edit | Historical PR48 source/CI review and reported device observations; not security certification for PR75 | Risk-based click admission, prompt-injection isolation, lock/unlock renderer recovery, need for real QA |
+| R06 | 2026-11-18, KAI-001 original architecture/research: https://docs.google.com/document/d/1AJ8Yfr9tDXg4VRy8aepkpuWdMQEWSAn5ObrImMg-zm0/edit | RESEARCHED/DRAFT/PROPOSED at document creation; later PR69/70 have partial SOURCE code, no current S24 E2E | Evidence-based task loop, filter/sort, nested and virtual lists, atEnd UNKNOWN, dedup, schema validation, coverage & human handoff |
+| R07 | 2026-11-19, Wave1 owner-directed execution draft: https://docs.google.com/document/d/1w7-dRc3HqGXX8R_5a7XD3rbVRhwNSIVvoGUDvQCmMo8/edit | REVIEW-GATED draft; branch/CI/device states time-bounded | PR66→70→71→72→73→74 dependency chain and release gates, preserve owner installation/rollback |
+| R08 | 2026-11-18 incident/device RCA: https://docs.google.com/document/d/1_ulI2TV66d60_2XPJTh3aGCTCbH_40Na5o3_YhUGu1U/edit | Dated hardware evidence; source of code40 25/25 actual image requests after HOME, NOT 25 lifecycle/reboot cycles | Measured positive regression fixture with SHA; never generalize success to code45 |
+| R09 | 2026-11-20–21 single operational Kelpie live log: https://docs.google.com/document/d/1_OynFl25a2KtynEOJyY3qAcTRIi8QrCmTuUmY47I0RU/edit | CURRENT TIMESTAMPED DEVICE/CONNECT readback; code45 metadata PASS, tab/viewport RENDERER_NOT_READY | Actual run-state provenance and pending native cause codes; maintain one Live Log, not parallel logs |
+| R10 | 2026-11-21 owner freeze in CDG: https://docs.google.com/document/d/1oYRR-qawFourZeDEUE30QNUfF9S0bD_WXAP4uljGVJU/edit | OWNER APPROVED scoped decision: EF-OPS-KELPIE-CONNECTION-BASELINE-FREEZE-20261121 | Freeze code45 existing Ed25519 computer trust, pairing, native approval, ports, install signature and STOP/lock; NO stricter routine authorization, no invented EF-GOV ID |
+
+Historical P2/P3/P4 source PR15/17/34 and R5 PR66/68/69/70/71/74 are NOT independent current deployments. Check exact SHA and device before interpreting history. Source code for current R5 belongs to GitHub, Drive is research/decision authority.
+
+## Supplementary verification of external references — 2026-11-21
+
+| EXT | Direct primary source | Verified property and decision for Kelpie |
+| --- | --- | --- |
+| E01 Android WebView | https://developer.android.com/reference/android/webkit/WebView | postVisualStateCallback means a later draw can include queued DOM changes IF attachment/visibility prerequisites hold; it is NOT proof of a fresh ImageReader pixel. Keep a separate actual frame timestamp/nonce + Surface/host check. evaluateJavascript is UI-thread-only. |
+| E02 Android ImageReader | https://developer.android.com/reference/android/media/ImageReader | acquireLatestImage drops old queued images; every acquired image must be closed; maxImages must leave adequate margin. Add bounded queue and instrumentation for no-frame/stale-frame, never pretend JavaScript readiness equals pixels. |
+| E03 So7o Android WebView CDP | https://github.com/jan5o7o/android-webview-cdp | README on actual Samsung Android16 explicitly separates CDP/DOM input from display Surface that is ON. Surface-less display can execute JS and CDP input while captureScreenshot times out. ADOPT the diagnostic split and optional local **dev-only** CDP parity tests. REJECT raw network CDP relay, hidden ADB, WRITE_SECURE_SETTINGS/overlay dependence as product prerequisites. This is NOT independent S24 code45 proof. |
+| E04 KMPwright alpha | https://github.com/bernaferrari/kmpwright | Playwright-style locator/getByRole/action commands and explicit per-backend capability matrix for same Android WebView and iOS WKWebView. ADOPT locator semantics/feature detection and optional test contract, NOT a required alpha dependency or a renderer replacement; freeze revision/version before experiments. |
+| E05 agent-browser | https://github.com/vercel-labs/agent-browser/blob/main/skill-data/core/references/commands.md | Compact accessibility snapshot, stable temporary @element references, delta snapshots, click/fill/drag/scroll command grammar. ADOPT semantic observation+element ref invalidation and delta efficiency concept; desktop Chromium behavior is not an Android hardware proof. |
+| E06 Browser Use | https://github.com/browser-use/browser-use | Persistent agent control loop + CDP and code-driven real browser interaction; ADOPT task step/verification and recoverable agent state. Cloud/Chromium/browser profiles are not a substitute for the user's same S24 WebView or automatically shared session. |
+| E07 Android MotionEvent/View | https://developer.android.com/reference/android/view/MotionEvent ; https://developer.android.com/reference/android/view/View | Android View.dispatchTouchEvent takes local MotionEvent. For touch-drag, use *only* the live Kelpie-owned WebView on UI thread with CSS→native viewport/zoom/insets mapping and before/after evidence; never claim universal HTML5 drag semantics. |
+| E08 Android clipboard/drag | https://developer.android.com/privacy-and-security/risks/secure-clipboard-handling ; https://developer.android.com/develop/ui/views/touch-and-input/drag-drop/view | Shared ClipboardManager has exposure/preview constraints; prefer bounded, session-local in-memory copy/paste for approved webpage text, no reading global device clipboard. Android View drag/drop is not automatically HTML5 drag and drop. |
+| E09 Android background service | https://developer.android.com/develop/background-work/services/fgs/changes ; https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start | Android15/16 impose FGS types, start constraints and Job quotas. Keep owner-authorized service foreground notification as appropriate, do not launch Activity behind another app or promise unlimited screen-off/lock execution. |
+| E10 Chrome WebMCP | https://developer.chrome.com/docs/modern-web-guidance/guides/webmcp/webmcp | Experimental origin trial/early preview and flag; use as future opt-in semantics for sites explicitly publishing actions. Do NOT make it required or grant site scripts new authority over Kelpie. |
+| E11 WebViewCompat | https://developer.android.com/reference/androidx/webkit/WebViewCompat | Feature-gate supported origin-scoped/document-start script mechanisms; never expose a universal JavascriptInterface to untrusted frames. |
+
+This is supplementary publicly sourced research, NOT copied source code and NOT a claim that these projects were installed or tested on S24. Product vendor statements in older P5/BrowserUse reports are not empirical local-device results. Relevant third-party licences and exact upstream revisions must be reviewed prior to any dependency import. Prefer lightweight reusable patterns over adding a second browser or mandatory cloud.
+
+## Specific source gap crosswalk at code45 (GitHub PR75 HEAD ancestry)
+
+- R5WebViewActionScripts.kt: SNAPSHOT enumerates only 'a,button,input,textarea,select,[role=tab]', returns max 160 elements / 28000 body characters, says coverage='INCOMPLETE', lacks systematic open-shadow/nested-scroll/iframe/canvas/control state traversal. 'window.scrollBy(x,y)' changes outer window, not necessarily nested scrollers.
+- R5PrivateMcpActions.kt: exposes tabs.new/close/select, tab.goto/click/fill/type/select/wait/back/forward and page.scroll; no typed clipboard, text selection, drag, long-press, element.scrollIntoView, per-scrollport scan or visual coverage commands.
+- R5NativeBrowserPort.kt: uses same WebView/TabStore on UI thread; requires real target/owner and layout; some operation postcondition checks present. New typed gesture and selection APIs should reuse its admission and receipts and must not bypass existing safety.
+- PrivateWebViewDisplay.kt: still uses VirtualDisplay+Presentation+RGBA ImageReader. RENDERER_NOT_READY on S24 requires first native failure reason (host/viewport/CSS/VisualState/Compose ownership/restore), not a speculative delay increase.
+- WebViewCapturePrivacy.kt: source-confirmed private synthetic fixture-only screenshot export. Even when compositor recovers, ordinary website pixel export requires an independently reviewed privacy-preserving provider. Do not remove sensitive-content controls for feature parity.
+- Existing code40/PR66 physical evidence is a comparator only. Newer successful transport/approval on code45 is not acceptance of T1–T4.
+
+## Selected implementation route; no auth churn and no duplicate sources
+
+| Order | Work package and exact integration boundary | Source rationale | Acceptance/evidence |
+| --- | --- | --- | --- |
+| P0 | Instrument/reconcile native HOME → private host WebView/Surface/VisualState callback state and deterministic same-WebView recovery, without foreground steal. R5AgentCoordinator.kt, R5LifecycleReconciler.kt, PrivateWebViewDisplay.kt, R5PrivateViewportReadiness.kt | R01 R03 R08 R09 E01 E02 E03 | Code45 connected S24 real native reason; privateFrame actual pixel after HOME; stop/lock negative; authentic history preserved |
+| P1 | Native safe real-page frame provider: redact protected page inputs and sensitive screenshots, preserve fresh pixels+tab/document/frame epoch; never bypass fixture-only gate before replacement review | R02 R06 R07 E01 E02 | BG-02/BG-05 actual public-page visual tiles; negative OTP/password/payment/secure; privacy receipt |
+| P2 | Paged capability/semantic inventory with live document-scoped refs, element geometry/state, DOM/AX, open shadow if accessible, iframe scopes when permitted; avoid fixed 160 cap as false complete | R02 R04 R06 E04 E05 E11 | BG-10 and BG-13, explicit total/returned/truncated/unknown and post-action ref invalidation |
+| P3 | Nested/horizontal/RTL and lazy/virtualized scrolling with region ledger, sentinel/pagination/item count proof; adaptive image tiles + overlapped coverage; no inferred end-of-results | R06 R04 E05 E06 | BG-04/05/15; no unvisited reachable public region silently omitted; explicit PARTIAL/UNKNOWN |
+| P4 | Typed copy/paste/selection, scoped in-memory clipboard, contenteditable, native owned-WebView MotionEvent gestures for swipe/long-press/drag; strict document/owner/geometry and postcondition proof | R02 R03 R06 E07 E08 | BG-11/12/14/17 on S24 without touching phone-wide clipboard or other apps |
+| P5 | KAI task planning/completeness from R06, sorting/filtering, verified workflows, human handoff, cross-source result provenance, bounded retries and resumes | R06 R04 E06 | 3 fixture flows+real authorized sites, no false VERIFIED_EMPTY or unknown-as-success |
+| P6 | End-to-end device QA: 25 **actual** HOME lifecycle cycles with multi-step actions+vision, reboot/network, STOP/lock/revoke, memory/thermal/backpressure and iOS parity or approved exception | R07 R08 R09 E02 E09 | BG-01..BG-18, exact APK SHA, code commit, QA record, owner review before merge/install/release |
+
+## Critical scope reconciliation
+
+- The latest owner CDG connection freeze R10 supersedes broad earlier research proposals about adding per-site/per-action approval for routine browsing. Existing high-risk human intervention and native STOP remain; a new prompt for ordinary screenshot/click/scroll is OUT OF SCOPE.
+- HOME/unlocked/authorized private WebView is the near-term supported development target. Screen-off, fully locked Keyguard, device-wide screen capture and remote OS input are NOT inferred from the user's background goal; R01 locked-task research is a distinct proposal, not release approval.
+- If a finite authorized page can truly be fully scanned, report scope, evidence and elapsed time. Infinite scroll, cross-origin inaccessible iframe, protected content, hardware video frames, closed-shadow states or dynamically changing layouts must produce PARTIAL/UNKNOWN, not "nothing was hidden" claims.
+- Do not close PR15/17/34/66/68/69/70/71/74 or mark old KAI document implemented based on this synthesis. The active implementation route remains dependent DRAFT PR75 (https://github.com/imanipour2/kelpie/pull/75), and management Issues #100 R5 QA, #101 KAI; Issues are in enerfoam-website because Kelpie Issues are disabled.
+- Website WordPress LIVE/STAGING, GitHub main and the installed code45 APK are unchanged by research. EF-DOC-CYCLE: original prior research in Drive → owner/CDG as relevant → this GitHub PR appendix → CI/review → device QA → owner release decision → readback and Kelpie Live Log.
+
+## Status / next action
+RESEARCH_DISCOVERED_AND_CLASSIFIED / PRIMARY_SOURCES_READ / OFFICIAL_AND_OSS_SUPPLEMENT_VERIFIED / IMPLEMENTATION_CROSSWALK_PREPARED / OWNER_CONNECTION_BASELINE_FROZEN / RENDERER_QA_PENDING / SAFE_REAL_PAGE_PIXELS_PENDING / FULL_PAGE_AGENT_E2E_PENDING / SYNC_BLOCKED_MAIN / NO_INSTALL.
+
+
+## Follow-up primary-source cross-check — 2026-11-21 (specific engineering corrections)
+
+The following direct external source checks add important constraints beyond older research. They are not S24 device tests.
+
+- So7o upstream README https://github.com/jan5o7o/android-webview-cdp explicitly reports background app frozen-cgroup causing CDP to hang, and requires ADB-created overlay display to keep its own pixels. It does not prove that app-owned VirtualDisplay alone prevents Android freezing. It also reports unsupported Android WebView CDP Target.createTarget, old leftover targets after Activity recreation, and screenshots with duplicated page tiles when requested viewport device pixels exceed physical compositor surface. Kelpie should correlate exact tab target, WebView identity, CSS/native geometry, DPR, surface bounds and frame freshness. Do NOT adopt raw CDP relay, ADB overlay, WRITE_SECURE_SETTINGS, forced foregrounding or external app controls in production.
+- Android WebView official https://developer.android.com/reference/android/webkit/WebView: postVisualStateCallback promises DOM state visible at a subsequent draw only under documented WebView attachment/visibility prerequisites. Callback success is not ImageReader pixel delivery.
+- Android ImageReader official https://developer.android.com/reference/android/media/ImageReader: acquireLatestImage drops older frames only with sufficient maxImages margin; every Image must close. With Kelpie maxImages=2 verify immediate close, no retained buffer, producer timestamps and frame backpressure.
+- Android AOSP clipboard https://source.android.com/docs/whatsnew/android-10-release: background applications cannot normally read the global clipboard without input focus (or IME role). Prefer bounded session-local text copy/paste for HOME. Also see https://developer.android.com/privacy-and-security/risks/secure-clipboard-handling .
+- Playwright actionability https://playwright.dev/docs/actionability: check unique locator, visible, stable, receives events, enabled, editable/not-inert, then await actual state change. Adapt these as native WebView+DOM/visual checks, not as the desktop Playwright engine. Android View.dispatchTouchEvent returning true only means an event was handled, not that a website task succeeded: https://developer.android.com/reference/android/view/View .
+- Chromium WebMCP https://developer.chrome.com/docs/modern-web-guidance/guides/webmcp/webmcp: early preview, currently Chromium 146+ experimental flag, not a portable required Android WebView dependency. Site-provided tools never receive native owner authority.
+- Android WebViewCompat https://developer.android.com/reference/androidx/webkit/WebViewCompat: feature-gate document-start scripts, use explicit origin rules, minimize script cost; DOM is not necessarily ready when the injection runs.
+- Android background FGS rules https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start: background start/while-in-use restrictions still apply; no speculative permanent background service without proof.
+
+Technical disposition: ADOPT existing genuine WebView/compositor, typed commands, bounded fresh image proofs, Playwright-like actionability and KAI coverage; EVALUATE local CDP comparison only in development, capability-gated origin-scoped WebView scripts and View-local MotionEvent; DEFER experimental WebMCP/cloud paths; REJECT production ADB overlay, system-wide Accessibility/MediaProjection, global clipboard read during HOME, duplicate WebView/cookie transfer and renewed connection-auth tightening. Retain older original Drive studies unchanged as historical sources; this is a traceable addendum, not proof of device acceptance or a new CDG approval.
+
+## 2026-11-21 supplementary source, licence-metadata and threat-model review
+
+Evidence class: **UPSTREAM_REPO_METADATA + PRIMARY_SPECIFICATION + DESIGN IMPLICATIONS**. Review date: 2026-11-21. These additions refine the preceding matrix; they do not supersede the original Google Docs, authorize use of third-party code, or claim an Android device pass.
+
+### Upstream metadata and adoption screening
+
+The following licence strings are GitHub repository **reported SPDX metadata as read on 2026-11-21**, not an audit of each dependency, asset, source file, trademark, patent or distribution condition. If implementation imports code, pin/review the exact commit and complete licence/dependency/security due diligence before the change. **Pattern reuse and native reimplementation are the default.**
+
+| Candidate / source repository | Reported licence; repo status at review | Limited reuse recommendation |
+| --- | --- | --- |
+| [So7o / android-webview-cdp](https://github.com/jan5o7o/android-webview-cdp) | MIT; active | Dev-only compositor/CDP diagnosis patterns. Never depend on ADB overlay, special privileges or expose raw CDP. |
+| [KMPwright](https://github.com/bernaferrari/kmpwright) | MIT; active | Semantic API/capability parity concepts; optional evaluated test adapter, not mandatory alpha runtime. |
+| [agentic-webview](https://github.com/shanthropic/agentic-webview) | Apache-2.0; active | Typed commands, document-scoped refs, lifecycle reducer and receipts; do not duplicate R5 native gateway. |
+| [Playwright MCP](https://github.com/microsoft/playwright-mcp) | Apache-2.0; active | Accessibility snapshot / ephemeral refs / actionability as an API model, not an Android WebView renderer. |
+| [Browser Use](https://github.com/browser-use/browser-use) | MIT; active | Agent observation-action-verification and bounded recoverable task state, not a substitute cloud browser/profile. |
+| [agent-browser](https://github.com/vercel-labs/agent-browser) | Apache-2.0; active | Compact refs, delta snapshots and command naming; invalidate on navigation/epoch change. |
+| [Tencent BrowserSkill](https://github.com/Tencent/BrowserSkill) | MIT; active | Human takeover and existing-session collaboration pattern only; native Android applicability not proven. |
+| [Midscene](https://github.com/web-infra-dev/midscene) | MIT; active | Visual assertions + deterministic postconditions; no Android background rendering claims. |
+| [MobileAgent](https://github.com/X-PLUG/MobileAgent) | MIT; active | Planner/verifier research and task-state modeling, no direct model/runtime dependency. |
+| [Open-AutoGLM](https://github.com/zai-org/Open-AutoGLM) | Apache-2.0; active | Handoff/Take_over model only; reject ADB/system-wide automation in Kelpie release. |
+| [ByteDance UI-TARS-desktop](https://github.com/bytedance/UI-TARS-desktop) | Apache-2.0; **ARCHIVED** at review | Historic multimodal grounding reference, **not** an active maintenance/dependency candidate. |
+| [Kelpie upstream mother](https://github.com/UnlikeOtherAI/kelpie) | GitHub metadata **NOASSERTION** | Preserve provenance and inspect precise upstream licence terms, not an inferred SPDX grant. |
+
+### Primary-specification corrections and security classification
+
+1. **Transient semantic refs, not permanent selectors** — [Playwright MCP accessibility snapshots](https://playwright.dev/mcp/snapshots) use fresh element refs; gaps may appear and refs should be renewed after navigation or document mutation. [Playwright actionability](https://playwright.dev/docs/actionability) checks unique, visible/stable/enabled/receives pointer events/not inert and editable as applicable. **Kelpie decision:** DOM/AX refs must include tab/document generation and geometry; distinguish STALE_REF, NOT_ACTIONABLE and AMBIGUOUS_TARGET. Existing R5 admission/STOP is the sole authoritative gateway.
+2. **JS event does not prove drag or website result** — [MDN HTML Drag and Drop](https://developer.mozilla.org/en-US/docs/Web/API/HTML_Drag_and_Drop_API) defines dragstart/dragover/drop and associated DataTransfer constraints. Fabricated DOM events cannot prove ordinary site handlers accepted an HTML5 drag. Use local View.dispatchTouchEvent to the **Kelpie-owned WebView only** when suitable, verify target-site post-state, and mark unsupported patterns explicitly; handled touch events are not task completion.
+3. **Clipboard boundary** — [Android ClipboardManager.getPrimaryClip](https://developer.android.com/reference/android/content/ClipboardManager) returns null when the app lacks input focus and is not default IME. [Android secure clipboard handling](https://developer.android.com/privacy-and-security/risks/secure-clipboard-handling) warns of exposure; sensitive-preview masking is not private storage. Implement bounded, non-sensitive, RAM-only source-to-destination transfer scoped to owner/session/document; do not silently read or copy to the OS clipboard during HOME.
+4. **Untrusted-page bridge is a P0 threat** — [OWASP MASWE-0033](https://mas.owasp.org/MASWE-0033/) describes broad native bridges and unvalidated messages, and [MASWE-0035](https://mas.owasp.org/MASWE/MASVS-PLATFORM/MASWE-0035/) covers loading untrusted WebView content. Pages are untrusted inputs, NEVER authorization principals. Even with [WebViewCompat feature-gated, origin-scoped scripts](https://developer.android.com/reference/androidx/webkit/WebViewCompat), R5 native owner authorization must remain outside the page. Test malicious page text, cross-origin iframes, navigation races and bridge spoofing; do not expose privileged universal JavascriptInterface.
+5. **Render/control/transport are separate** — [WebView.postVisualStateCallback](https://developer.android.com/reference/android/webkit/WebView) guarantees DOM readiness for a subsequent draw under attachment/visibility conditions, not ImageReader pixels. [Android foreground service background-start restrictions](https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start) forbid assuming unbounded restarts. Private renderer must emit actual fresh-frame evidence; RENDERER_NOT_READY, NO_FRESH_FRAME and PRIVACY_REFUSED are distinct outcomes.
+
+### Traceable acceptance deltas to integrate into the EXISTING test plan
+
+| Target gate | Negative/positive oracle to add | Reuse boundary |
+| --- | --- | --- |
+| BG-10 / KAI-REQ-002,012 | Fresh semantic snapshot ref succeeds; old document epoch, duplicate label, obscured control and stale geometry fail safely. | Existing R5WebViewActionScripts + R5NativeBrowserPort, no new auth plane. |
+| BG-11 / KAI-REQ-010,011 | Persian/RTL non-sensitive copy across owned tabs works via RAM transfer; password/OTP/OS clipboard during HOME remains unavailable and unlogged. | Existing owner/STOP, DOM privacy and receipt controls. |
+| BG-12 / BG-14 | Owned-WebView MotionEvent gesture modifies observable control when supported; HTML5 drag not accepted returns UNSUPPORTED/UNCERTAIN, not VERIFIED_COMPLETE. | Same-WebView host and UI-thread action dispatcher. |
+| BG-15 / KAI-REQ-003,004,009 | Dynamic nested/virtual list and horizontal RTL complete only with region ledger and terminal witness; closed-shadow, cross-origin iframe, infinite feed, capture refusal remain PARTIAL/UNKNOWN. | Reuse KAI-001 task/coverage gate, add R5 observation capabilities. |
+| BG-16 / BG-17 | 25 **distinct** HOME cycles with action + permitted fresh image; no foreground stealing, approval prompts, STOP/lock/revoke bypass or page-origin commands. | Freeze code45 pairing/18463/8080/Ed25519; native privacy stays. |
+| BG-18 | Memory/PSS, thermal, ImageReader close and producer timestamp measured on S24; no busy polling or fabricated hardware success. | Existing VirtualDisplay + Presentation + ImageReader. |
+
+**Disposition:** REUSE_NATIVE_AND_KAI for existing WebView, auth, commands and task engine; EVALUATE_AS_PATTERNS for OSS research; DO_NOT_IMPORT_YET until exact-source/legal/security review; NO_RUNTIME_CHANGE / NO_INSTALL / NO_MAIN_MERGE. Tracking owners: [R5 beta #100](https://github.com/imanipour2/enerfoam-website/issues/100), [KAI #101](https://github.com/imanipour2/enerfoam-website/issues/101), [PR75 review](https://github.com/imanipour2/kelpie/pull/75). Implementation remains gated by authentic device evidence and owner release decision.
