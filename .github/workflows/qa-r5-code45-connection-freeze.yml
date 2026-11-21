@@ -1,0 +1,28 @@
+name: QA R5 Code45 Owner-Frozen Connection (Source Guard)
+
+on:
+  pull_request:
+    paths:
+      - 'core/android/**'
+      - 'apps/android/**'
+      - 'scripts/qa/check-r5-code45-connection-freeze.sh'
+      - '.github/workflows/qa-r5-code45-connection-freeze.yml'
+      - 'docs/qa/r5-code45-renderer-recovery-20261121.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  owner-frozen-code45-source-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v6.0.3
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check exact installed code45 connection freeze and private compositor invariants
+        shell: bash
+        run: bash scripts/qa/check-r5-code45-connection-freeze.sh
